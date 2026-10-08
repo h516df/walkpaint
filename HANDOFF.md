@@ -12,6 +12,8 @@
 
 **验证完成：** Android 15 MuMu 模拟器安装 v0.1 → 放入 3 个 GPS 历史点 → 覆盖安装 v0.2 → SQLite 转移成功，界面能显示旧里程/天数；MapLibre 底图加载与“地图/足迹/我的”三页截图验收；DocumentsUI JSON 导出后重新导入不崩溃；自动定位 Foreground Service 在模拟器显示前台通知；10 个 JVM 单测。详细 screenshots 位于 `verification/`（本地忽略提交）。
 
+**发布与安全复核（2026-10-08 18:00 +08:00）：** 私有 GitHub Release `https://github.com/h516df/walkpaint/releases/tag/v0.2` 已发布预览版 APK `WalkPaint-v0.2-debug.apk`（54,355,502 字节）；本机 APK SHA-256 为 `DA5B74B9BC60FFF6DE573117144BBE320C6C3DB0666A63BE5381AFD73C21BA3B`，`apksigner verify` 验证通过，SHA-1 与 v0.1 文档记录的 debug 签名匹配。使用 Gitleaks 8.30.1 对全部 2 次提交完成仓库扫描，退出码 0，未发现匹配的秘密。以上是发布与静态验证，**不是安卓真机长期定位验收**。
+
 **未验证/需后续：** 安卓真机户外 GPS、频繁锁屏/杀后台、省电续航、长期数据量、设备重启自动恢复及云端自动备份；无高德 Android Key，未接 AMap；道路吸附/去重覆盖率/地名反查尚不存在；模拟器曾回报非真实年月的定位点，新代码已拒绝异常时间戳，但需在真机测证。
 
 **下一版优先：**
