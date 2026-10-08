@@ -69,8 +69,17 @@ class MainActivity : ComponentActivity() {
     private var trackingEnabled by mutableStateOf(false)
     private var trackingRunning by mutableStateOf(false)
     private var backgroundGranted by mutableStateOf(false)
+    private var amapConsent by mutableStateOf(false)
+    private var showAmapConsent by mutableStateOf(false)
+    private val amapController by lazy { AmapMapController(this) }
+    private val amapActive get() = BuildConfig.AMAP_KEY.isNotBlank() && amapConsent
     private var confirmEnable by mutableStateOf(false)
     private var promptLocation by mutableStateOf(false)
+    private var pendingSettingsEnable = false
+    private val refreshExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private val refreshing = java.util.concurrent.atomic.AtomicBoolean(false)
+    private var realGeoJson = geoJson(emptyList())
+    private var demoGeoJson = geoJson(emptyList())
     private var pendingEnable by mutableStateOf(false)
     private var pendingCenter by mutableStateOf(false)
     private var lastRevision = -1L
@@ -104,6 +113,7 @@ class MainActivity : ComponentActivity() {
                     requestNotification()
                 } else if (pendingCenter) centerUser()
             } else toast("需要精确定位才能看到当前位置和绘制足迹")
+            if (AmbientTracking.hasFineLocation(this)) pendingSettingsEnable = false
             pendingEnable = false
             updateUi()
         }
@@ -150,12 +160,17 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        pendingEnable = savedInstanceState?.getBoolean("pendingEnable") ?: false
+        pendingSettingsEnable = savedInstanceState?.getBoolean("pendingSettingsEnable") ?: false
         MapLibre.getInstance(applicationContext)
-        if (!AmbientTracking.hasFineLocation(this) &&
-            !getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE).getBoolean("location_prompt_seen", false)) {
+        val mapPref = getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE)
+        amapConsent = mapPref.getBoolean("amap_sdk_consent", false)
+        showAmapConsent = BuildConfig.AMAP_KEY.isNotBlank() &&
+            !amapConsent && !mapPref.getBoolean("amap_sdk_decision_seen", false)
+        if (!AmbientTracking.enabled(this) &&
+            !getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE).getBoolean("auto_notice_v3_seen", false)) {
             promptLocation = true
         }
-        snapshot = repository.snapshot()
         updateUi()
         setContent {
             MaterialTheme(
@@ -204,32 +219,66 @@ class MainActivity : ComponentActivity() {
                     onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
                     onBackgroundSettings = { openAppSettings() },
                     internalBackupCount = repository.backupFiles().size,
-                    mapContent = { NativeMapView() }
+                    mapProviderLabel = if (amapActive) "高德地图" else "OpenFreeMap",
+                    onChooseAmap = { showAmapConsent = true },
+                    mapContent = { if (amapActive) AmapNativeView() else NativeMapView() }
                 )
 
                 if (promptLocation) AlertDialog(
                     onDismissRequest = {
                         promptLocation = false
                         getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE)
-                            .edit().putBoolean("location_prompt_seen", true).apply()
+                            .edit().putBoolean("auto_notice_v3_seen", true).apply()
                     },
-                    title = { Text("先找到你的位置", fontWeight = FontWeight.Bold, color = Ink) },
-                    text = { Text("允许精确定位后，地图就能显示你所在的位置。是否持续记录足迹由你另外决定，不会偷偷开启。") },
+                    title = { Text("让走过的路自动染色", fontWeight = FontWeight.Bold, color = Ink) },
+                    text = { Text("允许精确定位后即启动自动足迹，使用前台服务和持续通知，可在“我的”里随时暂停。定位点只保存在本机；系统省电策略可能中断记录。") },
                     confirmButton = {
                         Button(onClick = {
                             promptLocation = false
                             getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE)
-                                .edit().putBoolean("location_prompt_seen", true).apply()
-                            pendingCenter = true
-                            askLocation()
-                        }) { Text("显示我的位置") }
+                                .edit().putBoolean("auto_notice_v3_seen", true).apply()
+                            enableFromChoice()
+                        }) { Text("同意并开启自动足迹") }
                     },
                     dismissButton = {
                         TextButton(onClick = {
                             promptLocation = false
                             getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE)
-                                .edit().putBoolean("location_prompt_seen", true).apply()
+                                .edit().putBoolean("auto_notice_v3_seen", true).apply()
                         }) { Text("稍后再说") }
+                    }
+                )
+                if (showAmapConsent && !promptLocation && !confirmEnable) AlertDialog(
+                    onDismissRequest = {
+                        showAmapConsent = false
+                        getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE).edit()
+                            .putBoolean("amap_sdk_decision_seen", true).apply()
+                    },
+                    title = { Text("是否使用高德地图？", fontWeight = FontWeight.Bold) },
+                    text = { Column {
+                        Text("高德开放平台地图 SDK 由北京高德图强科技有限公司提供，用于地图展示；" +
+                            "可能收集经纬度、IP/网络、GNSS、设备参数、系统和传感器信息。" +
+                            "足迹数据库仍保留本机；拒绝使用高德不影响自动记录。")
+                        TextButton(onClick = {
+                            startActivity(Intent(Intent.ACTION_VIEW,
+                                Uri.parse("https://lbs.amap.com/home/privacy/")))
+                        }) { Text("阅读高德隐私政策") }
+                    } },
+                    confirmButton = {
+                        Button(onClick = {
+                            getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE).edit()
+                                .putBoolean("amap_sdk_consent", true)
+                                .putBoolean("amap_sdk_decision_seen", true).apply()
+                            amapConsent = true
+                            showAmapConsent = false
+                        }) { Text("同意使用高德") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = {
+                            showAmapConsent = false
+                            getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE).edit()
+                                .putBoolean("amap_sdk_decision_seen", true).apply()
+                        }) { Text("暂不用") }
                     }
                 )
                 if (confirmEnable) AlertDialog(
@@ -237,23 +286,14 @@ class MainActivity : ComponentActivity() {
                     title = { Text("开启自动足迹？", color = Ink, fontWeight = FontWeight.Bold) },
                     text = {
                         Text(
-                            "只需要启用一次。之后会在后台持续尝试记录行走路线，并显示常驻通知。" +
-                                "为省电，静止时会降低 GPS 频率，因此短途可能遗漏。" +
-                                "你可以随时暂停。系统省电或强制停止可能中断记录；重启后自动恢复通常还需要“始终允许定位”。"
+                            "允许精确定位后即启动自动足迹，使用前台服务和持续通知，可在我的里随时暂停。" +
+                                "系统省电或强制停止可能中断记录；重启恢复通常需要“始终允许定位”。"
                         )
                     },
                     confirmButton = {
                         Button(onClick = {
                             confirmEnable = false
-                            if (AmbientTracking.hasFineLocation(this)) {
-                                AmbientTracking.setEnabled(this, true)
-                                AmbientTracking.start(this)
-                                requestNotification()
-                                updateUi()
-                            } else {
-                                pendingEnable = true
-                                askLocation()
-                            }
+                            enableFromChoice()
                         }) { Text("启用自动足迹") }
                     },
                     dismissButton = { TextButton(onClick = { confirmEnable = false }) { Text("暂不开启") } }
@@ -269,11 +309,47 @@ class MainActivity : ComponentActivity() {
         trackingStatus = repository.lastError ?: AmbientTracking.status
         backgroundGranted = AmbientTracking.hasBackgroundLocation(this)
         userFix = AmbientTracking.lastFix ?: userFix
-        if (lastRevision != repository.revision) {
-            snapshot = repository.snapshot()
-            lastRevision = repository.revision
-            updateMapLayers()
-        } else updateLocationLayer()
+        if (!trackingEnabled) trackingStatus = "已暂停 · 不会记录定位点"
+        else if (!AmbientTracking.hasFineLocation(this)) trackingStatus = "缺少精确定位权限 · 请在系统设置中允许"
+        else if (!getSystemService(LocationManager::class.java).isProviderEnabled(LocationManager.GPS_PROVIDER))
+            trackingStatus = "GPS 已关闭 · 请打开系统位置服务"
+        val gps = AmbientTracking.lastGps
+        val saved = AmbientTracking.lastSaved.takeIf { it > 0 } ?: snapshot.realTracks.lastOrNull()?.points?.lastOrNull()?.time
+        val savedText = saved?.let { SimpleDateFormat("HH:mm:ss", Locale.CHINA).format(Date(it)) } ?: "尚未入库"
+        trackingStatus += "\nGPS精度：${gps?.let { "${it.accuracy.toInt()}米" } ?: "等待卫星定位"} · 已存 ${snapshot.realTracks.sumOf { it.points.size }} 点 · 最近入库 $savedText"
+        if (lastRevision != repository.revision && refreshing.compareAndSet(false, true)) {
+            refreshExecutor.execute {
+                try {
+                    val revision = repository.revision
+                    val next = repository.snapshot()
+                    // Compute expensive history/geometry work away from the UI thread.
+                    next.totalMeters; FootprintInsights.traveledDays(next); FootprintInsights.exploredCells(next)
+                    val real = geoJson(next.realTracks)
+                    val demo = geoJson(next.tracks.filter { it.demo })
+                    runOnUiThread {
+                        snapshot = next; lastRevision = revision
+                        realGeoJson = real; demoGeoJson = demo
+                        updateMapLayers()
+                    }
+                } finally { refreshing.set(false) }
+            }
+        }
+        updateLocationLayer()
+    }
+
+    private fun enableFromChoice() {
+        getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE).edit()
+            .putBoolean("auto_notice_v3_seen", true).apply()
+        if (AmbientTracking.hasFineLocation(this)) {
+            AmbientTracking.setEnabled(this, true)
+            AmbientTracking.start(this)
+            requestNotification()
+            updateUi()
+        } else {
+            pendingEnable = true
+            pendingSettingsEnable = true
+            askLocation()
+        }
     }
 
     private fun requestNotification() {
@@ -324,7 +400,7 @@ class MainActivity : ComponentActivity() {
         runCatching {
             latestSystemLocation()?.let { updatePosition(it, firstMapCenter || pendingCenter) }
             if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 8_000, 1f, visibleLocationListener, Looper.getMainLooper())
+                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 2_000, 0f, visibleLocationListener, Looper.getMainLooper())
             }
             if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
                 lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 20_000, 8f, visibleLocationListener, Looper.getMainLooper())
@@ -350,7 +426,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun focusCoordinate(lat: Double, lon: Double, zoom: Double = 16.0) {
-        mapInstance?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(lat, lon), zoom))
+        if (amapActive) amapController.focus(lat, lon, zoom)
+        else mapInstance?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(lat, lon), zoom))
     }
 
     private fun makeMapView(): MapView {
@@ -362,9 +439,14 @@ class MainActivity : ComponentActivity() {
             mapInstance = loaded
             loaded.setStyle("https://tiles.openfreemap.org/styles/liberty") { style ->
                 if (mapWidget !== view) return@setStyle
-                style.addSource(GeoJsonSource("wp-real", geoJson(snapshot.realTracks)))
-                style.addSource(GeoJsonSource("wp-demo", geoJson(snapshot.tracks.filter { it.demo })))
+                style.addSource(GeoJsonSource("wp-real", realGeoJson))
+                style.addSource(GeoJsonSource("wp-demo", demoGeoJson))
                 style.addSource(GeoJsonSource("wp-user", userJson(userFix)))
+                style.addLayer(CircleLayer("wp-real-seeds", "wp-real").withProperties(
+                    PropertyFactory.circleColor(android.graphics.Color.rgb(18, 145, 134)),
+                    PropertyFactory.circleRadius(10f), PropertyFactory.circleOpacity(0.85f),
+                    PropertyFactory.circleStrokeColor(android.graphics.Color.WHITE), PropertyFactory.circleStrokeWidth(2f)
+                ))
                 style.addLayer(LineLayer("wp-real-line", "wp-real").withProperties(
                     PropertyFactory.lineColor(android.graphics.Color.rgb(18, 145, 134)),
                     PropertyFactory.lineWidth(7f),
@@ -404,30 +486,21 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun updateMapLayers() {
+        if (amapActive) {
+            amapController.render(snapshot)
+            return
+        }
         val style = mapInstance?.style ?: return
-        style.getSourceAs<GeoJsonSource>("wp-real")?.setGeoJson(geoJson(snapshot.realTracks))
-        style.getSourceAs<GeoJsonSource>("wp-demo")?.setGeoJson(geoJson(snapshot.tracks.filter { it.demo }))
+        style.getSourceAs<GeoJsonSource>("wp-real")?.setGeoJson(realGeoJson)
+        style.getSourceAs<GeoJsonSource>("wp-demo")?.setGeoJson(demoGeoJson)
     }
 
     private fun updateLocationLayer() {
-        mapInstance?.style?.getSourceAs<GeoJsonSource>("wp-user")?.setGeoJson(userJson(userFix))
+        if (amapActive) amapController.updateUser(userFix)
+        else mapInstance?.style?.getSourceAs<GeoJsonSource>("wp-user")?.setGeoJson(userJson(userFix))
     }
 
-    private fun geoJson(tracks: List<Track>): String {
-        val features = JSONArray()
-        tracks.forEach { trip ->
-            trip.points.groupBy { it.segment }.values.forEach { points ->
-                if (points.size >= 2) {
-                    val positions = JSONArray()
-                    points.forEach { p -> positions.put(JSONArray().put(p.lon).put(p.lat)) }
-                    val geometry = JSONObject().put("type", "LineString").put("coordinates", positions)
-                    features.put(JSONObject().put("type", "Feature")
-                        .put("properties", JSONObject()).put("geometry", geometry))
-                }
-            }
-        }
-        return JSONObject().put("type", "FeatureCollection").put("features", features).toString()
-    }
+    private fun geoJson(tracks: List<Track>): String = TrackMapJson.encode(tracks)
 
     private fun userJson(fix: Location?): String {
         val features = JSONArray()
@@ -438,6 +511,29 @@ class MainActivity : ComponentActivity() {
                 .put("properties", JSONObject()))
         }
         return JSONObject().put("type", "FeatureCollection").put("features", features).toString()
+    }
+
+    @Composable
+    private fun AmapNativeView() {
+        val controller = remember { amapController }
+        val view = remember { controller.create(snapshot, userFix) }
+        val lifecycle = LocalLifecycleOwner.current.lifecycle
+        DisposableEffect(view, lifecycle) {
+            val observer = LifecycleEventObserver { _, event ->
+                when (event) {
+                    Lifecycle.Event.ON_RESUME -> view.onResume()
+                    Lifecycle.Event.ON_PAUSE -> view.onPause()
+                    else -> Unit
+                }
+            }
+            lifecycle.addObserver(observer)
+            if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) view.onResume()
+            onDispose {
+                lifecycle.removeObserver(observer)
+                runCatching { controller.release(view) }
+            }
+        }
+        AndroidView(factory = { view }, modifier = Modifier.fillMaxSize())
     }
 
     @Composable
@@ -467,8 +563,19 @@ class MainActivity : ComponentActivity() {
         AndroidView(factory = { view }, modifier = Modifier.fillMaxSize())
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("pendingEnable", pendingEnable)
+        outState.putBoolean("pendingSettingsEnable", pendingSettingsEnable)
+        super.onSaveInstanceState(outState)
+    }
+
     override fun onResume() {
         super.onResume()
+        if (pendingSettingsEnable && AmbientTracking.hasFineLocation(this)) {
+            pendingSettingsEnable = false
+            AmbientTracking.setEnabled(this, true)
+            requestNotification()
+        }
         updateUi()
         beginVisibleLocation()
         if (AmbientTracking.enabled(this) && AmbientTracking.hasFineLocation(this) && !AmbientTracking.running) {
@@ -481,6 +588,7 @@ class MainActivity : ComponentActivity() {
     }
     override fun onDestroy() {
         mainHandler.removeCallbacksAndMessages(null)
+        refreshExecutor.shutdown()
         super.onDestroy()
     }
     private fun toast(text: String) = Toast.makeText(this, text, Toast.LENGTH_LONG).show()

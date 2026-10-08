@@ -1,19 +1,28 @@
-# 高德地图 Android SDK 正式接入待办
+# 高德 Android 地图：v0.3 已集成 SDK，等待合法 Key
 
-此项目目前使用 MapLibre + OpenFreeMap，不使用未经授权的高德瓦片，也不把其他人的开放平台密钥打包进 APK。
+**现状：** v0.3 已通过 Gradle 集成高德官方 2026 年 Android Maps SDK 11.3.100（组合依赖 3dmap-location-search:11.3.100_loc11.3.000_sea9.8.1）。AMapMapController 可用来渲染真实 GPS 路线。**尚无用户自己的 Android Key，因此并未实测高德在线底图；默认继续 MapLibre / OpenFreeMap**。不使用盗链瓦片或他人的 Key。
 
-## 需要从高德开发者平台获取的资料
+## 必要用户授权（一次）
 
-高德开放平台官方入口：<https://lbs.amap.com/> ，Android 开发文档：<https://developer.amap.com/api/android-sdk/guide/create-project/get-key>
+1. 登录高德开放平台 https://lbs.amap.com/ ，按官方要求申请 Android 地图服务/Key，查看 https://developer.amap.com/api/android-sdk/guide/create-project/get-key 。
+2. 包名必须为 **cn.walkpaint**，当前调试版签名 **SHA1 = FA:E3:DF:35:B3:2F:A7:DF:41:B3:F8:53:79:3E:A6:9D:39:5B:8E:52**。这是证书摘要，不是私钥。正式版若换签名须按平台重新登记且妥善处理安卓升级兼容。
+3. **不要把 Key 发到公开聊天/Issue/仓库**。在项目已有、被 Git 忽略的 local.properties 追加一行纯字母数字格式：walkpaintAmapKey=自己的AndroidKey。构建系统从本地文件读取，不提交 Git；Key 仍会存在安装包中，必须由开发者平台的包名+签名限制保护。
+4. 重新构建 v0.3 APK，直接覆盖安装，首次使用高德地图时会另弹出地图 SDK 隐私说明，同意后才初始化 SDK。若不同意，可继续使用 OpenFreeMap 记录本地足迹。APP 会打开高德隐私政策 https://lbs.amap.com/home/privacy/ 供阅读。
+5. Android 真机校验：首页是否显示高德道路/地点中文底图、官方署名、当前位置/轨迹是否与道路一致、切换页面与恢复、弱网和隐私拒绝回退；确认官方 Key 实际生效前不能说已完成高德上线。
 
-- **应用包名**：`cn.walkpaint`（正式上线前不可随意更改，否则升级会变成两个 App）。
-- **本机 v0.1 / v0.2 测试证书 SHA1**：`FA:E3:DF:35:B3:2F:A7:DF:41:B3:F8:53:79:3E:A6:9D:39:5B:8E:52`，可通过 APK 签名验证命令重查。此指纹不是私钥。
-- **Android Key**：由应用所有者在自己的高德开发者控制台创建，绑定上面的包名和相应发布签名指纹。密钥必须走不入库的本地 Gradle properties / secrets 注入，不放在 Git、README、Issue、日志。
-- **发布签名**：目前是调试证书，若未来使用正式发布密钥，需要规划平滑升级签名策略；Android 对不同签名证书的同包名升级有限制，不能直接承诺跨证书覆盖安装。
-- **隐私流程**：首次接入及调用地图、定位 SDK 前，按官方最新隐私指南取得用户同意并调用 SDK 隐私接口；位置权限按需请求，若不同意可拒绝或使用非定位功能。
+## 已实施和边界
 
-## 开发约束
+- AndroidManifest 声明官方 Key meta-data，BuildConfig 在运行时判断是否有 Key；没有合法 Key 不触发高德地图初始化。
+- 高德初始化前先经单独的 SDK 告知与用户主动同意，再执行 MapsInitializer.updatePrivacyShow 和 updatePrivacyAgree。
+- 原始 SQLite/JSON **一直使用 WGS84**；AMapMapController 通过 CoordinateConverter.CoordType.GPS 在显示路径转换为高德使用的坐标，绝不回写数据库或双重转换。
+- 同一应用的 GPS foreground service 与高德底图不耦合，拒绝高德不会停止足迹记录。
+- SDK/地图在线服务会处理必要的位置和设备/网络信息。高德提供方：北京高德图强科技有限公司；应按官方最新版隐私政策、应用合规要求及非商业配额处理。
+- 国内地图备选顺序：**高德 → 腾讯 → 百度**。目前腾讯/百度 SDK 均未集成，后续只有高德不可行或确实不满足需求时再实施，不叠多套无用依赖。
 
-先确认高德官方免费使用范围、流量额度、SDK 版本、许可和隐私条款，再引入官方地图 SDK；不使用“高德地图网页瓦片 URL”作为非授权底图替代。地图呈现与轨迹数据库分开，存储坐标采用 WGS84，适配高德 GCJ-02 时需要显式单向显示转换，**严禁反复错误转换后改写历史轨迹坐标**。
+官方参考：
+- 高德 SDK 更新日志：https://developer.amap.com/api/android-sdk/changelog/3d
+- 高德隐私合规要求：https://developer.amap.com/api/compliance-center/check-and-reference/sdkhgsy
+- 官方隐私政策：https://lbs.amap.com/home/privacy/
+- 高德 Android SDK Gradle：https://developer.amap.com/api/android-sdk/guide/create-project/android-studio-create-project
 
-在未拿到合法 Key 之前，继续提供现有 OpenFreeMap 底图，避免 App 因地图 Key 缺失无法启动。
+注意：最新 11.x 官方 SDK SO 以 ARM 架构为主，基于 x86/x86_64 的模拟器可以继续使用 MapLibre fallback，但不代表高德 ARM 真机 SDK 已经验证；实际部署以真机测试为准。

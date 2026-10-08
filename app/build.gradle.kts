@@ -1,7 +1,16 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+// The restricted key is stored only in Git-ignored local.properties.
+val mapProperties = Properties()
+rootProject.file("local.properties").takeIf { it.isFile }?.inputStream()?.use { mapProperties.load(it) }
+val amapKey = (mapProperties.getProperty("walkpaintAmapKey")
+    ?: providers.gradleProperty("walkpaintAmapKey").orNull).orEmpty().trim()
+require(amapKey.matches(Regex("[A-Za-z0-9]*"))) { "Invalid AMap Android Key" }
+
 android {
     namespace = "cn.walkpaint"
     compileSdk = 36
@@ -9,8 +18,14 @@ android {
         applicationId = "cn.walkpaint"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
+        // Optional phone-sized APK; the default universal debug APK remains emulator-compatible.
+        if (providers.gradleProperty("walkpaintArm64Only").orNull == "true") {
+            ndk { abiFilters.add("arm64-v8a") }
+        }
+        buildConfigField("String", "AMAP_KEY", "\"$amapKey\"")
+        manifestPlaceholders["AMAP_API_KEY"] = amapKey
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
@@ -28,11 +43,13 @@ android {
             }
         }
     }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
     testOptions { unitTests.isReturnDefaultValues = true }
 }
 dependencies {
     implementation("org.maplibre.gl:android-sdk-opengl:13.5.2")
+    // 2026 official AMap SDK; only initialized after separate user consent.
+    implementation("com.amap.api:3dmap-location-search:11.3.100_loc11.3.000_sea9.8.1")
     implementation(platform("androidx.compose:compose-bom:2026.03.01"))
     implementation("androidx.activity:activity-compose:1.13.0")
     implementation("androidx.compose.ui:ui")

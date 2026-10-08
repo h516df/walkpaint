@@ -1,48 +1,41 @@
 # 足迹涂色 · WalkPaint
 
-把平时走过的路径慢慢染色，而不是每次出门都要开运动记录。Android 私人项目，当前 **v0.2.0 测试版**。
+Android 私人足迹涂色 App。日常自动累积走过的路线；当前 **v0.3.0 预览版**，尚未经真机长期续航验收。
 
-## v0.2 重点
+## v0.3 重点
 
-- **自动足迹**：首次在 App 内确认、授权精确位置，开启开关后由带常驻通知的定位前台服务持续尝试记录；静止时降低 GPS 采样频率，移动时再提高，减少电量消耗。用户可随时暂停；不是未经授权的静默全天候追踪。
-- **看见自己**：地图上的蓝色位置点和“定位我”按钮；首次打开会解释并请求定位权限。MapLibre + OpenFreeMap Liberty 在线地图。用户真实路径蓝绿色，紫色演示路线不计入里程。
-- **三大页面**：地图 / 足迹 / 我的。里程、记录天数、探索网格（约半公里级估算）、按日期整理的历史路线；点击足迹可在地图中定位。
-- **备份与恢复**：“我的 → 导出备份”用系统文件选择器保存 JSON（可以保存在云盘）；“导入备份”按轨迹 ID 合并，不删除原记录。程序在本地尝试周期性保存快照，但卸载应用会把这些私有本地快照一起删除，**必须另外导出**才算脱离设备的可靠备份。
-- **数据兼容**：应用包名仍为 `cn.walkpaint`，`versionCode=2`，调试版沿用 v0.1 同一签名。SQLite 保存位置点；升级时将 v0.1 的 `tracks.json` 迁移并保留源文件，不要求清除旧数据。数据库升级必须显式迁移，禁止默默删表。
-- **私密性**：没有足迹上传服务器；加载地图瓦片会向 OpenFreeMap 请求地图区域信息。用户自己的完整轨迹只在设备和用户主动导出的文件中。App 不会自动把 JSON 上传到云端。
+- **首次同意，授权即开始**：阅读“同意并开启自动足迹”后授予精确定位，就立即尝试开启有常驻通知的定位前台服务；不需再次点开始。拒绝不会偷偷开启，“我的”可暂停。
+- **短途立即反馈**：首个准确 GPS 点显示蓝绿色种子标记，多个已接受的真实点绘制线路；展示精度、点数、最近入库时间和 GPS 异常、过滤原因。不会假装画出未采集的路线。
+- **正常导航图标**：地图、足迹、我的采用矢量图标，“我的”是人物图标。
+- **性能与历史数据**：Indexed SQLite 最近点查询，异步历史快照与 GeoJSON；兼容 v0.1/v0.2 轨迹和调试版签名，versionCode=3，包名 cn.walkpaint。
+- **地图**：加入高德 2026 官方 Maps SDK、单独第三方隐私授权和只在显示端进行 GPS(WGS84)→GCJ-02 转换。没有合法 Android Key 时继续 MapLibre/OpenFreeMap；腾讯、百度为候补，尚未集成。
+- **备份**：JSON 可导出和合并导入；本地自动快照随卸载消失，仍需主动备份到设备外。
 
-## 使用方法
+## 安装与使用
 
-1. 从当前私有 GitHub Release 下载 `WalkPaint-v0.2-debug.apk`，直接覆盖安装 v0.1（不可卸载重装，否则旧数据会消失）。
-2. 打开后允许**精确位置**，地图有蓝色当前位置标记，点“⌖”可回到定位点。
-3. 在地图或“我的”打开「自动足迹」，确认弹窗。以后不必为每次外出手动启动；记录运行状态会显示在页面和 Android 持续通知中。
-4. 为了让**重启后恢复**尽量成功，在系统的应用定位权限中允许“始终允许”；即使如此，Android、厂家电池限制及手动强制停止仍可能中断定位。没有后台授权时，打开 App 可尝试恢复。
-5. 在“我的”点击「导出备份」，把 JSON 保存到手机、网盘或其他长期位置。可用「导入备份」合并恢复。
-6. 紫色“演示路线”只供试看，可单独清除，不计入真实统计。
+1. 从私有 GitHub Release 下载 v0.3。常规 arm64 安卓手机优先 WalkPaint-v0.3-arm64-debug.apk（约 70 MB）；其他 ABI 使用 WalkPaint-v0.3-universal-debug.apk（约 125 MB）。
+2. **直接覆盖安装** v0.1 或 v0.2，不要卸载或清除数据。签名与先前测试版一致。
+3. 首次阅读“自动足迹”说明并主动同意，随后授权精确位置，录制就会立即尝试开始。地图蓝点是自己，蓝绿色是记录足迹，紫色仅演示。
+4. 在“我的”查看里程、天数、探索网格、跟踪状态、导入/导出。后台重启自动恢复通常还需系统权限“始终允许定位”，以及按机型确认电池策略。
+5. Android 省电、强制停止、GPS 环境可能影响持续采集；App 会尽量说明状态，但不能承诺永不间断。
 
-### 能做到什么、还做不到什么
+## 高德地图与隐私
 
-当前把真实 GPS 折线叠加在地图上，**不等于精确识别每条道路**；“探索网格”是粗略区域统计，不是城市道路覆盖率。定位点会过滤不准确、超速跳变、静止漂移和异常时间戳；省电采样可能漏掉很短的行走路线。当前路线页按日期显示记录，不包含精确城市/地点地名反向地理编码。
+官方依赖版本 **com.amap.api:3dmap-location-search:11.3.100_loc11.3.000_sea9.8.1**。高德仅在已配置受签名限制的官方 Android Key 且用户**单独同意**高德 SDK 隐私信息后初始化；拒绝时可继续在开放地图上记录本地足迹。说明见 docs/AMap_SETUP.md。
 
-**高德地图**可以接入，但还没有接入。合法接入要求你拥有高德开放平台 Android Key（绑定此应用包名、签名证书），并完成其隐私合规初始化。不能拿非官方瓦片或他人的 Key 来冒充已接入。准备资料在 [docs/AMap_SETUP.md](docs/AMap_SETUP.md)。当前底图仍为 OpenFreeMap。
+**没有有效高德 Key，因此高德底图未被实测成功。** SDK 可能访问网络、定位、设备/系统与传感器信息，APP 内提供隐私说明和高德隐私政策链接。足迹仍在本地 SQLite/JSON 存为 WGS84，不将历史数据库自动上传至我方服务器；第三方在线地图会收到必要地图区域及网络请求信息。
 
-## 开发与构建
+## 已知限制 / 下一阶段
 
-项目核心入口：
+- 目前是 GPS 点与折线叠加，**不是真正把道路吸附并永久去重涂色**；探索网格不等于道路覆盖率。地点城市统计、重复道路识别尚未实现。
+- 真机长期锁屏、省电、重启、定位漂移、安卓厂商限制以及多年数据量性能未测试，需真实手机验证。
+- 真正独立于手机本地数据的定时云备份尚未实现。
+- 腾讯/百度为必要时备用地图服务，不使用无授权瓦片或他人的 Key。
 
-| 路径 | 作用 |
-| --- | --- |
-| `app/src/main/java/cn/walkpaint/MainActivity.kt` | UI 入口、权限、地图生命周期与导入/导出流程 |
-| `app/src/main/java/cn/walkpaint/Screens.kt` | 三栏页面与 Material 3 组件 |
-| `app/src/main/java/cn/walkpaint/RecordingService.kt` | 自动定位前台服务、省电策略与恢复 |
-| `app/src/main/java/cn/walkpaint/FootprintDatabase.kt` | SQLite、v0.1 迁移、轨迹存取、备份 |
-| `app/src/main/java/cn/walkpaint/Tracks.kt` | 坐标模型、距离/过滤器与 JSON 格式 |
-| `app/src/test/java/cn/walkpaint/` | 位置计算、过滤、序列化与统计单元测试 |
+## 开发与验证
 
-本机 Gradle 使用 Android SDK 36、JDK 21、AGP 9.0.1、Gradle 9.1.0 和 Kotlin Compose 2.3.20；正式编译需安装对应依赖。使用项目的 `gradlew.bat :app:testDebugUnitTest :app:assembleDebug`。APK 在 `app/build/outputs/apk/debug/app-debug.apk`；正式产品签名、发布与 API Key 不应写在 Git。
+主要文件：MainActivity.kt（权限、Compose/地图生命周期）、Screens.kt（3 页）、RecordingService.kt（自动定位）、FootprintDatabase.kt 与 Tracks.kt（数据与过滤）、TrackMapJson.kt（点/路线格式）、AmapMapController.kt（官方高德显示层）。默认地图仍是 MapLibre + OpenFreeMap，署名 © OpenStreetMap contributors；高德启用后署名 © 高德。
 
-**验收状态（2026-10-08）**：模拟器 Android 15 安装与旧版覆盖安装成功，旧轨迹已迁移；地图瓦片和三个页面实际渲染，导出/导入 Android 系统文件选择器可操作；前台定位服务成功启动并显示常驻通知。10 项 JVM 单测通过。真实 Android 手机跨天 GPS、低功耗与长期后台可靠性尚未验收，不能承诺绝对不断线。
+Android SDK 36、JDK21、AGP9.0.1、Gradle9.1.0；全量构建运行：gradlew.bat :app:testDebugUnitTest :app:assembleDebug；手机 arm64 精简构建：gradlew.bat :app:assembleDebug -PwalkpaintArm64Only=true。构建 APK 位于 app/build/outputs/apk/debug/app-debug.apk。API Key、用户足迹与签名私钥绝不提交到 Git。
 
-## 开源服务及署名
-
-地图：MapLibre Android SDK + OpenFreeMap，© OpenStreetMap contributors。使用公共服务时保留署名与满足服务条款；生产化前复核配额和稳定性。
+**2026-10-08 验收**：14 项 JVM 单元测试通过。MuMu Android15 模拟器覆盖安装并实际点击首次同意，系统显示定位前台服务 isForeground=true；注入 3 个模拟短途 GPS 点，SQLite 真实定位点数从 3→6，地图显示蓝绿色足迹；测试完撤销 Mock Location 权限及测试提供器。真机及有 Key 的高德底图尚未验证。

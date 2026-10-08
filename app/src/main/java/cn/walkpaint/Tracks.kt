@@ -11,8 +11,10 @@ import kotlin.math.*
 data class TrackPoint(val lat: Double, val lon: Double, val time: Long, val accuracy: Float, val segment: Int = 0)
 data class Track(val id: String, val started: Long, val demo: Boolean, val points: List<TrackPoint> = emptyList())
 data class TrackState(val tracks: List<Track> = emptyList(), val activeId: String? = null) {
-    val realTracks get() = tracks.filter { !it.demo && it.points.isNotEmpty() }
-    val totalMeters get() = realTracks.sumOf { Geo.distance(it.points) }
+    val realTracks by lazy { tracks.filter { !it.demo && it.points.isNotEmpty() } }
+    val totalMeters by lazy { realTracks.sumOf { Geo.distance(it.points) } }
+    val dayCount by lazy { realTracks.flatMap { it.points }.map { java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ROOT).format(java.util.Date(it.time)) }.toSet().size }
+    val cellCount by lazy { realTracks.flatMap { it.points }.map { floor(it.lat / 0.005).toInt() to floor(it.lon / 0.005).toInt() }.toSet().size }
 }
 
 object Geo {
@@ -25,7 +27,7 @@ object Geo {
         val h = sin(dLat / 2).pow(2) + cos(Math.toRadians(a.lat)) * cos(Math.toRadians(b.lat)) * sin(dLon / 2).pow(2)
         return 6371000.0 * 2 * asin(sqrt(h.coerceIn(0.0, 1.0)))
     }
-    fun distance(points: List<TrackPoint>) = points.zipWithNext().sumOf { (a, b) -> if (a.segment == b.segment) meters(a, b) else 0.0 }
+    fun distance(points: List<TrackPoint>) = points.zipWithNext().sumOf { (a, b) -> if (a.segment == b.segment && accept(a, b)) meters(a, b) else 0.0 }
     fun accept(previous: TrackPoint?, next: TrackPoint): Boolean {
         if (!next.lat.isFinite() || !next.lon.isFinite() || next.lat !in -90.0..90.0 || next.lon !in -180.0..180.0 || !next.accuracy.isFinite() || next.accuracy !in 0f..35f) return false
         if (previous == null) return true
@@ -33,7 +35,7 @@ object Geo {
         if (seconds <= 0) return false
         val distance = meters(previous, next)
         // Avoid coloring stationary GPS drift as genuine movement.
-        val minimumMove = max(8.0, max(previous.accuracy.toDouble(), next.accuracy.toDouble()) * 1.25)
+        val minimumMove = max(4.0, max(previous.accuracy.toDouble(), next.accuracy.toDouble()) * 1.25)
         return distance >= minimumMove && distance <= max(60.0, seconds * 8.0) && distance / seconds <= 8.0
     }
 }

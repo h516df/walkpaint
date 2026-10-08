@@ -128,17 +128,24 @@ class FootprintDatabase(private val context: Context) :
         val wallClock = System.currentTimeMillis()
         if (!Geo.plausibleTimestamp(location.time, wallClock)) return false
         val now = TrackPoint(location.latitude, location.longitude, location.time, location.accuracy)
-        val current = snapshot().realTracks.lastOrNull()
-        val previous = current?.points?.lastOrNull()
+        // One indexed last-point query, rather than loading all history for every GPS fix.
+        var currentId: String? = null
+        val previous = readableDatabase.rawQuery(
+            "SELECT p.lat,p.lon,p.time,p.accuracy,p.segment,p.trip_id FROM points p JOIN trips t ON t.id=p.trip_id WHERE t.demo=0 ORDER BY p.time DESC,p.id DESC LIMIT 1", null
+        ).use { c -> if (c.moveToFirst()) {
+            currentId = c.getString(5)
+            TrackPoint(c.getDouble(0), c.getDouble(1), c.getLong(2), c.getFloat(3), c.getInt(4))
+        } else null }
         val gap = if (previous == null) Long.MAX_VALUE else now.time - previous.time
-        val newTrip = current == null || previous == null || gap > 25 * 60_000L ||
+        val newTrip = currentId == null || previous == null || gap > 25 * 60_000L ||
             localDay(now.time) != localDay(previous.time)
         if (!Geo.accept(if (newTrip) null else previous, now)) return false
 
         val db = writableDatabase
+        val id = if (newTrip) UUID.randomUUID().toString() else currentId!!
+        val stored = now.copy(segment = if (newTrip) 0 else previous!!.segment + if (gap > 90_000L) 1 else 0)
         db.beginTransaction()
         try {
-            val id = if (newTrip) UUID.randomUUID().toString() else current!!.id
             if (newTrip) {
                 db.insertOrThrow("trips", null, ContentValues().apply {
                     put("id", id); put("started", now.time); put("demo", 0)
@@ -148,14 +155,17 @@ class FootprintDatabase(private val context: Context) :
                 put("trip_id", id)
                 put("lat", now.lat); put("lon", now.lon)
                 put("time", now.time); put("accuracy", now.accuracy)
-                put("segment", if (newTrip) 0 else previous!!.segment + if (gap > 90_000L) 1 else 0)
+                put("segment", stored.segment)
             })
             db.setTransactionSuccessful()
         } catch (e: Exception) {
             lastError = "足迹写入失败。请检查存储空间并尽快备份"
             return false
         } finally { db.endTransaction() }
-        cached = null
+        cached = cached?.let { state ->
+            if (newTrip) state.copy(tracks = state.tracks + Track(id, now.time, false, listOf(stored)))
+            else state.copy(tracks = state.tracks.map { if (it.id == id) it.copy(points = it.points + stored) else it })
+        }
         revision++
         maybeDailyBackup(now.time)
         return true
@@ -247,12 +257,8 @@ class FootprintDatabase(private val context: Context) :
 }
 
 object FootprintInsights {
-    fun traveledDays(state: TrackState): Int = state.realTracks.flatMap { it.points }
-        .map { SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date(it.time)) }.toSet().size
-
-    fun exploredCells(state: TrackState): Int = state.realTracks.flatMap { it.points }
-        .map { p -> kotlin.math.floor(p.lat / 0.005).toInt() to kotlin.math.floor(p.lon / 0.005).toInt() }
-        .toSet().size
+    fun traveledDays(state: TrackState): Int = state.dayCount
+    fun exploredCells(state: TrackState): Int = state.cellCount
 
     fun lastVisited(state: TrackState, limit: Int = 10): List<Track> =
         state.realTracks.sortedByDescending { it.points.lastOrNull()?.time ?: it.started }.take(limit)

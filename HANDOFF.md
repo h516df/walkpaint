@@ -1,4 +1,30 @@
-# HANDOFF — WalkPaint v0.2（2026-10-08）
+# HANDOFF — WalkPaint v0.3（2026-10-08）
+
+## 当前可交接状态
+
+**用户本轮明确目标**：定位授权后应立即自动记录，不需要再次按开始；几步路有真实可见的上色反馈；“我的”改人物图标；国内地图优先高德、其次腾讯、再其次百度；长期迭代不能牺牲质量或数据。
+
+**当前工作**：v0.3 核心位于 feat/v03-usable-footprints 分支（具体 main/Release 状态每次以实时 Git 为准）。v0.3 code3，应用包名 cn.walkpaint、debug 签名与 v0.1/v0.2 一致；SQLite schema version 未变，不能卸载旧 App 测试。
+
+**已实施**：
+- 首次明确告知“同意并开启自动足迹”，精确定位授权成功后自动启动 GPS foreground service；拒绝不偷录；已有 automatic_enabled 状态不重置。
+- GPS 有效首点可见蓝绿色涂色种子，后续连续点画线；显示精度、最近入库时间、有效点总数和过滤原因。移动时提高采样频率，待机再降低；仍有 GPS/电池限制。
+- 路线点数据库按时间索引获取最新点，地图快照/GeoJSON 异步刷新；新增 TrackMapJson 与单测；矢量导航图标，个人页面为人物图标。
+- **高德官方 SDK**：依赖 com.amap.api:3dmap-location-search:11.3.100_loc11.3.000_sea9.8.1；独立 SDK 隐私同意后才初始化 AmapMapController，提供可打开的官方隐私政策链接；本地开发者 Key 从 Git 忽略的 local.properties 读取，缺少则 OpenFreeMap；数据库全部 WGS84，地图显示时转换到高德坐标，不改写历史。腾讯/百度未接入。
+
+**验证证据（2026-10-08）**：
+- Gradle :app:testDebugUnitTest :app:assembleDebug 通过；14 项 JVM 单测。
+- MuMu Android15 ADB 覆盖安装成功；真实点击首次授权确认，检查系统服务 isForeground=true，显示常驻通知；已保存足迹点数原 3 → 6（三个模拟步行 GPS 点），地图蓝绿色点/线和统计变化。
+- 测试定位提供器与 shell Mock Location 权限均已移除/恢复，未卸载应用或清除旧数据。截图在本机 verification/，该目录不提交 Git。
+- arm64 包约 70 MB；universal 包约 125 MB；两种 APK 均沿用原测试签名，arm64 包签名 SHA1 FA:E3:DF:35:B3:2F:A7:DF:41:B3:F8:53:79:3E:A6:9D:39:5B:8E:52。最终 Release/提交状态需再次核验。
+
+**外部阻塞**：当前还没有用户自己的高德 Android 开发者 Key，不能展示高德官方底图，更不能称其已真机验收。Key 需要绑定包名 cn.walkpaint 和签名 SHA1，设置见 docs/AMap_SETUP.md；Key 不应通过聊天公开。Android 真机户外、锁屏、重启、功耗、多日稳定性尚未验证，短路线仍可能因硬件定位精度被过滤。
+
+**高优先级下一阶段**：1) 拿合法 Key 后实测高德底图并核对官方许可和隐私清单；2) 安卓真机至少多次短途+锁屏/重启/耗电验收；3) 道路吸附与重复去重、正确的城市道路覆盖口径；4) 授权后自动的设备外备份；5) 长期轨迹分段渲染和压缩，不为了架构先做过度抽象。若高德因账号/许可不可用，再按顺序评估腾讯和百度官方 SDK。
+
+---
+
+## v0.2 历史交接（已归档）
 
 **用户目标：** 不用每次手动开启运动记录；在 Android 手机上长期自动积累生活足迹，城市地图上的已走道路逐渐上色；UI 现代、有个人统计和备份。高德是优先候选但目前没有官方 Key。
 

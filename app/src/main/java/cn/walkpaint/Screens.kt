@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -78,6 +79,8 @@ internal fun AppShell(
     onImport: () -> Unit,
     onBackgroundSettings: () -> Unit,
     internalBackupCount: Int,
+    mapProviderLabel: String,
+    onChooseAmap: () -> Unit,
     mapContent: @Composable () -> Unit
 ) {
     Scaffold(
@@ -89,11 +92,8 @@ internal fun AppShell(
                         selected = selectedTab == index,
                         onClick = { onTab(index) },
                         icon = {
-                            Text(
-                                when (index) { 0 -> "⌖"; 1 -> "≋"; else -> "◉" },
-                                fontSize = 23.sp,
-                                color = if (selectedTab == index) Accent else Muted
-                            )
+                            Icon(painterResource(when (index) { 0 -> R.drawable.ic_map; 1 -> R.drawable.ic_route; else -> R.drawable.ic_person }),
+                                contentDescription = tab, tint = if (selectedTab == index) Accent else Muted)
                         },
                         label = { Text(tab, fontWeight = if (selectedTab == index) FontWeight.SemiBold else FontWeight.Normal) }
                     )
@@ -105,12 +105,13 @@ internal fun AppShell(
             when (selectedTab) {
                 0 -> MapPage(
                     state, fix, automatic, running, trackingStatus,
-                    onLocate, onToggleTracking, onDemo, mapContent
+                    onLocate, onToggleTracking, onDemo, mapProviderLabel, mapContent
                 )
                 1 -> TripsPage(state, onTrip)
                 else -> ProfilePage(
                     state, automatic, running, trackingStatus, needsBackground,
-                    internalBackupCount, onToggleTracking, onExport, onImport, onBackgroundSettings
+                    internalBackupCount, onToggleTracking, onExport, onImport, onBackgroundSettings,
+                    mapProviderLabel, onChooseAmap
                 )
             }
         }
@@ -127,87 +128,138 @@ private fun MapPage(
     onLocate: () -> Unit,
     onToggle: (Boolean) -> Unit,
     onDemo: () -> Unit,
+    mapProviderLabel: String,
     mapContent: @Composable () -> Unit
 ) {
+    var detailsExpanded by remember { mutableStateOf(false) }
+    val statusParts = status.lines()
+    val statusHint = statusParts.firstOrNull().orEmpty()
+    val statusNumbers = statusParts.drop(1).firstOrNull().orEmpty()
     Box(Modifier.fillMaxSize()) {
         mapContent()
+
         Column(
             Modifier.align(Alignment.TopCenter).fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, top = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(start = 12.dp, end = 12.dp, top = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Surface(shape = RoundedCornerShape(23.dp), color = Color.White.copy(alpha = 0.97f),
-                shadowElevation = 5.dp) {
-                Column(Modifier.fillMaxWidth().padding(18.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("足迹涂色", color = Ink, fontSize = 23.sp, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.weight(1f))
-                        Surface(color = AccentSoft, shape = RoundedCornerShape(50)) {
-                            Text("探索地图", color = Accent, fontSize = 11.sp,
-                                modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp))
-                        }
+            Surface(
+                color = Color.White.copy(alpha = 0.96f),
+                shadowElevation = 3.dp,
+                shape = RoundedCornerShape(20.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("足迹涂色", color = Ink, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(3.dp))
+                        Text("走过的路，慢慢染上颜色", color = Muted, fontSize = 11.sp)
                     }
-                    Spacer(Modifier.height(6.dp))
-                    Text("每天走过的路，都悄悄变成颜色。", color = Muted, fontSize = 12.sp)
-                    Spacer(Modifier.height(14.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        TinyStat("%.1f".format(Locale.CHINA, state.totalMeters / 1000), "累计公里", Modifier.weight(1f))
-                        TinyStat(FootprintInsights.traveledDays(state).toString(), "足迹天数", Modifier.weight(1f))
-                        TinyStat(FootprintInsights.exploredCells(state).toString(), "探索网格", Modifier.weight(1f))
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("%.1f km".format(Locale.CHINA, state.totalMeters / 1000),
+                            color = Accent, fontWeight = FontWeight.Bold, fontSize = 19.sp)
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            FootprintInsights.traveledDays(state).toString() + " 天 · " +
+                                FootprintInsights.exploredCells(state).toString() + " 格",
+                            color = Muted, fontSize = 11.sp
+                        )
                     }
                 }
             }
             if (fix == null) {
-                Surface(shape = RoundedCornerShape(15.dp), color = Color.White.copy(alpha = 0.96f),
-                    shadowElevation = 2.dp) {
-                    Text("尚未获得当前位置 · 点击下方“定位我”", fontSize = 12.sp, color = Muted,
-                        modifier = Modifier.fillMaxWidth().padding(12.dp))
+                Surface(
+                    color = Color.White.copy(alpha = 0.94f),
+                    shape = RoundedCornerShape(13.dp), shadowElevation = 1.dp
+                ) {
+                    Text("正在等候当前位置 · 点击右下角定位按钮",
+                        fontSize = 12.sp, color = Muted,
+                        modifier = Modifier.fillMaxWidth().padding(10.dp))
                 }
             }
         }
 
         Column(
             Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, bottom = 18.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(start = 12.dp, end = 12.dp, bottom = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 Surface(
-                    onClick = onLocate, shape = CircleShape, color = Color.White,
-                    shadowElevation = 5.dp, modifier = Modifier.size(56.dp)
+                    onClick = onLocate,
+                    shape = CircleShape,
+                    color = Color.White,
+                    shadowElevation = 4.dp,
+                    modifier = Modifier.size(51.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Text("⌖", fontSize = 30.sp, color = Accent)
+                        Icon(painterResource(R.drawable.ic_location), "定位我",
+                            tint = Accent, modifier = Modifier.size(26.dp))
                     }
                 }
             }
-            Surface(shape = RoundedCornerShape(23.dp), color = Color.White.copy(alpha = 0.98f),
-                shadowElevation = 7.dp) {
-                Column(Modifier.fillMaxWidth().padding(15.dp)) {
+            Surface(
+                color = Color.White.copy(alpha = 0.97f),
+                shape = RoundedCornerShape(20.dp),
+                shadowElevation = 4.dp
+            ) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(9.dp).background(if (running) Accent else Color(0xFFD7A663), CircleShape))
-                        Spacer(Modifier.width(9.dp))
-                        Text(if (running) "自动足迹运行中" else if (automatic) "等待系统允许恢复" else "开启后会自动留下足迹",
-                            color = Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.weight(1f))
+                        Box(Modifier.size(8.dp).background(
+                            if (running) Accent else Color(0xFFD7A663), CircleShape))
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            if (running) "自动足迹运行中"
+                            else if (automatic) "等待系统允许恢复"
+                            else "自动足迹已暂停",
+                            color = Ink, fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f)
+                        )
                         Switch(checked = automatic, onCheckedChange = onToggle,
-                            modifier = Modifier.height(32.dp))
+                            modifier = Modifier.height(34.dp))
                     }
-                    Spacer(Modifier.height(5.dp))
-                    Text(status, fontSize = 11.sp, color = Muted, maxLines = 2,
-                        overflow = TextOverflow.Ellipsis)
-                    Spacer(Modifier.height(10.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Surface(onClick = onDemo, color = Color(0xFFF1EFFF),
-                            shape = RoundedCornerShape(13.dp)) {
-                            Text(if (state.tracks.any { it.demo }) "清除演示路线" else "试试涂色效果",
-                                color = Lilac, fontSize = 12.sp, modifier = Modifier.padding(12.dp))
+                    if (statusHint.isNotBlank()) {
+                        Text(statusHint, color = Muted, fontSize = 11.sp, maxLines = 1,
+                            overflow = TextOverflow.Ellipsis)
+                    }
+                    if (statusNumbers.isNotBlank()) {
+                        Spacer(Modifier.height(2.dp))
+                        Text(statusNumbers, color = Muted, fontSize = 11.sp, maxLines = 2,
+                            overflow = TextOverflow.Ellipsis)
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("地图 · " + mapProviderLabel, color = Muted, fontSize = 10.sp,
+                            modifier = Modifier.weight(1f))
+                        TextButton(onClick = { detailsExpanded = !detailsExpanded }) {
+                            Text(if (detailsExpanded) "收起详情" else "查看详情",
+                                color = Accent, fontSize = 11.sp)
                         }
-                        Text("蓝绿：真实足迹   紫色：演示", color = Muted, fontSize = 10.sp)
                     }
-                    Spacer(Modifier.height(5.dp))
-                    Text("地图：OpenFreeMap · © OpenStreetMap contributors",
-                        color = Muted, fontSize = 10.sp)
+                    if (detailsExpanded) {
+                        HorizontalDivider(color = PageBackground)
+                        Spacer(Modifier.height(7.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(onClick = onDemo, color = Color(0xFFF1EFFF),
+                                shape = RoundedCornerShape(12.dp)) {
+                                Text(
+                                    if (state.tracks.any { it.demo }) "清除演示路线" else "试看涂色效果",
+                                    color = Lilac, fontSize = 12.sp,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp)
+                                )
+                            }
+                            Spacer(Modifier.width(9.dp))
+                            Text("蓝绿=真实 · 紫色=演示", color = Muted, fontSize = 10.sp)
+                        }
+                        Spacer(Modifier.height(7.dp))
+                        Text(
+                            if (mapProviderLabel == "高德地图") "© 高德"
+                            else "OpenFreeMap · © OpenStreetMap contributors",
+                            color = Muted, fontSize = 10.sp
+                        )
+                    }
                 }
             }
         }
@@ -289,7 +341,7 @@ private fun TripsPage(state: TrackState, onTrip: (Track) -> Unit) {
                         Surface(color = AccentSoft, shape = RoundedCornerShape(15.dp),
                             modifier = Modifier.size(49.dp)) {
                             Box(contentAlignment = Alignment.Center) {
-                                Text("↝", color = Accent, fontSize = 25.sp)
+                                Icon(painterResource(R.drawable.ic_route), "足迹路线", tint = Accent)
                             }
                         }
                         Spacer(Modifier.width(13.dp))
@@ -320,7 +372,9 @@ private fun ProfilePage(
     onToggle: (Boolean) -> Unit,
     onExport: () -> Unit,
     onImport: () -> Unit,
-    onBackgroundSettings: () -> Unit
+    onBackgroundSettings: () -> Unit,
+    mapProviderLabel: String,
+    onChooseAmap: () -> Unit
 ) {
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -333,7 +387,7 @@ private fun ProfilePage(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Surface(color = AccentSoft, shape = CircleShape, modifier = Modifier.size(64.dp)) {
                         Box(contentAlignment = Alignment.Center) {
-                            Text("⌖", color = Accent, fontSize = 35.sp)
+                            Icon(painterResource(R.drawable.ic_person), "个人资料", tint = Accent, modifier = Modifier.size(36.dp))
                         }
                     }
                     Spacer(Modifier.width(14.dp))
@@ -399,9 +453,13 @@ private fun ProfilePage(
             WhiteCard {
                 Text("地图与功能扩展", color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                 Spacer(Modifier.height(8.dp))
-                Text("当前：MapLibre / OpenFreeMap", color = Accent, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                Text("当前底图：$mapProviderLabel", color = Accent, fontWeight = FontWeight.Medium, fontSize = 13.sp)
                 Spacer(Modifier.height(5.dp))
-                Text("高德地图可接入，但必须使用与你的包名、签名绑定的开发者 Key，并完成隐私授权流程。未拿到有效 Key 前保留开放地图，不使用非官方瓦片。", color = Muted, fontSize = 12.sp)
+                Text("高德 SDK 已预留：需绑定 cn.walkpaint 与签名 SHA1 的官方 Key，且用户独立同意高德隐私政策。未配置 Key 时仍使用 OpenFreeMap；SQLite 中所有历史 GPS 永远保留 WGS84。", color = Muted, fontSize = 12.sp)
+                if (BuildConfig.AMAP_KEY.isNotBlank() && mapProviderLabel != "高德地图") {
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(onClick = onChooseAmap) { Text("切换到高德地图") }
+                }
                 Spacer(Modifier.height(11.dp))
                 HorizontalDivider(color = PageBackground)
                 Spacer(Modifier.height(9.dp))
@@ -410,7 +468,7 @@ private fun ProfilePage(
             }
         }
         item {
-            Text("V0.2 预览版 · 精度受 GPS 和电池策略影响 · 定位点只存本机，地图瓦片在线请求第三方服务。",
+            Text("V0.3 预览版 · 精度受 GPS 和电池策略影响 · 定位点只存本机，地图瓦片在线请求第三方服务。",
                 color = Muted, fontSize = 11.sp, modifier = Modifier.padding(6.dp))
         }
     }
