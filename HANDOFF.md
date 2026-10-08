@@ -1,23 +1,23 @@
-# HANDOFF — 足迹涂色
+# HANDOFF — WalkPaint v0.2（2026-10-08）
 
-**日期：** 2026-10-08 ｜ **项目：** `D:\Projects\WalkPaint`
+**用户目标：** 不用每次手动开启运动记录；在 Android 手机上长期自动积累生活足迹，城市地图上的已走道路逐渐上色；UI 现代、有个人统计和备份。高德是优先候选但目前没有官方 Key。
 
-## 用户目标
-在 Android 手机上像给地图涂色一样，逐步累计自己真正走过的道路，未来需道路吸附与覆盖率进度。首版只做用户主动开启的 GPS 路线彩色叠加，不虚报整条路已涂色。
+**Authority：** 私人 GitHub 仓库 `h516df/walkpaint`；本机 `D:\Projects\WalkPaint`；代码实际状态以 Git/Gradle/APK 为准。不要泄露 GPS 数据、密钥或签名私钥。
 
-## 现场
-- 独立本地 Git 仓库（不是 `MyFirstApp`），Gradle Kotlin/AGP + MapLibre Android SDK 13.5.2，OpenFreeMap Liberty 底图，无付费 API key。
-- Kotlin：`Tracks.kt`（状态、过滤、JSON原子写入），`WalkPaintApp.kt`，`RecordingService.kt`（显式开始/结束的 Location FGS），`MainActivity.kt`（地图图层、控件、演示与统计）。
-- `app/src/test/java/cn/walkpaint/TracksTest.kt` 共 6 项单测。
-- 构建需要 `JAVA_HOME` 指向本机 JDK21，`GRADLE_USER_HOME` 可用项目下 `.gradle-user-home`；Kotlin 编译设置 in-process 可避免 Codex 沙箱中的 daemon 路径拒绝访问。退出码与最终 APK 见实际构建测试产物，不能仅依赖本文件。
-- 调试包根目录 `足迹涂色-v0.1-debug.apk`；原始 Gradle 输出 `app/build/outputs/apk/debug/app-debug.apk`。
+**用户体验边界：** 自动模式仍需要首次明确授权并打开开关。Android 需要可见的 foreground service 通知；待机调低定位频率，短路线可能遗漏；重启恢复需要 ACCESS_BACKGROUND_LOCATION 和操作系统允许，某些 OEM 会终止服务。不能保证“无条件永久运行”。
 
-## 下一步
-1. 优先用**真实 Android 手机**测试地图在线加载、允许精确位置、GPS 在户外收到点、锁屏持续记录、通知停止、重开后轨迹仍在；留截图/日志再宣称真机可用。本机 ADB 无连接设备；尚无实际设备验收。
-2. 为真实长期使用添加 GPX/JSON 导入导出与恢复/备份（v0.1 清除 App 数据、卸载会丢失）。
-3. 迭代道路匹配（OSM 路网/地图匹配，精度和覆盖率真实性要区分），重复道路去重与探索进度；避免仅按轨迹长度宣称已走道路比例。
-4. 测试 vivo/Android 后台电池策略；前台服务不等于所有机型都保证不被杀。
-5. 后续源码改动遵循 Git 单写手和隔离规则；不碰别的项目的签名文件，不公开地图轨迹，不使用付费 API，除非另获授权。
+**模块：** `MainActivity.kt` + `Screens.kt`（Compose Material3 / MapLibre）；`RecordingService.kt`（Android location foreground service / retained preference）；`FootprintDatabase.kt`（SQLite / 旧版 JSON 迁移 / JSON 合并备份 / 本地周期快照）；`Tracks.kt`（v1 JSON 格式及 GPS 过滤）；`WalkPaintApp.kt`（仓库初始化）。
 
-## 安全边界
-用户轨迹不上传业务服务器；底图向 OpenFreeMap 请求地图数据，须持续显示归属。无 `ACCESS_BACKGROUND_LOCATION`，仅主动点击后启用 Android 定位前台服务。不绕过 ChatGPT 平台安全审核、不关闭 Windows 防护。
+**升级保护：** `applicationId=cn.walkpaint`，v0.2 `versionCode=2`，使用和 v0.1 相同的本机 Android debug 签名证书。v0.1 `tracks.json` 导入 SQLite 时保留旧文件，失败 fail-closed 不覆盖。后续新版本需要显式数据库迁移，不要卸载旧 App 重装测试用户数据。
+
+**验证完成：** Android 15 MuMu 模拟器安装 v0.1 → 放入 3 个 GPS 历史点 → 覆盖安装 v0.2 → SQLite 转移成功，界面能显示旧里程/天数；MapLibre 底图加载与“地图/足迹/我的”三页截图验收；DocumentsUI JSON 导出后重新导入不崩溃；自动定位 Foreground Service 在模拟器显示前台通知；10 个 JVM 单测。详细 screenshots 位于 `verification/`（本地忽略提交）。
+
+**未验证/需后续：** 安卓真机户外 GPS、频繁锁屏/杀后台、省电续航、长期数据量、设备重启自动恢复及云端自动备份；无高德 Android Key，未接 AMap；道路吸附/去重覆盖率/地名反查尚不存在；模拟器曾回报非真实年月的定位点，新代码已拒绝异常时间戳，但需在真机测证。
+
+**下一版优先：**
+1. 真实手机后台记录与通知/权限 UX，确认后台采样不会因多种省电策略中断；必要时让用户仅操作一次定位、电池设置。
+2. 正规接入高德 SDK：用户高德开放平台 Android Key + 包名 `cn.walkpaint` + 签名 SHA1，隐私合规；参考 `docs/AMap_SETUP.md`。
+3. 真实道路吸附，回收 GPS 漂移、道路重复累计，以及覆盖率/城市维度的正确口径。
+4. 数据自动同步方案（用户授权的云盘 / 系统备份），确保可恢复且版本兼容；必要时 SQLite 长期压缩与分段地图渲染性能。
+
+**运行环境：** 本机 SDK `D:\Apps\Android\sdk`，JDK21 `C:\Program Files\Eclipse Adoptium\jdk-21.0.12.101-hotspot`，Gradle wrapper `D:\Apps\Android\gradle-home\wrapper\dists\gradle-9.1.0-bin\9agqghryom9wkf8r80qlhnts3\gradle-9.1.0\bin\gradle.bat`，项目独立 GRADLE_USER_HOME 为 `D:\Projects\WalkPaint\.gradle-user-home`。不要操作与本项目无关的 Android 项目。初始 v0.1 Release 仍在私有 GitHub 可回退，v0.2 单独新 release 不能覆盖旧资产。

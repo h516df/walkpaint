@@ -16,6 +16,9 @@ data class TrackState(val tracks: List<Track> = emptyList(), val activeId: Strin
 }
 
 object Geo {
+    fun plausibleTimestamp(fixTime: Long, now: Long): Boolean =
+        fixTime in (now - 120_000L)..(now + 60_000L)
+
     fun meters(a: TrackPoint, b: TrackPoint): Double {
         val dLat = Math.toRadians(b.lat - a.lat)
         val dLon = Math.toRadians(b.lon - a.lon)
@@ -29,7 +32,9 @@ object Geo {
         val seconds = (next.time - previous.time) / 1000.0
         if (seconds <= 0) return false
         val distance = meters(previous, next)
-        return distance >= 3 && distance <= max(60.0, seconds * 8.0) && distance / seconds <= 8.0
+        // Avoid coloring stationary GPS drift as genuine movement.
+        val minimumMove = max(8.0, max(previous.accuracy.toDouble(), next.accuracy.toDouble()) * 1.25)
+        return distance >= minimumMove && distance <= max(60.0, seconds * 8.0) && distance / seconds <= 8.0
     }
 }
 

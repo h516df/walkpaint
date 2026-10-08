@@ -1,25 +1,41 @@
 package cn.walkpaint
 
 import android.Manifest
-import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Color
-import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.location.Location
+import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.view.Gravity
-import android.view.ViewGroup
-import android.widget.Button
-import android.widget.FrameLayout
-import android.widget.LinearLayout
-import android.widget.TextView
+import android.provider.Settings
+import android.net.Uri
 import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.*
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import org.json.JSONArray
 import org.json.JSONObject
 import org.maplibre.android.MapLibre
@@ -27,270 +43,445 @@ import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
+import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.sources.GeoJsonSource
+import java.io.ByteArrayOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
-class MainActivity : Activity() {
-    private lateinit var mapView: MapView
-    private lateinit var distanceView: TextView
-    private lateinit var tripsView: TextView
-    private lateinit var statusView: TextView
-    private lateinit var recordButton: Button
-    private lateinit var demoButton: Button
-    private var map: MapLibreMap? = null
-    private val handler = Handler(Looper.getMainLooper())
-    private var lastState: TrackState? = null
-    private val app: WalkPaintApp get() = application as WalkPaintApp
+private val Ink = Color(0xFF193D40)
+private val Muted = Color(0xFF758C89)
+private val Accent = Color(0xFF187F78)
+private val AccentSoft = Color(0xFFDFF2ED)
+private val Lilac = Color(0xFF8271C7)
+private val PageBackground = Color(0xFFF4F8F6)
 
-    private val refreshTask = object : Runnable {
-        override fun run() {
-            refresh()
-            handler.postDelayed(this, 1800)
+class MainActivity : ComponentActivity() {
+    private val repository by lazy { (application as WalkPaintApp).repository }
+    private var currentTab by mutableIntStateOf(0)
+    private var snapshot by mutableStateOf(TrackState())
+    private var userFix by mutableStateOf<Location?>(null)
+    private var trackingStatus by mutableStateOf("正在检查位置状态")
+    private var trackingEnabled by mutableStateOf(false)
+    private var trackingRunning by mutableStateOf(false)
+    private var backgroundGranted by mutableStateOf(false)
+    private var confirmEnable by mutableStateOf(false)
+    private var promptLocation by mutableStateOf(false)
+    private var pendingEnable by mutableStateOf(false)
+    private var pendingCenter by mutableStateOf(false)
+    private var lastRevision = -1L
+
+    private var mapInstance: MapLibreMap? = null
+    private var mapWidget: MapView? = null
+    private var firstMapCenter = true
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var locationManager: LocationManager? = null
+
+    private val visibleLocationListener = LocationListener { fix ->
+        if (fix.hasAccuracy() && fix.accuracy < 200f) {
+            updatePosition(fix, pendingCenter)
+            pendingCenter = false
         }
     }
+    private val refreshTask = object : Runnable {
+        override fun run() {
+            updateUi()
+            mainHandler.postDelayed(this, 2000L)
+        }
+    }
+
+    private val locationPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { _ ->
+            if (AmbientTracking.hasFineLocation(this)) {
+                beginVisibleLocation()
+                if (pendingEnable) {
+                    AmbientTracking.setEnabled(this, true)
+                    AmbientTracking.start(this)
+                    requestNotification()
+                } else if (pendingCenter) centerUser()
+            } else toast("需要精确定位才能看到当前位置和绘制足迹")
+            pendingEnable = false
+            updateUi()
+        }
+
+    private val notificationPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { _ -> updateUi() }
+
+    private val exportLauncher =
+        registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+            if (uri != null) Thread {
+                runCatching {
+                    val payload = repository.exportBackup().toByteArray(Charsets.UTF_8)
+                    contentResolver.openOutputStream(uri)?.use { it.write(payload) }
+                        ?: error("无法写入目标文件")
+                }.onSuccess { runOnUiThread { toast("足迹备份已保存，可放入云盘") } }
+                    .onFailure { runOnUiThread { toast("导出失败：请检查目标位置或空间") } }
+            }.start()
+        }
+
+    private val importLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) Thread {
+                runCatching {
+                    val buffer = ByteArray(16 * 1024)
+                    val memory = ByteArrayOutputStream()
+                    val input = contentResolver.openInputStream(uri) ?: error("无法读取文件")
+                    input.use { stream ->
+                        while (true) {
+                            val n = stream.read(buffer)
+                            if (n < 0) break
+                            require(memory.size() + n <= 80 * 1024 * 1024) { "备份超过80MB" }
+                            memory.write(buffer, 0, n)
+                        }
+                    }
+                    repository.importBackup(memory.toString("UTF-8"))
+                }.onSuccess { count ->
+                    runOnUiThread {
+                        updateUi()
+                        toast("已合并 $count 条历史足迹，原数据未删除")
+                    }
+                }.onFailure { runOnUiThread { toast("无法导入，请确认是有效的足迹备份") } }
+            }.start()
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         MapLibre.getInstance(applicationContext)
-        val root = FrameLayout(this)
-        root.setBackgroundColor(Color.rgb(243, 248, 247))
-        mapView = MapView(this)
-        root.addView(mapView, FrameLayout.LayoutParams(-1, -1))
-        setContentView(root)
-        mapView.onCreate(savedInstanceState)
-
-        val top = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(16), dp(18), dp(14))
-            background = pill(Color.WHITE, 22)
-            elevation = dp(5).toFloat()
+        if (!AmbientTracking.hasFineLocation(this) &&
+            !getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE).getBoolean("location_prompt_seen", false)) {
+            promptLocation = true
         }
-        val title = label("足迹涂色", 24f, Color.rgb(25, 72, 73), true)
-        top.addView(title)
-        top.addView(label("走过的每一步，都为城市添一点颜色", 12f, Color.rgb(111, 135, 133)))
-        val numbers = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(0, dp(12), 0, dp(4))
-        }
-        val dCol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        distanceView = label("0.00 km", 23f, Color.rgb(28, 117, 111), true)
-        dCol.addView(distanceView)
-        dCol.addView(label("累计里程", 12f, Color.rgb(105, 126, 124)))
-        numbers.addView(dCol, LinearLayout.LayoutParams(0, -2, 1f))
-        val tCol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        tripsView = label("0", 23f, Color.rgb(28, 117, 111), true)
-        tCol.addView(tripsView)
-        tCol.addView(label("探索次数", 12f, Color.rgb(105, 126, 124)))
-        numbers.addView(tCol, LinearLayout.LayoutParams(0, -2, 1f))
-        top.addView(numbers)
-        root.addView(top, FrameLayout.LayoutParams(-1, -2).apply {
-            gravity = Gravity.TOP
-            setMargins(dp(14), dp(16), dp(14), 0)
-        })
+        snapshot = repository.snapshot()
+        updateUi()
+        setContent {
+            MaterialTheme(
+                colorScheme = lightColorScheme(
+                    primary = Accent, onPrimary = Color.White,
+                    background = PageBackground, surface = Color.White,
+                    onSurface = Ink, secondary = Lilac, surfaceContainerLow = PageBackground
+                )
+            ) {
+                AppShell(
+                    selectedTab = currentTab,
+                    onTab = { currentTab = it },
+                    state = snapshot,
+                    fix = userFix,
+                    automatic = trackingEnabled,
+                    running = trackingRunning,
+                    trackingStatus = trackingStatus,
+                    needsBackground = trackingEnabled && !backgroundGranted,
+                    onLocate = { centerUser() },
+                    onToggleTracking = { requested ->
+                        if (requested) confirmEnable = true
+                        else {
+                            AmbientTracking.stop(this)
+                            updateUi()
+                        }
+                    },
+                    onDemo = {
+                        runCatching {
+                            repository.setDemo(!snapshot.tracks.any { it.demo })
+                            updateUi()
+                            val demo = snapshot.tracks.firstOrNull { it.demo }
+                            if (demo != null) focusCoordinate(31.2318, 121.4742, 15.0)
+                        }.onFailure { toast("演示数据不可写入，请检查存储") }
+                    },
+                    onTrip = { trip ->
+                        currentTab = 0
+                        val p = trip.points.firstOrNull()
+                        if (p != null) {
+                            mainHandler.postDelayed({ focusCoordinate(p.lat, p.lon, 15.5) }, 500)
+                        }
+                    },
+                    onExport = {
+                        val title = "WalkPaint-${SimpleDateFormat("yyyyMMdd-HHmm", Locale.ROOT).format(Date())}.json"
+                        exportLauncher.launch(title)
+                    },
+                    onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
+                    onBackgroundSettings = { openAppSettings() },
+                    internalBackupCount = repository.backupFiles().size,
+                    mapContent = { NativeMapView() }
+                )
 
-        val bottom = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(16), dp(16), dp(14))
-            background = pill(Color.WHITE, 22)
-            elevation = dp(8).toFloat()
+                if (promptLocation) AlertDialog(
+                    onDismissRequest = {
+                        promptLocation = false
+                        getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE)
+                            .edit().putBoolean("location_prompt_seen", true).apply()
+                    },
+                    title = { Text("先找到你的位置", fontWeight = FontWeight.Bold, color = Ink) },
+                    text = { Text("允许精确定位后，地图就能显示你所在的位置。是否持续记录足迹由你另外决定，不会偷偷开启。") },
+                    confirmButton = {
+                        Button(onClick = {
+                            promptLocation = false
+                            getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE)
+                                .edit().putBoolean("location_prompt_seen", true).apply()
+                            pendingCenter = true
+                            askLocation()
+                        }) { Text("显示我的位置") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = {
+                            promptLocation = false
+                            getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE)
+                                .edit().putBoolean("location_prompt_seen", true).apply()
+                        }) { Text("稍后再说") }
+                    }
+                )
+                if (confirmEnable) AlertDialog(
+                    onDismissRequest = { confirmEnable = false },
+                    title = { Text("开启自动足迹？", color = Ink, fontWeight = FontWeight.Bold) },
+                    text = {
+                        Text(
+                            "只需要启用一次。之后会在后台持续尝试记录行走路线，并显示常驻通知。" +
+                                "为省电，静止时会降低 GPS 频率，因此短途可能遗漏。" +
+                                "你可以随时暂停。系统省电或强制停止可能中断记录；重启后自动恢复通常还需要“始终允许定位”。"
+                        )
+                    },
+                    confirmButton = {
+                        Button(onClick = {
+                            confirmEnable = false
+                            if (AmbientTracking.hasFineLocation(this)) {
+                                AmbientTracking.setEnabled(this, true)
+                                AmbientTracking.start(this)
+                                requestNotification()
+                                updateUi()
+                            } else {
+                                pendingEnable = true
+                                askLocation()
+                            }
+                        }) { Text("启用自动足迹") }
+                    },
+                    dismissButton = { TextButton(onClick = { confirmEnable = false }) { Text("暂不开启") } }
+                )
+            }
         }
-        statusView = label("准备好开始你的城市探索", 13f, Color.rgb(71, 104, 101))
-        bottom.addView(statusView)
-        recordButton = actionButton("开始记录", Color.rgb(43, 145, 135))
-        bottom.addView(recordButton, LinearLayout.LayoutParams(-1, dp(50)).apply {
-            topMargin = dp(12)
-        })
-        recordButton.setOnClickListener { onRecordClicked() }
-        val actionRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val locateButton = actionButton("定位我", Color.rgb(233, 243, 241), Color.rgb(29, 99, 97))
-        demoButton = actionButton("查看演示", Color.rgb(234, 238, 249), Color.rgb(72, 88, 146))
-        actionRow.addView(locateButton, LinearLayout.LayoutParams(0, dp(46), 1f))
-        actionRow.addView(demoButton, LinearLayout.LayoutParams(0, dp(46), 1f).apply { marginStart = dp(10) })
-        bottom.addView(actionRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
-        locateButton.setOnClickListener { centerOnUser() }
-        demoButton.setOnClickListener { toggleDemo() }
-        bottom.addView(label("轨迹仅保存在本机，卸载会丢失 · 地图需联网\n© OpenStreetMap contributors / OpenFreeMap", 10f, Color.rgb(116, 131, 131)).apply {
-            setPadding(0, dp(10), 0, 0)
-        })
-        root.addView(bottom, FrameLayout.LayoutParams(-1, -2).apply {
-            gravity = Gravity.BOTTOM
-            setMargins(dp(14), 0, dp(14), dp(28))
-        })
+        mainHandler.post(refreshTask)
+    }
 
-        mapView.getMapAsync { loaded ->
-            map = loaded
+    private fun updateUi() {
+        trackingEnabled = AmbientTracking.enabled(this)
+        trackingRunning = AmbientTracking.running
+        trackingStatus = repository.lastError ?: AmbientTracking.status
+        backgroundGranted = AmbientTracking.hasBackgroundLocation(this)
+        userFix = AmbientTracking.lastFix ?: userFix
+        if (lastRevision != repository.revision) {
+            snapshot = repository.snapshot()
+            lastRevision = repository.revision
+            updateMapLayers()
+        } else updateLocationLayer()
+    }
+
+    private fun requestNotification() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    private fun askLocation() {
+        locationPermissionLauncher.launch(arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION
+        ))
+    }
+
+    private fun centerUser() {
+        if (!AmbientTracking.hasFineLocation(this)) {
+            pendingCenter = true
+            askLocation()
+            return
+        }
+        val fix = userFix ?: latestSystemLocation()
+        if (fix != null) {
+            updatePosition(fix, true)
+            pendingCenter = false
+        } else {
+            pendingCenter = true
+            toast("正在获取当前定位，请确保系统位置服务已开启")
+            beginVisibleLocation()
+        }
+    }
+
+    private fun latestSystemLocation(): Location? {
+        if (!AmbientTracking.hasFineLocation(this)) return null
+        val manager = locationManager ?: getSystemService(LocationManager::class.java).also { locationManager = it }
+        return try {
+            listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+                .filter { manager.isProviderEnabled(it) }
+                .mapNotNull { manager.getLastKnownLocation(it) }
+                .filter { System.currentTimeMillis() - it.time < 2 * 60 * 60 * 1000 }
+                .maxByOrNull { it.time }
+        } catch (_: Exception) { null }
+    }
+
+    private fun beginVisibleLocation() {
+        if (!AmbientTracking.hasFineLocation(this)) return
+        val lm = locationManager ?: getSystemService(LocationManager::class.java).also { locationManager = it }
+        runCatching {
+            latestSystemLocation()?.let { updatePosition(it, firstMapCenter || pendingCenter) }
+            if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 8_000, 1f, visibleLocationListener, Looper.getMainLooper())
+            }
+            if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 20_000, 8f, visibleLocationListener, Looper.getMainLooper())
+            }
+        }
+    }
+
+    private fun updatePosition(fix: Location, center: Boolean) {
+        userFix = fix
+        AmbientTracking.lastFix = fix
+        updateLocationLayer()
+        if (center || firstMapCenter) {
+            focusCoordinate(fix.latitude, fix.longitude, 16.0)
+            firstMapCenter = false
+        }
+    }
+
+    private fun openAppSettings() {
+        toast("在定位权限中选择“始终允许”，再返回 App")
+        startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.fromParts("package", packageName, null)
+        })
+    }
+
+    private fun focusCoordinate(lat: Double, lon: Double, zoom: Double = 16.0) {
+        mapInstance?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(lat, lon), zoom))
+    }
+
+    private fun makeMapView(): MapView {
+        val view = MapView(this)
+        view.onCreate(null)
+        mapWidget = view
+        view.getMapAsync { loaded ->
+            if (mapWidget !== view) return@getMapAsync
+            mapInstance = loaded
             loaded.setStyle("https://tiles.openfreemap.org/styles/liberty") { style ->
-                style.addSource(GeoJsonSource("walkpaint-real", geoJson(app.store.snapshot().realTracks)))
-                style.addSource(GeoJsonSource("walkpaint-demo", geoJson(app.store.snapshot().tracks.filter { it.demo })))
-                style.addLayer(LineLayer("walkpaint-real-layer", "walkpaint-real").withProperties(
-                    PropertyFactory.lineColor(Color.rgb(27, 164, 150)),
-                    PropertyFactory.lineWidth(6f),
+                if (mapWidget !== view) return@setStyle
+                style.addSource(GeoJsonSource("wp-real", geoJson(snapshot.realTracks)))
+                style.addSource(GeoJsonSource("wp-demo", geoJson(snapshot.tracks.filter { it.demo })))
+                style.addSource(GeoJsonSource("wp-user", userJson(userFix)))
+                style.addLayer(LineLayer("wp-real-line", "wp-real").withProperties(
+                    PropertyFactory.lineColor(android.graphics.Color.rgb(18, 145, 134)),
+                    PropertyFactory.lineWidth(7f),
                     PropertyFactory.lineOpacity(0.88f),
                     PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                     PropertyFactory.lineCap(Property.LINE_CAP_ROUND)
                 ))
-                style.addLayer(LineLayer("walkpaint-demo-layer", "walkpaint-demo").withProperties(
-                    PropertyFactory.lineColor(Color.rgb(124, 112, 211)),
+                style.addLayer(LineLayer("wp-demo-line", "wp-demo").withProperties(
+                    PropertyFactory.lineColor(android.graphics.Color.rgb(133, 104, 197)),
                     PropertyFactory.lineWidth(6f),
-                    PropertyFactory.lineOpacity(0.78f),
+                    PropertyFactory.lineOpacity(0.8f),
                     PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                     PropertyFactory.lineCap(Property.LINE_CAP_ROUND)
                 ))
-                val first = app.store.snapshot().tracks.flatMap { it.points }.firstOrNull()
-                if (first != null) loaded.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(first.lat, first.lon), 15.0))
-                else loaded.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(20.0, 0.0), 2.5))
-                refresh()
-            }
-        }
-        handler.post(refreshTask)
-    }
-
-    private fun label(s: String, sp: Float, color: Int, bold: Boolean = false): TextView =
-        TextView(this).apply {
-            text = s
-            textSize = sp
-            setTextColor(color)
-            if (bold) typeface = Typeface.create("sans-serif", Typeface.BOLD)
-            gravity = Gravity.CENTER_VERTICAL
-        }
-
-    private fun actionButton(text: String, bg: Int, fg: Int = Color.WHITE): Button =
-        Button(this).apply {
-            this.text = text
-            isAllCaps = false
-            textSize = 15f
-            setTextColor(fg)
-            background = pill(bg, 14)
-            elevation = 0f
-            minHeight = dp(46)
-        }
-
-    private fun pill(color: Int, radius: Int): GradientDrawable =
-        GradientDrawable().apply { setColor(color); cornerRadius = dp(radius).toFloat() }
-
-    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
-
-    private fun onRecordClicked() {
-        if (app.store.snapshot().activeId != null) {
-            startService(Intent(this, RecordingService::class.java).setAction("STOP"))
-            handler.postDelayed({ refresh() }, 350)
-            return
-        }
-        if (app.store.loadError != null) {
-            toast(app.store.loadError!!)
-            return
-        }
-        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 100)
-            return
-        }
-        startRecording()
-    }
-
-    private fun startRecording() {
-        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
-        }
-        try {
-            startForegroundService(Intent(this, RecordingService::class.java).setAction("START"))
-            statusView.text = "正在启动记录，请保持定位开启"
-        } catch (e: Exception) {
-            toast("无法开始记录，请检查定位权限与系统设置")
-        }
-    }
-
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 100) {
-            if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) startRecording()
-            else toast("需要精确定位才能记录走过的路径")
-        }
-    }
-
-    private fun toggleDemo() {
-        try {
-            val current = app.store.snapshot()
-            val hasDemo = current.tracks.any { it.demo }
-            if (hasDemo) {
-                app.store.update { it.copy(tracks = it.tracks.filterNot { t -> t.demo }) }
-                toast("演示路线已清除，真实足迹保留")
-            } else {
-                val baseLat = 31.2304
-                val baseLon = 121.4737
-                val now = System.currentTimeMillis()
-                val steps = listOf(
-                    0.0000 to 0.0000, 0.0009 to 0.0011, 0.0017 to 0.0021,
-                    0.0025 to 0.0019, 0.0030 to 0.0007, 0.0022 to -0.0004,
-                    0.0014 to -0.0010, 0.0005 to -0.0004, 0.0000 to 0.0000
-                )
-                val points = steps.mapIndexed { i, pair ->
-                    TrackPoint(baseLat + pair.first, baseLon + pair.second, now + i * 10000L, 5f)
+                style.addLayer(CircleLayer("wp-user-halo", "wp-user").withProperties(
+                    PropertyFactory.circleColor(android.graphics.Color.rgb(29, 132, 211)),
+                    PropertyFactory.circleRadius(16f),
+                    PropertyFactory.circleOpacity(0.18f)
+                ))
+                style.addLayer(CircleLayer("wp-user-dot", "wp-user").withProperties(
+                    PropertyFactory.circleColor(android.graphics.Color.rgb(23, 119, 205)),
+                    PropertyFactory.circleRadius(7f),
+                    PropertyFactory.circleStrokeColor(android.graphics.Color.WHITE),
+                    PropertyFactory.circleStrokeWidth(3f)
+                ))
+                val fix = userFix ?: latestSystemLocation()
+                if (fix != null) {
+                    updatePosition(fix, true)
+                } else {
+                    val recent = snapshot.realTracks.flatMap { it.points }.lastOrNull()
+                    if (recent != null) loaded.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(recent.lat, recent.lon), 14.5))
+                    else loaded.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(20.0, 0.0), 2.5))
                 }
-                app.store.update { it.copy(tracks = it.tracks + Track("demo-preview", now, true, points)) }
-                map?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(baseLat + 0.0014, baseLon + 0.0005), 15.5))
-                toast("紫色为演示足迹，不计入真实里程")
             }
-            refresh()
-        } catch (e: Exception) { toast("演示操作失败，检查存储空间") }
+        }
+        return view
     }
 
-    private fun centerOnUser() {
-        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
-            checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 100)
-            return
-        }
-        val lm = getSystemService(LocationManager::class.java)
-        val location: Location? = try {
-            listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
-                .filter { lm.isProviderEnabled(it) }
-                .mapNotNull { lm.getLastKnownLocation(it) }
-                .maxByOrNull { it.time }
-        } catch (e: SecurityException) { null }
-        if (location != null) {
-            map?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(location.latitude, location.longitude), 16.0))
-        } else toast("暂时没有定位结果，请到开阔处尝试开始记录")
+    private fun updateMapLayers() {
+        val style = mapInstance?.style ?: return
+        style.getSourceAs<GeoJsonSource>("wp-real")?.setGeoJson(geoJson(snapshot.realTracks))
+        style.getSourceAs<GeoJsonSource>("wp-demo")?.setGeoJson(geoJson(snapshot.tracks.filter { it.demo }))
     }
 
-    private fun refresh() {
-        val state = app.store.snapshot()
-        distanceView.text = String.format(java.util.Locale.CHINA, "%.2f km", state.totalMeters / 1000)
-        tripsView.text = state.realTracks.size.toString()
-        recordButton.text = if (state.activeId != null) "结束并保存" else "开始记录"
-        recordButton.background = pill(if (state.activeId != null) Color.rgb(189, 112, 100) else Color.rgb(43, 145, 135), 14)
-        statusView.text = app.store.loadError ?: app.recordingMessage
-        demoButton.text = if (state.tracks.any { it.demo }) "清除演示" else "查看演示"
-        if (lastState != state) {
-            lastState = state
-            map?.style?.getSourceAs<GeoJsonSource>("walkpaint-real")?.setGeoJson(geoJson(state.realTracks))
-            map?.style?.getSourceAs<GeoJsonSource>("walkpaint-demo")?.setGeoJson(geoJson(state.tracks.filter { it.demo }))
-        }
+    private fun updateLocationLayer() {
+        mapInstance?.style?.getSourceAs<GeoJsonSource>("wp-user")?.setGeoJson(userJson(userFix))
     }
 
     private fun geoJson(tracks: List<Track>): String {
         val features = JSONArray()
-        tracks.forEach { track ->
-            track.points.groupBy { it.segment }.values.forEach { points ->
+        tracks.forEach { trip ->
+            trip.points.groupBy { it.segment }.values.forEach { points ->
                 if (points.size >= 2) {
-                    val coordinates = JSONArray()
-                    points.forEach { p -> coordinates.put(JSONArray().put(p.lon).put(p.lat)) }
-                    val line = JSONObject().put("type", "LineString").put("coordinates", coordinates)
-                    features.put(JSONObject().put("type", "Feature").put("properties", JSONObject()).put("geometry", line))
+                    val positions = JSONArray()
+                    points.forEach { p -> positions.put(JSONArray().put(p.lon).put(p.lat)) }
+                    val geometry = JSONObject().put("type", "LineString").put("coordinates", positions)
+                    features.put(JSONObject().put("type", "Feature")
+                        .put("properties", JSONObject()).put("geometry", geometry))
                 }
             }
         }
         return JSONObject().put("type", "FeatureCollection").put("features", features).toString()
     }
 
-    private fun toast(message: String) = Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+    private fun userJson(fix: Location?): String {
+        val features = JSONArray()
+        if (fix != null) {
+            features.put(JSONObject().put("type", "Feature")
+                .put("geometry", JSONObject().put("type", "Point")
+                    .put("coordinates", JSONArray().put(fix.longitude).put(fix.latitude)))
+                .put("properties", JSONObject()))
+        }
+        return JSONObject().put("type", "FeatureCollection").put("features", features).toString()
+    }
 
-    override fun onStart() { super.onStart(); mapView.onStart() }
-    override fun onResume() { super.onResume(); mapView.onResume(); refresh() }
-    override fun onPause() { mapView.onPause(); super.onPause() }
-    override fun onStop() { mapView.onStop(); super.onStop() }
-    override fun onLowMemory() { super.onLowMemory(); mapView.onLowMemory() }
-    override fun onSaveInstanceState(outState: Bundle) { mapView.onSaveInstanceState(outState); super.onSaveInstanceState(outState) }
-    override fun onDestroy() { handler.removeCallbacksAndMessages(null); mapView.onDestroy(); super.onDestroy() }
+    @Composable
+    private fun NativeMapView() {
+        val view = remember { makeMapView() }
+        val lifecycle = LocalLifecycleOwner.current.lifecycle
+        DisposableEffect(view, lifecycle) {
+            val observer = LifecycleEventObserver { _, event ->
+                when (event) {
+                    Lifecycle.Event.ON_START -> view.onStart()
+                    Lifecycle.Event.ON_RESUME -> view.onResume()
+                    Lifecycle.Event.ON_PAUSE -> view.onPause()
+                    Lifecycle.Event.ON_STOP -> view.onStop()
+                    Lifecycle.Event.ON_DESTROY -> Unit
+                    else -> Unit
+                }
+            }
+            lifecycle.addObserver(observer)
+            if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) view.onStart()
+            if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) view.onResume()
+            onDispose {
+                lifecycle.removeObserver(observer)
+                runCatching { view.onPause(); view.onStop(); view.onDestroy() }
+                if (mapWidget === view) { mapWidget = null; mapInstance = null }
+            }
+        }
+        AndroidView(factory = { view }, modifier = Modifier.fillMaxSize())
+    }
+
+    override fun onResume() {
+        super.onResume()
+        updateUi()
+        beginVisibleLocation()
+        if (AmbientTracking.enabled(this) && AmbientTracking.hasFineLocation(this) && !AmbientTracking.running) {
+            AmbientTracking.start(this)
+        }
+    }
+    override fun onPause() {
+        locationManager?.let { runCatching { it.removeUpdates(visibleLocationListener) } }
+        super.onPause()
+    }
+    override fun onDestroy() {
+        mainHandler.removeCallbacksAndMessages(null)
+        super.onDestroy()
+    }
+    private fun toast(text: String) = Toast.makeText(this, text, Toast.LENGTH_LONG).show()
 }
