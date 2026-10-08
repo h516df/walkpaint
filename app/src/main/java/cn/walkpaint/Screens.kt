@@ -78,6 +78,7 @@ internal fun AppShell(
     onExport: () -> Unit,
     onImport: () -> Unit,
     onBackgroundSettings: () -> Unit,
+    onCopyDiagnostics: () -> Unit,
     internalBackupCount: Int,
     mapProviderLabel: String,
     onChooseAmap: () -> Unit,
@@ -111,7 +112,7 @@ internal fun AppShell(
                 else -> ProfilePage(
                     state, automatic, running, trackingStatus, needsBackground,
                     internalBackupCount, onToggleTracking, onExport, onImport, onBackgroundSettings,
-                    mapProviderLabel, onChooseAmap
+                    onCopyDiagnostics, mapProviderLabel, onChooseAmap
                 )
             }
         }
@@ -158,8 +159,12 @@ private fun MapPage(
                         Text("走过的路，慢慢染上颜色", color = Muted, fontSize = 11.sp)
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text("%.1f km".format(Locale.CHINA, state.totalMeters / 1000),
-                            color = Accent, fontWeight = FontWeight.Bold, fontSize = 19.sp)
+                        val distanceLabel = when {
+                            state.totalMeters < 1.0 && state.realPointCount > 0 -> "已记录起点"
+                            state.totalMeters < 1000 -> "%.0f 米".format(Locale.CHINA, state.totalMeters)
+                            else -> "%.2f km".format(Locale.CHINA, state.totalMeters / 1000)
+                        }
+                        Text(distanceLabel, color = Accent, fontWeight = FontWeight.Bold, fontSize = 19.sp)
                         Spacer(Modifier.height(2.dp))
                         Text(
                             FootprintInsights.traveledDays(state).toString() + " 天 · " +
@@ -211,7 +216,8 @@ private fun MapPage(
                             if (running) Accent else Color(0xFFD7A663), CircleShape))
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            if (running) "自动足迹运行中"
+                            if (running && statusHint.startsWith("刚刚保存")) "新足迹已保存"
+                            else if (running) "自动监测已开启"
                             else if (automatic) "等待系统允许恢复"
                             else "自动足迹已暂停",
                             color = Ink, fontSize = 14.sp,
@@ -373,6 +379,7 @@ private fun ProfilePage(
     onExport: () -> Unit,
     onImport: () -> Unit,
     onBackgroundSettings: () -> Unit,
+    onCopyDiagnostics: () -> Unit,
     mapProviderLabel: String,
     onChooseAmap: () -> Unit
 ) {
@@ -399,7 +406,11 @@ private fun ProfilePage(
                 }
                 Spacer(Modifier.height(22.dp))
                 Row {
-                    TinyStat("%.1f km".format(Locale.CHINA, state.totalMeters / 1000), "总里程", Modifier.weight(1f))
+                    TinyStat(
+                        if (state.totalMeters < 1000) "%.0f 米".format(Locale.CHINA, state.totalMeters)
+                        else "%.2f km".format(Locale.CHINA, state.totalMeters / 1000),
+                        "总里程", Modifier.weight(1f)
+                    )
                     TinyStat("${FootprintInsights.traveledDays(state)}", "足迹天数", Modifier.weight(1f))
                     TinyStat("${FootprintInsights.exploredCells(state)}", "探索网格", Modifier.weight(1f))
                 }
@@ -419,6 +430,10 @@ private fun ProfilePage(
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(status, color = Muted, fontSize = 11.sp)
+                Spacer(Modifier.height(7.dp))
+                TextButton(onClick = onCopyDiagnostics) {
+                    Text("复制无位置坐标的诊断信息", fontSize = 12.sp)
+                }
                 if (needsBackground) {
                     Spacer(Modifier.height(12.dp))
                     HorizontalDivider(color = PageBackground)
@@ -455,7 +470,7 @@ private fun ProfilePage(
                 Spacer(Modifier.height(8.dp))
                 Text("当前底图：$mapProviderLabel", color = Accent, fontWeight = FontWeight.Medium, fontSize = 13.sp)
                 Spacer(Modifier.height(5.dp))
-                Text("高德 SDK 已预留：需绑定 cn.walkpaint 与签名 SHA1 的官方 Key，且用户独立同意高德隐私政策。未配置 Key 时仍使用 OpenFreeMap；SQLite 中所有历史 GPS 永远保留 WGS84。", color = Muted, fontSize = 12.sp)
+                Text("高德需配置专属开发者 Key 并同意隐私政策。目前使用开放地图，历史轨迹仍保存在本机。", color = Muted, fontSize = 12.sp)
                 if (BuildConfig.AMAP_KEY.isNotBlank() && mapProviderLabel != "高德地图") {
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(onClick = onChooseAmap) { Text("切换到高德地图") }
@@ -463,12 +478,11 @@ private fun ProfilePage(
                 Spacer(Modifier.height(11.dp))
                 HorizontalDivider(color = PageBackground)
                 Spacer(Modifier.height(9.dp))
-                Text("已为后续扩展保留 SQLite 数据迁移、分次足迹与备份格式。未来再加入道路吸附、去重覆盖率、城市统计。",
-                    color = Muted, fontSize = 12.sp)
+                Text("当前展示真实 GPS 轨迹，并非精确的道路覆盖率。", color = Muted, fontSize = 12.sp)
             }
         }
         item {
-            Text("V0.3 预览版 · 精度受 GPS 和电池策略影响 · 定位点只存本机，地图瓦片在线请求第三方服务。",
+            Text("V0.3.1 预览版 · 精度受 GPS 和电池策略影响 · 定位点只存本机，地图瓦片在线请求第三方服务。",
                 color = Muted, fontSize = 11.sp, modifier = Modifier.padding(6.dp))
         }
     }

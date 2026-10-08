@@ -77,8 +77,9 @@ class RecordingService : Service(), LocationListener {
     private var gpsEnabled = false
     private var idle = false
     private var lastMovementElapsed = 0L
-    private var gpsProbeStarted = 0L
-    private var lastGpsPaused = 0L
+    private var lastNotificationAt = 0L
+    private var rawFixBeforeLast: Location? = null
+    private var lastRawFix: Location? = null
 
     override fun onBind(intent: Intent?) = null
 
@@ -168,6 +169,24 @@ class RecordingService : Service(), LocationListener {
         gpsEnabled = false
     }
 
+    private fun isConfidentMovement(fix: Location): Boolean {
+        // Provider-reported speed is a good walking cue when reasonably accurate.
+        if (fix.hasSpeed() && fix.speed in 0.55f..3.5f &&
+            (!fix.hasSpeedAccuracy() || fix.speedAccuracyMetersPerSecond < 1.3f)) return true
+        val a = rawFixBeforeLast ?: return false
+        val b = lastRawFix ?: return false
+        if (a.accuracy > 15f || b.accuracy > 15f || fix.accuracy > 15f ||
+            fix.time <= b.time || b.time <= a.time || fix.time - a.time > 30_000) return false
+        val d1 = a.distanceTo(b)
+        val d2 = b.distanceTo(fix)
+        val direct = a.distanceTo(fix)
+        val speed = direct / ((fix.time - a.time) / 1000f)
+        val turn = kotlin.math.abs((b.bearingTo(fix) - a.bearingTo(b) + 540f) % 360f - 180f)
+        return d1 >= 2.5f && d2 >= 2.5f && turn <= 50f &&
+            speed in 0.5f..3.5f &&
+            direct > maxOf(7f, maxOf(a.accuracy, b.accuracy, fix.accuracy) * 0.75f)
+    }
+
     private val gpsListener = object : LocationListener {
         override fun onLocationChanged(fix: Location) = this@RecordingService.onLocationChanged(fix)
         override fun onProviderDisabled(provider: String) = this@RecordingService.onProviderDisabled(provider)
@@ -176,22 +195,26 @@ class RecordingService : Service(), LocationListener {
 
     override fun onLocationChanged(location: Location) {
         if (isClosing.get() || !AmbientTracking.running || !location.hasAccuracy()) return
-        val ageSeconds = (SystemClock.elapsedRealtimeNanos() - location.elapsedRealtimeNanos) / 1_000_000_000.0
-        if (ageSeconds !in 0.0..30.0 || !location.latitude.isFinite() || !location.longitude.isFinite()) return
+        val ageMillis = (SystemClock.elapsedRealtimeNanos() -
+            location.elapsedRealtimeNanos) / 1_000_000L
+        if (!location.latitude.isFinite() || !location.longitude.isFinite()) return
         val now = System.currentTimeMillis()
-        if (!Geo.plausibleTimestamp(location.time, now)) {
-            AmbientTracking.status = "已忽略时间异常的定位点"
+        val normalized = Geo.normalizedFixTime(location.time, now, ageMillis)
+        if (normalized == null) {
+            AmbientTracking.status = "定位点过期，等待新 GPS"
             return
         }
+        val reliableFix = Location(location).apply { time = normalized }
         val previousFix = AmbientTracking.lastFix
-        if (location.accuracy <= 250f) {
-            AmbientTracking.lastFix = location
+        if (reliableFix.accuracy <= 250f) {
+            AmbientTracking.lastFix = reliableFix
         }
 
-        if (idle && location.provider != LocationManager.GPS_PROVIDER) {
+        if (idle && reliableFix.provider != LocationManager.GPS_PROVIDER) {
             val old = previousFix
-            if (old != null && location.accuracy < 110f &&
-                old !== location && old.distanceTo(location) > maxOf(90f, location.accuracy * 1.7f)) {
+            if (old != null && reliableFix.accuracy < 110f &&
+                old !== reliableFix && old.distanceTo(reliableFix) >
+                    maxOf(90f, reliableFix.accuracy * 1.7f)) {
                 idle = false
                 lastMovementElapsed = SystemClock.elapsedRealtime()
                 pauseGps()
@@ -199,15 +222,27 @@ class RecordingService : Service(), LocationListener {
             }
         }
 
-        if (location.provider != LocationManager.GPS_PROVIDER) return
-        AmbientTracking.lastGps = location
-        if (location.accuracy > 35f) {
-            AmbientTracking.status = "GPS精度 ${location.accuracy.toInt()} 米 · 等待更准确定位（需≤35米）"
+        if (reliableFix.provider != LocationManager.GPS_PROVIDER) return
+        AmbientTracking.lastGps = reliableFix
+        val inferredMovement = isConfidentMovement(reliableFix)
+        if (reliableFix.accuracy <= 20f) {
+            rawFixBeforeLast = lastRawFix
+            lastRawFix = reliableFix
+        } else {
+            rawFixBeforeLast = null
+            lastRawFix = null
+        }
+        if (reliableFix.accuracy < 1f || reliableFix.accuracy > 35f) {
+            AmbientTracking.status = if (reliableFix.accuracy < 1f)
+                "GPS 未提供可信的精度，等待新信号"
+            else "GPS精度 ${reliableFix.accuracy.toInt()} 米 · 等待更准确定位（需≤35米）"
             return
         }
         storeExecutor.execute {
             if (isClosing.get() || !AmbientTracking.enabled(this)) return@execute
-            val accepted = runCatching { app.repository.addPosition(location) }.getOrDefault(false)
+            val accepted = runCatching {
+                app.repository.addPosition(reliableFix, inferredMovement)
+            }.getOrDefault(false)
             if (isClosing.get() || !AmbientTracking.enabled(this)) return@execute
             if (accepted) {
                 AmbientTracking.lastSaved = System.currentTimeMillis()
@@ -229,6 +264,10 @@ class RecordingService : Service(), LocationListener {
     }
 
     private fun updateNotification(s: String) {
+        // Don't wake system notification handling on every two-second GPS fix.
+        val now = SystemClock.elapsedRealtime()
+        if (lastNotificationAt != 0L && now - lastNotificationAt < 30_000L) return
+        lastNotificationAt = now
         getSystemService(NotificationManager::class.java).notify(17, notification(s))
     }
 

@@ -1,4 +1,30 @@
-# HANDOFF — WalkPaint v0.3（2026-10-08）
+# HANDOFF — WalkPaint v0.3.1（2026-10-08）
+
+**背景：** 用户明确反馈 v0.3 真机实际体验仍差，不能把 Gradle 构建和 GitHub Release 当作产品验收。这次只处理录制/短途展示/诊断核心缺陷，未增加新的常驻框架。
+
+**修复与根因：**
+- 之前高精度阈值按 GPS 误差 x1.25，短途可能被丢弃；v0.3.1 仅在 GPS 速度可信或连续三个定位呈合理同向运动时适当放宽，其余仍严格过滤静止漂移/跳点。
+- 存库后里程又执行了一遍更严格的门槛，可能画出轨迹却显示 0 米；现在统一里程统计已存合法路段，短距离页面显示米数。
+- 之前缺少 GPS 当前位置时地图回到上一次足迹的 zoom14.5，约 10~20 米的轨迹缩成几个像素，被圆点盖住；改用 zoom18 的街道级缩放、高对比度路线轮廓和首尾两个节点。竖屏真渲染已比对。
+- 点击历史路线旧实现延迟 500ms，经常早于地图样式加载而无效；现在使用 pendingTripFocus，在地图就绪后再应用。
+- 原先 GPS Wall-clock 异常直接丢弃；现在核验 Location.elapsedRealtimeNanos 小于30秒后才按当前时间修复，并阻止旧定位/精度0假定位；UI不把前台服务已启动误称为已保存足迹。
+- “我的”增加复制**不包含经纬度/路线**的诊断摘要，便于后续定位真机问题；减少无意义地图 SDK 开发说明。定位通知更新限频，避免每次 GPS 入库都刷新通知。
+
+**可重复验证（本机）：**
+- Android SDK36 / JDK21 / Gradle9.1.0：:app:testDebugUnitTest :app:assembleDebug 成功；共18个JVM单测，失败0。
+- scripts/android_emulator_smoke.py（只允许 MuMu loopback 或 emulator- 串号）运行结果：ANDROID_SMOKE_PASS，3个模拟步行点新增、静止漂移新增0、GNSS时间错4分钟但monotonic新鲜的定位点新增1、foreground service运行；提供器和 Mock Location 权限已在 finally 中恢复。
+- 安卓15 MuMu中实际截图和触控：portrait地图短路线显色、足迹列表→地图定位、我的→诊断入口；截屏在本机 verification/，此目录 Git 忽略。APK装回覆盖安装，应用包名 cn.walkpaint，versionCode4，沿用历史调试签名；旧SQLite未清理。
+- 构建产物：D:\Projects\WalkPaint\WalkPaint-v0.3.1-arm64-debug.apk（约70MB）、同目录universal包；GitHub release是否发布须以当时远端核查为准。
+
+**尚未解决 / 阻塞：** 没有用户高德官方Android Key，当前手机显示底图仍是OpenFreeMap；没有道路吸附、永久去重、真正城市道路覆盖率；用户真实安卓手机尚未接入电脑，无户外/锁屏/省电/多日与系统停止后的真机验收。若在用户手机仍不好用，优先从“我的→复制无位置坐标的诊断信息”收取最小证据再定位，不要盲目改阈值。不要把模拟器通过宣称为用户真机通过。
+
+**回退与保护：** private v0.3 Release仍在；禁止卸载清空足迹，v0.3.1使用同包名同签名versionCode4升级；数据SQLite schema不变。项目相关改动一律核对Git/测试/最新Release。实际程序状态不从本交接文件猜。
+
+---
+
+## v0.3 历史记录
+
+
 
 ## 当前可交接状态
 

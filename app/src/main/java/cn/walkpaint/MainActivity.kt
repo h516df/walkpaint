@@ -2,6 +2,8 @@ package cn.walkpaint
 
 import android.Manifest
 import android.content.Context
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
@@ -87,11 +89,13 @@ class MainActivity : ComponentActivity() {
     private var mapInstance: MapLibreMap? = null
     private var mapWidget: MapView? = null
     private var firstMapCenter = true
+    // A tap on a historical trip must survive the tab switch / asynchronous style load.
+    private var pendingTripFocus: Triple<Double, Double, Double>? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private var locationManager: LocationManager? = null
 
     private val visibleLocationListener = LocationListener { fix ->
-        if (fix.hasAccuracy() && fix.accuracy < 200f) {
+        if (fix.hasAccuracy() && fix.accuracy in 1f..200f) {
             updatePosition(fix, pendingCenter)
             pendingCenter = false
         }
@@ -206,10 +210,15 @@ class MainActivity : ComponentActivity() {
                         }.onFailure { toast("演示数据不可写入，请检查存储") }
                     },
                     onTrip = { trip ->
-                        currentTab = 0
-                        val p = trip.points.firstOrNull()
+                        val p = trip.points.lastOrNull()
                         if (p != null) {
-                            mainHandler.postDelayed({ focusCoordinate(p.lat, p.lon, 15.5) }, 500)
+                            val zoom = when {
+                                Geo.distance(trip.points) < 100.0 -> 18.0
+                                Geo.distance(trip.points) < 800.0 -> 16.5
+                                else -> 14.5
+                            }
+                            pendingTripFocus = Triple(p.lat, p.lon, zoom)
+                            currentTab = 0
                         }
                     },
                     onExport = {
@@ -218,6 +227,7 @@ class MainActivity : ComponentActivity() {
                     },
                     onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
                     onBackgroundSettings = { openAppSettings() },
+                    onCopyDiagnostics = { copyTrackingDiagnostics() },
                     internalBackupCount = repository.backupFiles().size,
                     mapProviderLabel = if (amapActive) "高德地图" else "OpenFreeMap",
                     onChooseAmap = { showAmapConsent = true },
@@ -304,19 +314,52 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun updateUi() {
+        val now = System.currentTimeMillis()
         trackingEnabled = AmbientTracking.enabled(this)
         trackingRunning = AmbientTracking.running
-        trackingStatus = repository.lastError ?: AmbientTracking.status
         backgroundGranted = AmbientTracking.hasBackgroundLocation(this)
-        userFix = AmbientTracking.lastFix ?: userFix
-        if (!trackingEnabled) trackingStatus = "已暂停 · 不会记录定位点"
-        else if (!AmbientTracking.hasFineLocation(this)) trackingStatus = "缺少精确定位权限 · 请在系统设置中允许"
-        else if (!getSystemService(LocationManager::class.java).isProviderEnabled(LocationManager.GPS_PROVIDER))
-            trackingStatus = "GPS 已关闭 · 请打开系统位置服务"
-        val gps = AmbientTracking.lastGps
-        val saved = AmbientTracking.lastSaved.takeIf { it > 0 } ?: snapshot.realTracks.lastOrNull()?.points?.lastOrNull()?.time
-        val savedText = saved?.let { SimpleDateFormat("HH:mm:ss", Locale.CHINA).format(Date(it)) } ?: "尚未入库"
-        trackingStatus += "\nGPS精度：${gps?.let { "${it.accuracy.toInt()}米" } ?: "等待卫星定位"} · 已存 ${snapshot.realTracks.sumOf { it.points.size }} 点 · 最近入库 $savedText"
+        val newestFix = AmbientTracking.lastFix?.takeIf {
+            it.hasAccuracy() && it.accuracy in 1f..200f &&
+                now - it.time in 0L..120_000L
+        }
+        userFix = newestFix ?: userFix?.takeIf { now - it.time in 0L..120_000L }
+        val latestGps = AmbientTracking.lastGps
+        val recentGps = latestGps?.takeIf { it.hasAccuracy() && it.accuracy >= 1f && now - it.time in 0L..60_000L }
+        val savedAt = listOfNotNull(
+            AmbientTracking.lastSaved.takeIf { it > 0L },
+            snapshot.realTracks.lastOrNull()?.points?.lastOrNull()?.time
+        ).maxOrNull()
+        val savedAge = savedAt?.let { now - it }
+        val savedLabel = when {
+            savedAge == null -> "还没有足迹"
+            savedAge in 0L..30_000L -> "刚刚"
+            savedAge in 0L..59_999L -> (savedAge / 1_000L).toString() + " 秒前"
+            savedAge in 0L..3_599_999L -> (savedAge / 60_000L).toString() + " 分钟前"
+            else -> SimpleDateFormat("MM-dd HH:mm", Locale.CHINA).format(Date(savedAt))
+        }
+        val gpsEnabled = getSystemService(LocationManager::class.java)
+            .isProviderEnabled(LocationManager.GPS_PROVIDER)
+        val diagnosis = when {
+            repository.lastError != null -> repository.lastError!!
+            !trackingEnabled -> "已暂停 · 不会记录位置"
+            !AmbientTracking.hasFineLocation(this) -> "缺少精确定位授权，请检查设置"
+            !gpsEnabled -> "系统 GPS 已关闭，无法记录"
+            !trackingRunning -> "自动记录服务未运行，请重新打开开关"
+            recentGps == null && AmbientTracking.status == "已忽略时间异常的定位点" ->
+                "定位时间异常，请检查手机日期、时间和自动同步设置"
+            recentGps == null -> "自动监测已开启 · 请到室外等待卫星定位"
+            recentGps.accuracy > 35f -> "定位误差较大，等待更精准信号"
+            savedAge != null && savedAge in 0L..30_000L -> "刚刚保存新足迹 · 继续行走会出现彩色路线"
+            else -> "GPS 正常监听 · 未检测到新的可靠位移"
+        }
+        val gpsLabel = when {
+            recentGps != null -> "GPS ±" + recentGps.accuracy.toInt() + "米"
+            latestGps != null && latestGps.accuracy < 1f -> "GPS 精度尚不可用"
+            latestGps != null -> "GPS 信号已过期"
+            else -> "正在搜寻 GPS"
+        }
+        trackingStatus = diagnosis + "\n" + gpsLabel + " · 已存 " +
+            snapshot.realPointCount + " 点 · 上次保存 " + savedLabel
         if (lastRevision != repository.revision && refreshing.compareAndSet(false, true)) {
             refreshExecutor.execute {
                 try {
@@ -377,7 +420,13 @@ class MainActivity : ComponentActivity() {
             pendingCenter = false
         } else {
             pendingCenter = true
-            toast("正在获取当前定位，请确保系统位置服务已开启")
+            val savedPoint = snapshot.realTracks.lastOrNull()?.points?.lastOrNull()
+            if (savedPoint != null) {
+                focusCoordinate(savedPoint.lat, savedPoint.lon, 16.0)
+                toast("暂时没有当前 GPS，已定位到最近足迹，正在继续寻找卫星信号")
+            } else {
+                toast("正在获取当前定位，请检查系统 GPS 并到室外稍等")
+            }
             beginVisibleLocation()
         }
     }
@@ -389,7 +438,8 @@ class MainActivity : ComponentActivity() {
             listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
                 .filter { manager.isProviderEnabled(it) }
                 .mapNotNull { manager.getLastKnownLocation(it) }
-                .filter { System.currentTimeMillis() - it.time < 2 * 60 * 60 * 1000 }
+                .filter { fix -> fix.hasAccuracy() && fix.accuracy in 1f..200f &&
+                    System.currentTimeMillis() - fix.time in 0L..120_000L }
                 .maxByOrNull { it.time }
         } catch (_: Exception) { null }
     }
@@ -413,9 +463,44 @@ class MainActivity : ComponentActivity() {
         AmbientTracking.lastFix = fix
         updateLocationLayer()
         if (center || firstMapCenter) {
-            focusCoordinate(fix.latitude, fix.longitude, 16.0)
+            focusCoordinate(fix.latitude, fix.longitude, 18.0)
             firstMapCenter = false
         }
+    }
+
+    private fun copyTrackingDiagnostics() {
+        // No coordinates, route identifiers or exact street names leave the app.
+        val now = System.currentTimeMillis()
+        fun age(whenAt: Long?): String =
+            if (whenAt == null || whenAt <= 0L) "无"
+            else ((now - whenAt).coerceAtLeast(0L) / 1_000L).toString() + " 秒前"
+        val lastFix = AmbientTracking.lastGps
+        val lastSaved = listOfNotNull(
+            AmbientTracking.lastSaved.takeIf { it > 0L },
+            snapshot.realTracks.lastOrNull()?.points?.lastOrNull()?.time
+        ).maxOrNull()
+        val gpsEnabled = getSystemService(LocationManager::class.java)
+            .isProviderEnabled(LocationManager.GPS_PROVIDER)
+        val power = getSystemService(android.os.PowerManager::class.java)
+        val notifications = getSystemService(android.app.NotificationManager::class.java)
+        val rows = listOf(
+            "WalkPaint " + BuildConfig.VERSION_NAME + " / Android " + Build.VERSION.RELEASE,
+            "自动记录开关：" + AmbientTracking.enabled(this),
+            "前台服务实际运行：" + AmbientTracking.running,
+            "精确位置授权：" + AmbientTracking.hasFineLocation(this),
+            "后台定位授权：" + AmbientTracking.hasBackgroundLocation(this),
+            "系统 GPS 开启：" + gpsEnabled,
+            "通知已允许：" + notifications.areNotificationsEnabled(),
+            "系统省电白名单：" + power.isIgnoringBatteryOptimizations(packageName),
+            "最近 GPS 信号：" + age(lastFix?.time),
+            "最近 GPS 精度：" + (lastFix?.accuracy?.toInt()?.toString() ?: "未知") + "米",
+            "上次足迹写入：" + age(lastSaved),
+            "本地足迹点：" + snapshot.realPointCount,
+            "状态：" + trackingStatus.substringBefore("\n")
+        )
+        val clip = ClipData.newPlainText("WalkPaint 定位诊断", rows.joinToString("\n"))
+        getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
+        toast("诊断已复制，不包含经纬度和个人路线")
     }
 
     private fun openAppSettings() {
@@ -442,17 +527,26 @@ class MainActivity : ComponentActivity() {
                 style.addSource(GeoJsonSource("wp-real", realGeoJson))
                 style.addSource(GeoJsonSource("wp-demo", demoGeoJson))
                 style.addSource(GeoJsonSource("wp-user", userJson(userFix)))
-                style.addLayer(CircleLayer("wp-real-seeds", "wp-real").withProperties(
-                    PropertyFactory.circleColor(android.graphics.Color.rgb(18, 145, 134)),
-                    PropertyFactory.circleRadius(10f), PropertyFactory.circleOpacity(0.85f),
-                    PropertyFactory.circleStrokeColor(android.graphics.Color.WHITE), PropertyFactory.circleStrokeWidth(2f)
-                ))
-                style.addLayer(LineLayer("wp-real-line", "wp-real").withProperties(
-                    PropertyFactory.lineColor(android.graphics.Color.rgb(18, 145, 134)),
-                    PropertyFactory.lineWidth(7f),
-                    PropertyFactory.lineOpacity(0.88f),
+                style.addLayer(LineLayer("wp-real-outline", "wp-real").withProperties(
+                    PropertyFactory.lineColor(android.graphics.Color.WHITE),
+                    PropertyFactory.lineWidth(16f),
+                    PropertyFactory.lineOpacity(0.9f),
                     PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                     PropertyFactory.lineCap(Property.LINE_CAP_ROUND)
+                ))
+                style.addLayer(LineLayer("wp-real-line", "wp-real").withProperties(
+                    PropertyFactory.lineColor(android.graphics.Color.rgb(0, 153, 144)),
+                    PropertyFactory.lineWidth(10f),
+                    PropertyFactory.lineOpacity(1f),
+                    PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND)
+                ))
+                style.addLayer(CircleLayer("wp-real-seeds", "wp-real").withProperties(
+                    PropertyFactory.circleColor(android.graphics.Color.rgb(0, 153, 144)),
+                    PropertyFactory.circleRadius(12f),
+                    PropertyFactory.circleOpacity(1f),
+                    PropertyFactory.circleStrokeColor(android.graphics.Color.WHITE),
+                    PropertyFactory.circleStrokeWidth(3f)
                 ))
                 style.addLayer(LineLayer("wp-demo-line", "wp-demo").withProperties(
                     PropertyFactory.lineColor(android.graphics.Color.rgb(133, 104, 197)),
@@ -472,12 +566,18 @@ class MainActivity : ComponentActivity() {
                     PropertyFactory.circleStrokeColor(android.graphics.Color.WHITE),
                     PropertyFactory.circleStrokeWidth(3f)
                 ))
+                val selected = pendingTripFocus
                 val fix = userFix ?: latestSystemLocation()
-                if (fix != null) {
+                if (selected != null) {
+                    loaded.moveCamera(CameraUpdateFactory.newLatLngZoom(
+                        LatLng(selected.first, selected.second), selected.third))
+                    pendingTripFocus = null
+                    firstMapCenter = false
+                } else if (fix != null) {
                     updatePosition(fix, true)
                 } else {
                     val recent = snapshot.realTracks.flatMap { it.points }.lastOrNull()
-                    if (recent != null) loaded.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(recent.lat, recent.lon), 14.5))
+                    if (recent != null) loaded.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(recent.lat, recent.lon), 18.0))
                     else loaded.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(20.0, 0.0), 2.5))
                 }
             }
@@ -517,6 +617,10 @@ class MainActivity : ComponentActivity() {
     private fun AmapNativeView() {
         val controller = remember { amapController }
         val view = remember { controller.create(snapshot, userFix) }
+        pendingTripFocus?.let {
+            controller.focus(it.first, it.second, it.third)
+            pendingTripFocus = null
+        }
         val lifecycle = LocalLifecycleOwner.current.lifecycle
         DisposableEffect(view, lifecycle) {
             val observer = LifecycleEventObserver { _, event ->

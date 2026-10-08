@@ -46,6 +46,16 @@ class FootprintInsightsTest {
         assertFalse(Geo.plausibleTimestamp(now + 120_000L, now))
     }
 
+    @Test fun freshGnssWithWrongWallClockCanRecoverWithoutRevivingStaleFix() {
+        val received = 1_791_453_240_000L
+        assertEquals(received - 3_000L,
+            Geo.normalizedFixTime(0L, received, 3_000L))
+        assertEquals(received - 1_000L,
+            Geo.normalizedFixTime(received - 1_000L, received, 2_000L))
+        assertNull(Geo.normalizedFixTime(0L, received, 180_000L))
+        assertNull(Geo.normalizedFixTime(0L, received, -1L))
+    }
+
     @Test fun stationaryGpsDriftIsNotPainted() {
         val a = TrackPoint(31.0, 121.0, 1000L, 10f)
         val jitter = TrackPoint(31.00004, 121.0, 5000L, 10f)

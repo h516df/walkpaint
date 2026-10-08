@@ -20,6 +20,7 @@ class TracksTest {
         assertFalse(Geo.accept(a, point(31.02, 121.0, 2000)))
         assertFalse(Geo.accept(a, point(31.0, 121.0, 2000)))
         assertFalse(Geo.accept(a, TrackPoint(31.0001, 121.0, 2000, 90f)))
+        assertFalse(Geo.accept(a, TrackPoint(31.0001, 121.0, 2000, 0f)))
         assertTrue(Geo.accept(a, point(31.0001, 121.0, 6000)))
     }
 
@@ -47,6 +48,30 @@ class TracksTest {
         } finally {
             dir.deleteRecursively()
         }
+    }
+
+    @Test fun shortWalkWithReliableMotionIsNotDiscardedOrHiddenFromStats() {
+        val first = TrackPoint(31.0, 121.0, 1_000L, 16f)
+        val second = TrackPoint(31.00009, 121.0, 9_000L, 16f)
+        // A ten-meter real walk can be lost with the former accuracy x 1.25 gate.
+        assertFalse(Geo.accept(first, second))
+        assertTrue(Geo.accept(first, second, confidentlyMoving = true))
+        val savedTrack = Track("moving", first.time, false, listOf(first, second))
+        assertTrue(TrackState(listOf(savedTrack)).totalMeters > 9.0)
+    }
+
+    @Test fun stationaryDriftAndTeleportAreRejectedEvenWithMotionOption() {
+        val atRest = TrackPoint(31.0, 121.0, 1_000L, 16f)
+        val noise = TrackPoint(31.00005, 121.0, 5_000L, 16f)
+        assertFalse(Geo.accept(atRest, noise))
+        val teleport = TrackPoint(31.01, 121.0, 2_000L, 5f)
+        assertFalse(Geo.accept(atRest, teleport, confidentlyMoving = true))
+    }
+
+    @Test fun segmentGapDoesNotAddFictitiousWalkDistance() {
+        val first = TrackPoint(31.0, 121.0, 1_000L, 5f, 0)
+        val last = TrackPoint(31.001, 121.0, 70_000L, 5f, 1)
+        assertEquals(0.0, Geo.distance(listOf(first, last)), 1e-6)
     }
 
     @Test fun corruptFileIsNotOverwritten() {

@@ -21,6 +21,15 @@ internal object TrackMapJson {
                         .put("type", "Point")
                         .put("coordinates", JSONArray().put(first.lon).put(first.lat))))
                 if (segment.size >= 2) {
+                    // Mark the newly recorded end as well as the start. Short
+                    // walks should be visible even with only two saved fixes.
+                    val last = segment.last()
+                    features.put(JSONObject()
+                        .put("type", "Feature")
+                        .put("properties", JSONObject())
+                        .put("geometry", JSONObject()
+                            .put("type", "Point")
+                            .put("coordinates", JSONArray().put(last.lon).put(last.lat))))
                     val coordinates = JSONArray()
                     segment.forEach { coordinates.put(JSONArray().put(it.lon).put(it.lat)) }
                     features.put(JSONObject()

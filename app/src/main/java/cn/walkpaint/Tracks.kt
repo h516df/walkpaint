@@ -13,6 +13,7 @@ data class Track(val id: String, val started: Long, val demo: Boolean, val point
 data class TrackState(val tracks: List<Track> = emptyList(), val activeId: String? = null) {
     val realTracks by lazy { tracks.filter { !it.demo && it.points.isNotEmpty() } }
     val totalMeters by lazy { realTracks.sumOf { Geo.distance(it.points) } }
+    val realPointCount by lazy { realTracks.sumOf { it.points.size } }
     val dayCount by lazy { realTracks.flatMap { it.points }.map { java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ROOT).format(java.util.Date(it.time)) }.toSet().size }
     val cellCount by lazy { realTracks.flatMap { it.points }.map { floor(it.lat / 0.005).toInt() to floor(it.lon / 0.005).toInt() }.toSet().size }
 }
@@ -21,21 +22,41 @@ object Geo {
     fun plausibleTimestamp(fixTime: Long, now: Long): Boolean =
         fixTime in (now - 120_000L)..(now + 60_000L)
 
+    // Android's monotonic location age is more reliable than a provider wall-clock.
+    // Recover the timestamp only for a genuinely fresh fix; never revive stale GPS.
+    fun normalizedFixTime(providerTime: Long, receivedAt: Long, ageMillis: Long): Long? {
+        if (ageMillis !in 0L..30_000L) return null
+        return if (plausibleTimestamp(providerTime, receivedAt)) providerTime
+               else receivedAt - ageMillis
+    }
+
     fun meters(a: TrackPoint, b: TrackPoint): Double {
         val dLat = Math.toRadians(b.lat - a.lat)
         val dLon = Math.toRadians(b.lon - a.lon)
         val h = sin(dLat / 2).pow(2) + cos(Math.toRadians(a.lat)) * cos(Math.toRadians(b.lat)) * sin(dLon / 2).pow(2)
         return 6371000.0 * 2 * asin(sqrt(h.coerceIn(0.0, 1.0)))
     }
-    fun distance(points: List<TrackPoint>) = points.zipWithNext().sumOf { (a, b) -> if (a.segment == b.segment && accept(a, b)) meters(a, b) else 0.0 }
-    fun accept(previous: TrackPoint?, next: TrackPoint): Boolean {
-        if (!next.lat.isFinite() || !next.lon.isFinite() || next.lat !in -90.0..90.0 || next.lon !in -180.0..180.0 || !next.accuracy.isFinite() || next.accuracy !in 0f..35f) return false
+    // Points in this list have already been accepted into persistent storage.
+    // Do not reapply the stricter no-motion filter when counting recorded distance:
+    // a short but genuine accepted step would otherwise be drawn but report 0 m.
+    fun distance(points: List<TrackPoint>): Double = points.zipWithNext().sumOf { (a, b) ->
+        val dt = (b.time - a.time) / 1000.0
+        val distance = meters(a, b)
+        if (a.segment == b.segment && dt > 0 && distance >= 3.0 &&
+            distance <= max(60.0, dt * 8.0) && distance / dt <= 8.0) distance else 0.0
+    }
+    // Speed or three consistent recent GPS fixes may lower the minimum movement
+    // threshold. With no motion evidence, retain the strict drift rejection.
+    fun accept(previous: TrackPoint?, next: TrackPoint, confidentlyMoving: Boolean = false): Boolean {
+        if (!next.lat.isFinite() || !next.lon.isFinite() || next.lat !in -90.0..90.0 || next.lon !in -180.0..180.0 || !next.accuracy.isFinite() || next.accuracy !in 1f..35f) return false
         if (previous == null) return true
         val seconds = (next.time - previous.time) / 1000.0
         if (seconds <= 0) return false
         val distance = meters(previous, next)
         // Avoid coloring stationary GPS drift as genuine movement.
-        val minimumMove = max(4.0, max(previous.accuracy.toDouble(), next.accuracy.toDouble()) * 1.25)
+        val maxAccuracy = max(previous.accuracy.toDouble(), next.accuracy.toDouble())
+        val minimumMove = if (confidentlyMoving) max(3.0, maxAccuracy * 0.55)
+                          else max(4.0, maxAccuracy * 1.25)
         return distance >= minimumMove && distance <= max(60.0, seconds * 8.0) && distance / seconds <= 8.0
     }
 }

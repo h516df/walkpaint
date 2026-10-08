@@ -26,8 +26,8 @@ class TrackMapJsonTest {
         ))
         val result = JSONObject(TrackMapJson.encode(listOf(track)))
         val features = result.getJSONArray("features")
-        assertEquals(2, features.length())
-        val geometry = features.getJSONObject(1).getJSONObject("geometry")
+        assertEquals(3, features.length())
+        val geometry = features.getJSONObject(2).getJSONObject("geometry")
         assertEquals("LineString", geometry.getString("type"))
         assertEquals(3, geometry.getJSONArray("coordinates").length())
         assertTrue(Geo.distance(track.points) > 10.0)
@@ -39,7 +39,7 @@ class TrackMapJsonTest {
             p(32.0, 122.0, 8, 1), p(32.0001, 122.0, 12, 1)
         ))
         val f = JSONObject(TrackMapJson.encode(listOf(track))).getJSONArray("features")
-        assertEquals(4, f.length())
+        assertEquals(6, f.length())
         assertEquals(2, (0 until f.length()).count {
             f.getJSONObject(it).getJSONObject("geometry").getString("type") == "LineString"
         })

@@ -123,7 +123,7 @@ class FootprintDatabase(private val context: Context) :
         return state
     }
 
-    @Synchronized fun addPosition(location: Location): Boolean {
+    @Synchronized fun addPosition(location: Location, confidentlyMoving: Boolean = false): Boolean {
         if (lastError != null) return false
         val wallClock = System.currentTimeMillis()
         if (!Geo.plausibleTimestamp(location.time, wallClock)) return false
@@ -139,11 +139,11 @@ class FootprintDatabase(private val context: Context) :
         val gap = if (previous == null) Long.MAX_VALUE else now.time - previous.time
         val newTrip = currentId == null || previous == null || gap > 25 * 60_000L ||
             localDay(now.time) != localDay(previous.time)
-        if (!Geo.accept(if (newTrip) null else previous, now)) return false
+        if (!Geo.accept(if (newTrip) null else previous, now, confidentlyMoving)) return false
 
         val db = writableDatabase
         val id = if (newTrip) UUID.randomUUID().toString() else currentId!!
-        val stored = now.copy(segment = if (newTrip) 0 else previous!!.segment + if (gap > 90_000L) 1 else 0)
+        val stored = now.copy(segment = if (newTrip) 0 else previous!!.segment + if (gap > 45_000L) 1 else 0)
         db.beginTransaction()
         try {
             if (newTrip) {
