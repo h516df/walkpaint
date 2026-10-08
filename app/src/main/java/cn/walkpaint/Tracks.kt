@@ -47,18 +47,25 @@ object Geo {
     }
     // Speed or three consistent recent GPS fixes may lower the minimum movement
     // threshold. With no motion evidence, retain the strict drift rejection.
-    fun accept(previous: TrackPoint?, next: TrackPoint, confidentlyMoving: Boolean = false): Boolean {
-        if (!next.lat.isFinite() || !next.lon.isFinite() || next.lat !in -90.0..90.0 || next.lon !in -180.0..180.0 || !next.accuracy.isFinite() || next.accuracy !in 1f..35f) return false
-        if (previous == null) return true
+    fun accept(previous: TrackPoint?, next: TrackPoint, confidentlyMoving: Boolean = false): Boolean =
+        rejectionReason(previous, next, confidentlyMoving) == null
+
+    fun rejectionReason(previous: TrackPoint?, next: TrackPoint, confidentlyMoving: Boolean = false): String? {
+        if (!next.lat.isFinite() || !next.lon.isFinite() || next.lat !in -90.0..90.0 ||
+            next.lon !in -180.0..180.0) return "INVALID_COORDINATE"
+        if (!next.accuracy.isFinite() || next.accuracy !in 1f..35f) return "UNRELIABLE_ACCURACY"
+        if (previous == null) return null
         val seconds = (next.time - previous.time) / 1000.0
-        if (seconds <= 0) return false
+        if (seconds <= 0) return "NON_INCREASING_TIME"
         val distance = meters(previous, next)
-        // Avoid coloring stationary GPS drift as genuine movement.
         val maxAccuracy = max(previous.accuracy.toDouble(), next.accuracy.toDouble())
         val minimumMove = if (confidentlyMoving) max(3.0, maxAccuracy * 0.55)
                           else max(4.0, maxAccuracy * 1.25)
-        return distance >= minimumMove && distance <= max(60.0, seconds * 8.0) && distance / seconds <= 8.0
+        if (distance < minimumMove) return "STATIONARY_OR_SMALL_MOVE"
+        if (distance > max(60.0, seconds * 8.0) || distance / seconds > 8.0) return "JUMP_OR_TOO_FAST"
+        return null
     }
+
 }
 
 object TrackCodec {

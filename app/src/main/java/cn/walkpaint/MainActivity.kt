@@ -50,6 +50,7 @@ import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.sources.GeoJsonSource
+import org.maplibre.android.style.sources.VectorSource
 import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -75,11 +76,15 @@ class MainActivity : ComponentActivity() {
     private var showAmapConsent by mutableStateOf(false)
     private val amapController by lazy { AmapMapController(this) }
     private val amapActive get() = BuildConfig.AMAP_KEY.isNotBlank() && amapConsent
+    private var showDiagnostics by mutableStateOf(false)
+    private var diagnosticText by mutableStateOf("")
     private var confirmEnable by mutableStateOf(false)
     private var promptLocation by mutableStateOf(false)
     private var pendingSettingsEnable = false
     private val refreshExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
     private val refreshing = java.util.concurrent.atomic.AtomicBoolean(false)
+    private var roadProbeAt = 0L
+    private var roadSourceStatus = "道路源尚未加载；当前只显示 GPS 轨迹"
     private var realGeoJson = geoJson(emptyList())
     private var demoGeoJson = geoJson(emptyList())
     private var pendingEnable by mutableStateOf(false)
@@ -111,7 +116,7 @@ class MainActivity : ComponentActivity() {
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { _ ->
             if (AmbientTracking.hasFineLocation(this)) {
                 beginVisibleLocation()
-                if (pendingEnable) {
+                if (pendingEnable || AmbientTracking.enabled(this)) {
                     AmbientTracking.setEnabled(this, true)
                     AmbientTracking.start(this)
                     requestNotification()
@@ -227,21 +232,30 @@ class MainActivity : ComponentActivity() {
                     },
                     onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
                     onBackgroundSettings = { openAppSettings() },
-                    onCopyDiagnostics = { copyTrackingDiagnostics() },
+                    onCopyDiagnostics = { diagnosticText = trackingDiagnostics(); showDiagnostics = true },
                     internalBackupCount = repository.backupFiles().size,
                     mapProviderLabel = if (amapActive) "高德地图" else "OpenFreeMap",
                     onChooseAmap = { showAmapConsent = true },
                     mapContent = { if (amapActive) AmapNativeView() else NativeMapView() }
                 )
 
+                if (showDiagnostics) AlertDialog(
+                    onDismissRequest = { showDiagnostics = false },
+                    title = { Text("记录诊断 · 不含坐标") },
+                    text = { Column(Modifier.verticalScroll(rememberScrollState())) {
+                        Text(diagnosticText, fontSize = 13.sp)
+                    } },
+                    confirmButton = { TextButton(onClick = { copyTrackingDiagnostics() }) { Text("复制诊断") } },
+                    dismissButton = { TextButton(onClick = { showDiagnostics = false }) { Text("关闭") } }
+                )
                 if (promptLocation) AlertDialog(
                     onDismissRequest = {
                         promptLocation = false
                         getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE)
                             .edit().putBoolean("auto_notice_v3_seen", true).apply()
                     },
-                    title = { Text("让走过的路自动染色", fontWeight = FontWeight.Bold, color = Ink) },
-                    text = { Text("允许精确定位后即启动自动足迹，使用前台服务和持续通知，可在“我的”里随时暂停。定位点只保存在本机；系统省电策略可能中断记录。") },
+                    title = { Text("自动记录走过的足迹", fontWeight = FontWeight.Bold, color = Ink) },
+                    text = { Text("允许精确定位后即启动自动足迹，使用前台服务、持续 GPS 和持续通知，会增加电耗，可在“我的”里随时暂停。定位点只保存在本机；系统省电策略可能中断记录。") },
                     confirmButton = {
                         Button(onClick = {
                             promptLocation = false
@@ -296,7 +310,7 @@ class MainActivity : ComponentActivity() {
                     title = { Text("开启自动足迹？", color = Ink, fontWeight = FontWeight.Bold) },
                     text = {
                         Text(
-                            "允许精确定位后即启动自动足迹，使用前台服务和持续通知，可在我的里随时暂停。" +
+                            "允许精确定位后即启动自动足迹，使用前台服务、持续 GPS 和持续通知，会增加电耗，可在我的里随时暂停。" +
                                 "系统省电或强制停止可能中断记录；重启恢复通常需要“始终允许定位”。"
                         )
                     },
@@ -378,6 +392,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         updateLocationLayer()
+        probeRoadSource()
     }
 
     private fun enableFromChoice() {
@@ -468,7 +483,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun copyTrackingDiagnostics() {
+    private fun trackingDiagnostics(): String {
         // No coordinates, route identifiers or exact street names leave the app.
         val now = System.currentTimeMillis()
         fun age(whenAt: Long?): String =
@@ -498,7 +513,13 @@ class MainActivity : ComponentActivity() {
             "本地足迹点：" + snapshot.realPointCount,
             "状态：" + trackingStatus.substringBefore("\n")
         )
-        val clip = ClipData.newPlainText("WalkPaint 定位诊断", rows.joinToString("\n"))
+        return rows.joinToString("\n") + "\n\n" + RecordingDiagnostics.summary(this) +
+            "\n\n" + roadSourceStatus + "\n道路累计未启用；不把 GPS 直线作为道路。" +
+            "\n\n持续 GPS 已启用，不长期持有 CPU 唤醒锁；常规诊断每30秒批量保存，异常退出最多损失末尾30秒诊断（不影响 SQLite 足迹）。vivo 等厂商需允许后台运行；强制停止后须手动打开 App，不能保证永不断录。"
+    }
+
+    private fun copyTrackingDiagnostics() {
+        val clip = ClipData.newPlainText("WalkPaint 定位诊断", trackingDiagnostics())
         getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
         toast("诊断已复制，不包含经纬度和个人路线")
     }
@@ -529,24 +550,24 @@ class MainActivity : ComponentActivity() {
                 style.addSource(GeoJsonSource("wp-user", userJson(userFix)))
                 style.addLayer(LineLayer("wp-real-outline", "wp-real").withProperties(
                     PropertyFactory.lineColor(android.graphics.Color.WHITE),
-                    PropertyFactory.lineWidth(16f),
+                    PropertyFactory.lineWidth(7f),
                     PropertyFactory.lineOpacity(0.9f),
                     PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                     PropertyFactory.lineCap(Property.LINE_CAP_ROUND)
                 ))
                 style.addLayer(LineLayer("wp-real-line", "wp-real").withProperties(
                     PropertyFactory.lineColor(android.graphics.Color.rgb(0, 153, 144)),
-                    PropertyFactory.lineWidth(10f),
+                    PropertyFactory.lineWidth(4f),
                     PropertyFactory.lineOpacity(1f),
                     PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                     PropertyFactory.lineCap(Property.LINE_CAP_ROUND)
                 ))
                 style.addLayer(CircleLayer("wp-real-seeds", "wp-real").withProperties(
                     PropertyFactory.circleColor(android.graphics.Color.rgb(0, 153, 144)),
-                    PropertyFactory.circleRadius(12f),
+                    PropertyFactory.circleRadius(3f),
                     PropertyFactory.circleOpacity(1f),
                     PropertyFactory.circleStrokeColor(android.graphics.Color.WHITE),
-                    PropertyFactory.circleStrokeWidth(3f)
+                    PropertyFactory.circleStrokeWidth(1.5f)
                 ))
                 style.addLayer(LineLayer("wp-demo-line", "wp-demo").withProperties(
                     PropertyFactory.lineColor(android.graphics.Color.rgb(133, 104, 197)),
@@ -564,7 +585,7 @@ class MainActivity : ComponentActivity() {
                     PropertyFactory.circleColor(android.graphics.Color.rgb(23, 119, 205)),
                     PropertyFactory.circleRadius(7f),
                     PropertyFactory.circleStrokeColor(android.graphics.Color.WHITE),
-                    PropertyFactory.circleStrokeWidth(3f)
+                    PropertyFactory.circleStrokeWidth(1.5f)
                 ))
                 val selected = pendingTripFocus
                 val fix = userFix ?: latestSystemLocation()
@@ -583,6 +604,27 @@ class MainActivity : ComponentActivity() {
             }
         }
         return view
+    }
+
+    private fun probeRoadSource() {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - roadProbeAt < 10_000 || amapActive) return
+        val style = mapInstance?.style ?: return
+        roadProbeAt = now
+        try {
+            val roads = style.sources.filterIsInstance<VectorSource>().flatMap {
+                it.querySourceFeatures(arrayOf("transportation"), null)
+            }.filter {
+                it.geometry()?.type() in listOf("LineString", "MultiLineString") &&
+                    it.hasProperty("class") && it.getStringProperty("class") in
+                    listOf("motorway", "trunk", "primary", "secondary", "tertiary", "minor", "service", "path", "track")
+            }
+            val withId = roads.count { !it.id().isNullOrBlank() }
+            roadSourceStatus = "开放道路几何：${roads.size} 个瓦片要素 · 自带 ID：$withId" +
+                "\n瓦片 ID 的跨缩放/裁剪稳定性未验收；本版未接入真实道路涂色。"
+        } catch (e: Exception) {
+            roadSourceStatus = "道路源查询失败：" + e.javaClass.simpleName + "；仍显示 GPS 轨迹。"
+        }
     }
 
     private fun updateMapLayers() {

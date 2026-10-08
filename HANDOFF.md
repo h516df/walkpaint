@@ -1,4 +1,39 @@
-# HANDOFF — 新会话接手（2026-10-08 20:00，Asia/Shanghai）
+# HANDOFF — v0.4 本地质量收尾（2026-10-09，Asia/Shanghai）
+
+> 用户已明确恢复开发并要求本地收尾；本节取代下方旧“暂停/只讨论”指令。唯一写手、工作目录 `D:\Projects\WalkPaint`、分支 `feat/v04-reliable-roadpaint`，基线 `d5b63c65fb0e82c6393cf3df9f94ddb9afcb6213`。本轮不 push、不 merge、不发 Release、不共享 APK、不增加服务或依赖。最终提交 SHA 以该分支 `git log -1` 为准。
+
+## 实现边界
+
+- 持续位置前台服务请求 GPS（2 秒请求间隔，不保证系统实际回调间隔），取消旧 idle 切换和重复 passive 回调；GPS 注册失败、关闭/恢复与无回调限频重注册均可诊断。保留定位过滤门槛，拒绝精度 0/不可靠精度，断档不连成假连续线。
+- **已删除持续续期 PARTIAL_WAKE_LOCK 逻辑，App 不长期持有 CPU 唤醒锁。** GPS 请求依赖 Android 定位前台服务；30 秒健康检查只在进程可运行时执行，不能绕过 Doze、OEM 杀后台或强制停止。
+- `DiagnosticBuffer` 累计 GPS/入库/过滤/心跳，`RecordingDiagnostics` 在独立线程每 30 秒批量落盘；start/stop/failure/registration/gap 到来立即排队提交，同时保存未落盘计数。失败会重试并在 UI 标明。关键事件不会等待批次，但不保证突然杀进程前一定完成磁盘写入。末尾常规诊断可能丢约 30 秒，**SQLite 足迹保存不依赖诊断批次**。
+- 诊断仅含固定原因、时间、次数、断档长度，不含经纬度、道路名或用户路线。我的页面可查看和复制；地图为细 GPS 线和小点，明确标注“道路涂色尚未接通”。
+- `RoadPaint.kt` 已实现纯算法投影匹配、平行路/交叉口歧义拒绝、同路连续段约束、稳定路段 ID 的区间累计去重及曲线截取；测试 fixture 是固定合成 WGS84 数据，**不加载到真实足迹库**。没有生产道路数据适配器、道路覆盖持久库或 UI 集成，真正道路着色仍未交付。
+- MapLibre/OpenFreeMap 当前视口曾查询到 121 个道路几何要素及 121 个瓦片 ID；这是只读诊断探测，**不能证明 ID 跨缩放/裁剪稳定，也不是已接通的道路匹配数据集**。没有合法高德 Android Key，没有报告高德底图成功；不盗用 Key/瓦片。
+
+## 最终构建与升级
+
+- JDK21（Eclipse Adoptium）、SDK36、AGP9.0.1、Gradle9.1.0；`gradlew.bat :app:testDebugUnitTest :app:assembleDebug --offline --console=plain` 成功。**33 个 JVM 测试，失败 0、错误 0**，含 3 个诊断批次策略测试及 9 个道路算法测试。这不代表真实道路或 vivo 后台验收。
+- 本地 APK：`app/build/outputs/apk/debug/app-debug.apk`，包名 `cn.walkpaint`、versionCode=5、versionName=0.4；SHA256 `468a7e3b17011dca9aac603bf4d8438efa92cd0ae1b33fae4ef81e6260ee4eed`。
+- `apksigner verify --print-certs` 验证通过，证书 SHA256 `21b74e3e2a10e12da8284d4e6bd7d99e55b00a385215902e94d7896f7a46c967`，与保留的 v0.3.1 universal APK 一致。SQLite schema=1、WGS84 历史格式不变；不卸载、不清数据、不迁移/重建真实足迹。
+
+## 模拟器证据与缺口
+
+- 仅操作允许的 MuMu `127.0.0.1:16384`，Android 15/API35；名称虽模拟 vivo，**不是 vivo 真机**。脚本 `scripts/android_v04_acceptance.py` 拒绝其他手机串号，用覆盖安装 `-r`，安装前后比较原 trips/points 的所有行，SQLite integrity_check 必须为 ok。
+- **先前完整链路（质量收尾前 APK）通过**：授权返回自动启动、短途、静止漂移/差精度/零精度过滤、异常 GNSS 时间但单调时钟新鲜、HOME、熄屏、回前台、GPS 停供 50 秒恢复、>45 秒断档及分段、强制停止后手动重开、暂停无写入/再次同意恢复、历史保留。35→45 点，新增 10 个模拟点，原行全部保留。证据 `verification/v04-acceptance.log`、`verification/v04/acceptance.json`，cleanup_errors=[]；对应 APK SHA256 `9d8f6a90ac1e7784f751a87d2bc9845ea952d76d88645c1cd53144ddc26f8fc6`，**不是最终无唤醒锁/批次诊断 APK**。
+- MuMu 曾断联导致一次 finally 清理报错；之后复连并恢复 MOCK_LOCATION=default，后续完整链路清理通过。最后短复核首次过早检查服务失败，服务实际稍后已进入前台；脚本增加有界等待，仍要求真实 dumpsys 证据，不以启动命令返回成功冒充服务运行。
+- 最后版本只运行 `python scripts/android_v04_acceptance.py --quick --output verification/v04-final`，不重复长 GPS 链路；结果见下方最后复核记录。脚本 finally 独立尝试删除模拟 GPS provider、恢复 shell MOCK_LOCATION/定位开关/权限/旋转及临时 UI XML，并将清理失败写入 acceptance.json。
+- **最后复核（2026-10-09 06:35 +08:00）通过**：`V04_FINAL_QUALITY_SMOKE_PASS`，同签名覆盖安装 code5；旧 45 点及所有原 trips/points 行保持不变；前台 45→46、HOME 46→47、熄屏 47→48；实际前台服务为 true、未持有 App CPU 唤醒锁、批次入库诊断已落盘。最终截图 `verification/v04-final/final-diagnostics.png` 已查看，48 点及启动/GPS/入库/过滤/断档字段真实可见。`verification/v04-final/acceptance.json` cleanup_errors=[]；复核 MOCK_LOCATION=default，系统日志确认移除 mock provider。短复核日志 `verification/v04-final-smoke.log`，构建日志 `verification/v04-final-gradle.log`。没有卸载、清数据或改写旧行，新增 3 点均为模拟器 GPS 测试。
+- 实渲染截图在本地忽略提交目录：`verification/v04/map.png`、`history.png`、`profile.png`、`diagnostics*.png`；补充手机比例截图 `phone-map.png`/`phone-profile.png`/`phone-diagnostics.png`。最终诊断截图在 `verification/v04-final/`。这些是模拟器真实渲染和注入 GPS，不能当作用户户外实走。
+- **未验收**：vivo 真机长时锁屏/后台/户外、实际耗电、长时间 Doze、重启自动恢复、Android14/API34 与 Android16/API36 实机运行、安全锁屏解锁、长期多日数据量；最终 APK 的完整停供/暂停链路未重跑。Android14+ 前台位置类型/权限已声明，后台自动启动还受背景定位权限和系统限制；强制停止后必须手动打开，OEM 电池策略无法保证永不断录。
+
+## 恢复与数据保护
+
+保留旧 APK 和用户数据库。ADB 不稳定时只重连同一允许的模拟器，核对 `appops get 2000 android:mock_location` 为原模式（本次 default），必要时在该模拟器移除测试 GPS provider；不要重启共享 ADB server 或操作用户手机。代码可从上述基线复查；旧版本同签名/schema 可作回退参考，但本轮没有验收降级安装，不能用卸载/清数据回退。`verification/`、APK、构建缓存、local.properties、签名文件与 Python cache 均忽略提交；测试数据库快照仅在进程内存比较，不输出原始坐标。
+
+---
+
+# 历史交接 — 新会话接手（2026-10-08 20:00，Asia/Shanghai）
 
 > **最新用户要求：先停止开发、只讨论方案，准备新开会话接手。** 本节优先于下方历史交接。未经用户新的明确要求，不要继续开发 WalkPaint、安装新开发工具或再发 APK；更新交接文档不代表新版本完成。
 

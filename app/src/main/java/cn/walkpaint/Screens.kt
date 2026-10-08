@@ -156,7 +156,7 @@ private fun MapPage(
                     Column(Modifier.weight(1f)) {
                         Text("足迹涂色", color = Ink, fontSize = 19.sp, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(3.dp))
-                        Text("走过的路，慢慢染上颜色", color = Muted, fontSize = 11.sp)
+                        Text("GPS 足迹预览 · 道路涂色尚未接通", color = Muted, fontSize = 11.sp)
                     }
                     Column(horizontalAlignment = Alignment.End) {
                         val distanceLabel = when {
@@ -432,7 +432,7 @@ private fun ProfilePage(
                 Text(status, color = Muted, fontSize = 11.sp)
                 Spacer(Modifier.height(7.dp))
                 TextButton(onClick = onCopyDiagnostics) {
-                    Text("复制无位置坐标的诊断信息", fontSize = 12.sp)
+                    Text("查看记录诊断（无坐标）", fontSize = 12.sp)
                 }
                 if (needsBackground) {
                     Spacer(Modifier.height(12.dp))
@@ -478,11 +478,11 @@ private fun ProfilePage(
                 Spacer(Modifier.height(11.dp))
                 HorizontalDivider(color = PageBackground)
                 Spacer(Modifier.height(9.dp))
-                Text("当前展示真实 GPS 轨迹，并非精确的道路覆盖率。", color = Muted, fontSize = 12.sp)
+                Text("当前显示 GPS 轨迹；道路匹配与累计核心已测试，但尚未接通真实道路涂色。", color = Muted, fontSize = 12.sp)
             }
         }
         item {
-            Text("V0.3.1 预览版 · 精度受 GPS 和电池策略影响 · 定位点只存本机，地图瓦片在线请求第三方服务。",
+            Text("V0.4 预览版 · 精度受 GPS 和电池策略影响 · 定位点只存本机，地图瓦片在线请求第三方服务。",
                 color = Muted, fontSize = 11.sp, modifier = Modifier.padding(6.dp))
         }
     }

@@ -1,0 +1,5 @@
+{
+  "notice": "Synthetic WGS84 road geometry for unit tests only, never loaded into production tracks.",
+  "id": "fixture-v1:curved-road-1",
+  "coordinates": [[121.0,31.0],[121.0,31.0001],[121.0001,31.0001],[121.0001,31.0002]]
+}

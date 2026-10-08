@@ -21,6 +21,8 @@ class FootprintDatabase(private val context: Context) :
 
     @Volatile var lastError: String? = null
         private set
+    @Volatile var lastFilterReason: String = "NONE"
+        private set
     @Volatile var revision: Long = 0
         private set
     private var cached: TrackState? = null
@@ -126,7 +128,7 @@ class FootprintDatabase(private val context: Context) :
     @Synchronized fun addPosition(location: Location, confidentlyMoving: Boolean = false): Boolean {
         if (lastError != null) return false
         val wallClock = System.currentTimeMillis()
-        if (!Geo.plausibleTimestamp(location.time, wallClock)) return false
+        if (!Geo.plausibleTimestamp(location.time, wallClock)) { lastFilterReason = "STALE_FIX"; return false }
         val now = TrackPoint(location.latitude, location.longitude, location.time, location.accuracy)
         // One indexed last-point query, rather than loading all history for every GPS fix.
         var currentId: String? = null
@@ -139,7 +141,8 @@ class FootprintDatabase(private val context: Context) :
         val gap = if (previous == null) Long.MAX_VALUE else now.time - previous.time
         val newTrip = currentId == null || previous == null || gap > 25 * 60_000L ||
             localDay(now.time) != localDay(previous.time)
-        if (!Geo.accept(if (newTrip) null else previous, now, confidentlyMoving)) return false
+        val rejection = Geo.rejectionReason(if (newTrip) null else previous, now, confidentlyMoving)
+        if (rejection != null) { lastFilterReason = rejection; return false }
 
         val db = writableDatabase
         val id = if (newTrip) UUID.randomUUID().toString() else currentId!!
