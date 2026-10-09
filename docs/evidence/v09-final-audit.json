@@ -1,0 +1,19 @@
+{
+  "permissions_after": {
+    "ACCESS_FINE_LOCATION": true,
+    "ACCESS_COARSE_LOCATION": true,
+    "ACCESS_BACKGROUND_LOCATION": false
+  },
+  "installed_foreground_service": true,
+  "mock_shell_default": true,
+  "session_counts": {
+    "session_gps_count": 22,
+    "session_valid_gps_count": 2,
+    "session_saved_count": 2,
+    "session_filtered_count": 20
+  },
+  "gnss_is_current_or_not_observed": true,
+  "schema2": true,
+  "pass": true,
+  "viewport_unchanged": true
+}
