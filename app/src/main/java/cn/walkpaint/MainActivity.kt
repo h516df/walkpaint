@@ -91,6 +91,9 @@ class MainActivity : ComponentActivity() {
     private val amapActive get() = amapSupported && BuildConfig.AMAP_KEY.isNotBlank() && amapConsent
     private var showDiagnostics by mutableStateOf(false)
     private var diagnosticText by mutableStateOf("")
+    private var feedbackHistory by mutableStateOf(RecordingDiagnostics.HistoryView(emptyList(),true,false))
+    private var feedbackReport by mutableStateOf<String?>(null)
+    private var feedbackBusy by mutableStateOf(false)
     private var confirmEnable by mutableStateOf(false)
     private var showBackgroundPrompt by mutableStateOf(false)
     private var showFineSettings by mutableStateOf(false)
@@ -156,6 +159,7 @@ class MainActivity : ComponentActivity() {
                 if(pendingEnable) continueEnable()
                 else if(pendingCenter) centerUser()
             } else {
+                RecordingDiagnostics.problem(this,ProblemCode.PERMISSION_DENIED)
                 if(pendingEnable) { pendingEnable=false; showFineSettings=true }
                 else toast("需要允许精确定位，才能查看当前位置")
                 pendingCenter=false
@@ -166,11 +170,13 @@ class MainActivity : ComponentActivity() {
     private val backgroundPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) {
             backgroundDeferred=!AmbientTracking.hasBackgroundLocation(this)
+            if(backgroundDeferred) RecordingDiagnostics.problem(this,ProblemCode.PERMISSION_DENIED)
             if(pendingEnable) continueEnable()
         }
 
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+            if(!notificationsGranted()) RecordingDiagnostics.problem(this,ProblemCode.PERMISSION_DENIED)
             if(pendingEnable) continueEnable()
             updateUi()
         }
@@ -182,7 +188,10 @@ class MainActivity : ComponentActivity() {
             if(waiting && pendingEnable) {
                 if(AmbientTracking.hasFineLocation(this)) {
                     // Returning without "always allow" is a valid decline, never a prompt loop.
-                    if(pendingBackgroundSettings) backgroundDeferred=!AmbientTracking.hasBackgroundLocation(this)
+                    if(pendingBackgroundSettings) {
+                        backgroundDeferred=!AmbientTracking.hasBackgroundLocation(this)
+                        if(backgroundDeferred) RecordingDiagnostics.problem(this,ProblemCode.PERMISSION_DENIED)
+                    }
                     pendingBackgroundSettings=false
                     continueEnable()
                 } else { pendingEnable=false; toast("尚未允许精确定位，自动记录未开启") }
@@ -209,6 +218,7 @@ class MainActivity : ComponentActivity() {
                     roadBusy = false; roadMessage = "已导入 $n 条真实道路，历史足迹已重新匹配"
                     updateUi()
                 } }.onFailure { e -> runOnUiThread {
+                    RecordingDiagnostics.problem(this,ProblemCode.ROAD_IMPORT_FAILED)
                     roadBusy = false; roadMessage = "导入失败：" + (e.message?.take(120) ?: "文件格式无效")
                 } }
             }
@@ -223,7 +233,7 @@ class MainActivity : ComponentActivity() {
                     contentResolver.openOutputStream(uri)?.use { it.write(payload) }
                         ?: error("无法写入目标文件")
                 }.onSuccess { runOnUiThread { toast("足迹备份已保存，可放入云盘") } }
-                    .onFailure { runOnUiThread { toast("导出失败：请检查目标位置或空间") } }
+                    .onFailure { runOnUiThread { RecordingDiagnostics.problem(this,ProblemCode.BACKUP_FAILED);toast("导出失败：请检查目标位置或空间") } }
             }.start()
         }
 
@@ -248,7 +258,7 @@ class MainActivity : ComponentActivity() {
                         updateUi()
                         toast("已合并 $count 条历史足迹，原数据未删除")
                     }
-                }.onFailure { runOnUiThread { toast("无法导入，请确认是有效的足迹备份") } }
+                }.onFailure { runOnUiThread { RecordingDiagnostics.problem(this,ProblemCode.BACKUP_FAILED);toast("无法导入，请确认是有效的足迹备份") } }
             }.start()
         }
 
@@ -345,11 +355,16 @@ class MainActivity : ComponentActivity() {
                     onRoadAppearance = { showRoadAppearance=true },
                     onChooseAmap = {
                         if(amapSupported) showAmapConsent = true
-                        else toast("此设备暂不支持高德地图，请使用离线地图")
+                        else { RecordingDiagnostics.problem(this,ProblemCode.MAP_UNAVAILABLE);toast("此设备暂不支持高德地图，请使用离线地图") }
                     },
                     onOnlineMap = { showOnlineConsent = true },
                     roadState = roadState,
                     onRoadPack = { showRoadPack = true },
+                    feedbackContent = { onBack -> FeedbackPage(feedbackHistory,feedbackReport,feedbackBusy,
+                        onBack={feedbackReport=null;onBack()},onPreview=::prepareFeedback,
+                        onClosePreview={feedbackReport=null},onCopy={copyFeedback()},onShare={shareFeedback()},
+                        onCollection={RecordingDiagnostics.collectHistory(this,it)},
+                        onClear={RecordingDiagnostics.clearHistory(this)}) },
                     mapContent = { if (amapActive) AmapNativeView() else NativeMapView() }
                 )
 
@@ -512,6 +527,7 @@ class MainActivity : ComponentActivity() {
         val latestGps = AmbientTracking.lastGps
         val recentGps = latestGps?.takeIf { it.hasAccuracy() && it.accuracy >= 1f && now - it.time in 0L..60_000L }
         val diagnostic = RecordingDiagnostics.snapshot(this)
+        feedbackHistory=RecordingDiagnostics.recent(this)
         fun recordedAt(key: String) = (diagnostic[key] as? Number)?.toLong() ?: 0L
         val savedAt = maxOf(AmbientTracking.lastSaved, recordedAt("saved_at")).takeIf { it > 0 }
         val savedAge = savedAt?.let { now - it }
@@ -726,6 +742,7 @@ class MainActivity : ComponentActivity() {
                     updateUi()
                 }
             } }.onFailure { e -> runOnUiThread {
+                RecordingDiagnostics.problem(this,ProblemCode.ROAD_DOWNLOAD_FAILED)
                 if(!isDestroyed) {
                     roadBusy=false; roadDownload=null
                     android.util.Log.w("WalkPaintRoads", "failure="+e.javaClass.simpleName+";cause="+(e.cause?.javaClass?.simpleName ?: "none"))
@@ -803,6 +820,39 @@ class MainActivity : ComponentActivity() {
         toast("诊断已复制，不包含经纬度和个人路线")
     }
 
+    private fun prepareFeedback(category:String,description:String) {
+        if(feedbackBusy) return
+        feedbackBusy=true
+        val application=applicationContext
+        val enabled=AmbientTracking.enabled(this);val running=AmbientTracking.running
+        val fine=AmbientTracking.hasFineLocation(this);val background=AmbientTracking.hasBackgroundLocation(this)
+        val notifications=notificationsGranted()
+        refreshExecutor.execute {
+            val text=runCatching {
+                val state=repository.snapshot();val roads=repository.roadSnapshot()
+                val counts=RoadMatchDiagnostics.counts(state,roads);val recent=RecordingDiagnostics.recent(application)
+                FeedbackReport.build(FeedbackFacts(BuildConfig.VERSION_NAME,BuildConfig.VERSION_CODE,Build.VERSION.SDK_INT,
+                    Build.BRAND,Build.MODEL,enabled,running,fine,background,notifications,
+                    state.realPointCount,roads.roads.size,roads.matched,roads.unmapped,roads.meters.toLong(),
+                    counts.confirmable,counts.noCandidates,counts.unavailable,RecordingDiagnostics.snapshot(application),
+                    recent.entries,recent.enabled,recent.saveFailed),category,description,System.currentTimeMillis())
+            }.getOrElse { "报告暂时无法整理，足迹保留。请稍后重试。" }
+            runOnUiThread { feedbackBusy=false;feedbackReport=text }
+        }
+    }
+    private fun copyFeedback() {
+        feedbackReport?.let {
+            getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("足迹涂色反馈",it))
+            toast("报告已复制")
+        }
+    }
+    private fun shareFeedback() {
+        val text=feedbackReport ?: return
+        val intent=Intent(Intent.ACTION_SEND).apply { type="text/plain";putExtra(Intent.EXTRA_TEXT,text) }
+        try { startActivity(Intent.createChooser(intent,"分享反馈报告")) }
+        catch(_:android.content.ActivityNotFoundException) { toast("没有可用分享应用，可复制报告") }
+    }
+
     private fun openAppSettings() {
         toast("在定位权限中选择“始终允许”，再返回 App")
         startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
@@ -818,6 +868,7 @@ class MainActivity : ComponentActivity() {
     private fun makeMapView(): MapView {
         val view = MapView(this)
         view.onCreate(null)
+        view.addOnDidFailLoadingMapListener { RecordingDiagnostics.problem(this,ProblemCode.MAP_UNAVAILABLE) }
         mapWidget = view
         view.getMapAsync { loaded ->
             if (mapWidget !== view) return@getMapAsync

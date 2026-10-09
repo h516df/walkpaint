@@ -2,6 +2,15 @@ package cn.walkpaint
 
 /** Read-only explanation against the CURRENT catalog; never changes accepted matches or thresholds. */
 internal object RoadMatchDiagnostics {
+    data class Counts(val confirmable:Int=0,val noCandidates:Int=0,val unavailable:Boolean=false)
+    fun counts(state:TrackState,roads:RoadState):Counts {
+        if(roads.error!=null) return Counts(unavailable=true)
+        val catalog=RoadCatalog(roads.roads)
+        val pairs=state.realTracks.asSequence().flatMap { it.points.zipWithNext().asSequence() }
+            .sortedByDescending { it.second.time }.take(2000).toList()
+        return Counts(pairs.count { reason(it.first,it.second,catalog)=="当前道路包可确认" },
+            pairs.count { catalog.near(it.first).isEmpty() || catalog.near(it.second).isEmpty() })
+    }
     fun reason(a:TrackPoint,b:TrackPoint,catalog:RoadCatalog):String {
         if(a.segment!=b.segment || b.time-a.time !in 1L..45000L) return "断点 / 时间间隔超限"
         if(listOf(a,b).any { !it.accuracy.isFinite() || it.accuracy !in 1f..20f }) return "道路匹配精度不足（需 1–20 米）"
