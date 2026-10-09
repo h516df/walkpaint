@@ -125,6 +125,33 @@ class FootprintDatabase(private val context: Context) :
             return RoadState(error=lastRoadError)
         }
     }
+    /** Reconstruct a day's confirmed intervals without changing global coverage or raw rows. */
+    @Synchronized internal fun roadSnapshotForDay(day: String): RoadState {
+        val format=java.text.SimpleDateFormat("yyyy-MM-dd",java.util.Locale.ROOT).apply { isLenient=false }
+        val start=format.parse(day)!!.time
+        val calendar=java.util.Calendar.getInstance().apply { timeInMillis=start; add(java.util.Calendar.DAY_OF_MONTH,1) }
+        try {
+            val catalog=catalog()
+            val covered=RoadCoverage()
+            var previous: TrackPoint?=null;var previousTrip: String?=null
+            var pairs=0;var matched=0
+            readableDatabase.rawQuery("SELECT p.id,p.trip_id,p.lat,p.lon,p.time,p.accuracy,p.segment,COALESCE(m.matched,0) FROM points p JOIN trips t ON t.id=p.trip_id LEFT JOIN road_matches m ON m.point_id=p.id WHERE t.demo=0 AND p.time>=? AND p.time<? ORDER BY p.trip_id,p.time,p.id",arrayOf(start.toString(),calendar.timeInMillis.toString())).use { c ->
+                while(c.moveToNext()) {
+                    val trip=c.getString(1)
+                    val point=TrackPoint(c.getDouble(2),c.getDouble(3),c.getLong(4),c.getFloat(5),c.getInt(6))
+                    if(previousTrip==trip && previous!=null) {
+                        pairs++
+                        if(c.getInt(7)==1) catalog.traversed(previous!!,point)?.let { covered.add(it); matched++ }
+                    }
+                    previous=point;previousTrip=trip
+                }
+            }
+            return RoadState(catalog.roads,covered.snapshot(),pairs,pairs-matched,matched,lastRoadError)
+        } catch(_:Exception) {
+            return RoadState(error="当天道路显示暂不可用，原足迹与累计覆盖保留")
+        }
+    }
+
     private fun putPack(db: SQLiteDatabase, pack: RoadPack) {
         pack.roads.forEach { r ->
             val osmId = r.stableId.split(":")[2].toLong()

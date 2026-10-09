@@ -69,6 +69,8 @@ class MainActivity : ComponentActivity() {
     private var snapshot by mutableStateOf(TrackState())
     private var userFix by mutableStateOf<Location?>(null)
     private var trackingStatus by mutableStateOf("正在检查位置状态")
+    private var recordingTitle by mutableStateOf("正在检查记录状态")
+    private var recordingHealthy by mutableStateOf(false)
     private var trackingEnabled by mutableStateOf(false)
     private var trackingRunning by mutableStateOf(false)
     private var backgroundGranted by mutableStateOf(false)
@@ -84,6 +86,13 @@ class MainActivity : ComponentActivity() {
     private val refreshExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
     private val refreshing = java.util.concurrent.atomic.AtomicBoolean(false)
     private var roadState by mutableStateOf(RoadState())
+    private var mapRoadState by mutableStateOf(RoadState())
+    private var mapTrackState by mutableStateOf(TrackState())
+    private var selectedDay by mutableStateOf<String?>(null)
+    private var roadAreaHint by mutableStateOf("")
+    private var boundaryCatalog: RoadCatalog?=null
+    private var boundaryRoads: List<RoadSegment>?=null
+    private fun clearDaySelection() { selectedDay=null;lastRevision=-1;updateUi() }
     private var roadBusy by mutableStateOf(false)
     private var roadMessage by mutableStateOf("")
     private var showRoadPack by mutableStateOf(false)
@@ -231,8 +240,14 @@ class MainActivity : ComponentActivity() {
                     automatic = trackingEnabled,
                     running = trackingRunning,
                     trackingStatus = trackingStatus,
+                    recordingTitle = recordingTitle,
+                    recordingHealthy = recordingHealthy,
                     needsBackground = trackingEnabled && !backgroundGranted,
-                    onLocate = { centerUser() },
+                    selectedDay = selectedDay,
+                    mapRoadState = mapRoadState,
+                    roadAreaHint = roadAreaHint,
+                    onShowAll = { clearDaySelection() },
+                    onLocate = { clearDaySelection(); centerUser() },
                     onToggleTracking = { requested ->
                         if (requested) confirmEnable = true
                         else {
@@ -249,6 +264,8 @@ class MainActivity : ComponentActivity() {
                         }.onFailure { toast("演示数据不可写入，请检查存储") }
                     },
                     onTrip = { trip ->
+                        selectedDay=DailyFootprints.key(trip.started)
+                        lastRevision=-1
                         val p = trip.points.lastOrNull()
                         if (p != null) {
                             val zoom = when {
@@ -430,17 +447,12 @@ class MainActivity : ComponentActivity() {
         trackingEnabled = AmbientTracking.enabled(this)
         trackingRunning = AmbientTracking.running
         backgroundGranted = AmbientTracking.hasBackgroundLocation(this)
-        val newestFix = AmbientTracking.lastFix?.takeIf {
-            it.hasAccuracy() && it.accuracy in 1f..200f &&
-                now - it.time in 0L..120_000L
-        }
-        userFix = newestFix ?: userFix?.takeIf { now - it.time in 0L..120_000L }
+        userFix = chooseMapFix(listOfNotNull(AmbientTracking.lastGps, AmbientTracking.lastFix,userFix))
         val latestGps = AmbientTracking.lastGps
         val recentGps = latestGps?.takeIf { it.hasAccuracy() && it.accuracy >= 1f && now - it.time in 0L..60_000L }
-        val savedAt = listOfNotNull(
-            AmbientTracking.lastSaved.takeIf { it > 0L },
-            snapshot.realTracks.lastOrNull()?.points?.lastOrNull()?.time
-        ).maxOrNull()
+        val diagnostic = RecordingDiagnostics.snapshot(this)
+        fun recordedAt(key: String) = (diagnostic[key] as? Number)?.toLong() ?: 0L
+        val savedAt = maxOf(AmbientTracking.lastSaved, recordedAt("saved_at")).takeIf { it > 0 }
         val savedAge = savedAt?.let { now - it }
         val savedLabel = when {
             savedAge == null -> "还没有足迹"
@@ -451,19 +463,9 @@ class MainActivity : ComponentActivity() {
         }
         val gpsEnabled = getSystemService(LocationManager::class.java)
             .isProviderEnabled(LocationManager.GPS_PROVIDER)
-        val diagnosis = when {
-            repository.lastError != null -> repository.lastError!!
-            !trackingEnabled -> "已暂停 · 不会记录位置"
-            !AmbientTracking.hasFineLocation(this) -> "缺少精确定位授权，请检查设置"
-            !gpsEnabled -> "系统 GPS 已关闭，无法记录"
-            !trackingRunning -> "自动记录服务未运行，请重新打开开关"
-            recentGps == null && AmbientTracking.status == "已忽略时间异常的定位点" ->
-                "定位时间异常，请检查手机日期、时间和自动同步设置"
-            recentGps == null -> "自动监测已开启 · 请到室外等待卫星定位"
-            recentGps.accuracy > 35f -> "定位误差较大，等待更精准信号"
-            savedAge != null && savedAge in 0L..30_000L -> "刚刚保存新足迹 · 仅确认匹配的道路上色"
-            else -> "GPS 正常监听 · 未检测到新的可靠位移"
-        }
+        val status = RecordingStatus.assess(RecordingDiagnostics.signals(this, repository.lastError))
+        recordingTitle=status.title; recordingHealthy=status.healthy
+        val diagnosis = status.title + " · " + status.hint
         val gpsLabel = when {
             recentGps != null -> "GPS ±" + recentGps.accuracy.toInt() + "米"
             latestGps != null && latestGps.accuracy < 1f -> "GPS 精度尚不可用"
@@ -471,8 +473,24 @@ class MainActivity : ComponentActivity() {
             else -> "正在搜寻 GPS"
         }
         trackingStatus = diagnosis + "\n" + gpsLabel + " · 已存 " +
-            snapshot.realPointCount + " 点 · 上次保存 " + savedLabel
+            snapshot.realPointCount + " 点 · 上次实际入库 " + savedLabel
+        roadAreaHint = when {
+            roadState.error != null -> roadState.error!!
+            roadState.roads.isEmpty() -> "还没有附近道路，GPS 记录独立保存；下载需单次同意"
+            userFix==null -> ""
+            else -> {
+                if(boundaryRoads !== roadState.roads) {
+                    boundaryRoads=roadState.roads
+                    boundaryCatalog=runCatching { RoadCatalog(roadState.roads) }.getOrNull()
+                }
+                val fix=userFix!!
+                if(boundaryCatalog?.near(TrackPoint(fix.latitude,fix.longitude,fix.time,fix.accuracy))?.isEmpty()==true)
+                    "当前位置附近没有已导入道路 · 已存足迹保留，新区域暂不上色"
+                else ""
+            }
+        }
         if (lastRevision != repository.revision && refreshing.compareAndSet(false, true)) {
+            val day=selectedDay
             refreshExecutor.execute {
                 try {
                     val revision = repository.revision
@@ -481,11 +499,15 @@ class MainActivity : ComponentActivity() {
                     next.totalMeters; FootprintInsights.traveledDays(next); FootprintInsights.exploredCells(next)
                     val road = repository.roadSnapshot()
                     val roadBase = road.geoJson(false)
-                    val painted = road.geoJson(true)
-                    val real = geoJson(next.realTracks)
+                    val displayedRoad = if(day==null) road else repository.roadSnapshotForDay(day)
+                    val displayedTrack = DailyFootprints.select(next,day)
+                    val painted = displayedRoad.geoJson(true)
+                    val real = geoJson(displayedTrack.realTracks)
                     val demo = geoJson(next.tracks.filter { it.demo })
                     runOnUiThread {
+                        if(selectedDay!=day) return@runOnUiThread
                         snapshot = next; lastRevision = revision
+                        mapTrackState=displayedTrack; mapRoadState=displayedRoad
                         realGeoJson = real; demoGeoJson = demo
                         roadState = road; roadJson = roadBase; paintedJson = painted
                         updateMapLayers()
@@ -524,6 +546,14 @@ class MainActivity : ComponentActivity() {
         ))
     }
 
+    private fun chooseMapFix(fixes: List<Location>): Location? {
+        val valid=fixes.filter { it.hasAccuracy() && it.latitude.isFinite() && it.longitude.isFinite() &&
+            it.latitude in -90.0..90.0 && it.longitude in -180.0..180.0 }
+        val now=android.os.SystemClock.elapsedRealtimeNanos()
+        val choice=MapFixChoice.choose(valid.map { MapFixQuality(it.provider,(now-it.elapsedRealtimeNanos)/1_000_000,it.accuracy) })
+        return choice?.let { valid[it] }
+    }
+
     private fun centerUser() {
         if (!AmbientTracking.hasFineLocation(this)) {
             pendingCenter = true
@@ -551,12 +581,9 @@ class MainActivity : ComponentActivity() {
         if (!AmbientTracking.hasFineLocation(this)) return null
         val manager = locationManager ?: getSystemService(LocationManager::class.java).also { locationManager = it }
         return try {
-            listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+            chooseMapFix(listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
                 .filter { manager.isProviderEnabled(it) }
-                .mapNotNull { manager.getLastKnownLocation(it) }
-                .filter { fix -> fix.hasAccuracy() && fix.accuracy in 1f..200f &&
-                    System.currentTimeMillis() - fix.time in 0L..120_000L }
-                .maxByOrNull { it.time }
+                .mapNotNull { manager.getLastKnownLocation(it) } + listOfNotNull(AmbientTracking.lastGps))
         } catch (_: Exception) { null }
     }
 
@@ -616,11 +643,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun updatePosition(fix: Location, center: Boolean) {
-        userFix = fix
-        AmbientTracking.lastFix = fix
+        val chosen=chooseMapFix(listOfNotNull(fix,userFix,AmbientTracking.lastGps)) ?: return
+        userFix = chosen
+        AmbientTracking.lastFix = chosen
         updateLocationLayer()
         if (center || firstMapCenter) {
-            focusCoordinate(fix.latitude, fix.longitude, 18.0)
+            focusCoordinate(chosen.latitude, chosen.longitude, 18.0)
             firstMapCenter = false
         }
     }
@@ -632,10 +660,8 @@ class MainActivity : ComponentActivity() {
             if (whenAt == null || whenAt <= 0L) "无"
             else ((now - whenAt).coerceAtLeast(0L) / 1_000L).toString() + " 秒前"
         val lastFix = AmbientTracking.lastGps
-        val lastSaved = listOfNotNull(
-            AmbientTracking.lastSaved.takeIf { it > 0L },
-            snapshot.realTracks.lastOrNull()?.points?.lastOrNull()?.time
-        ).maxOrNull()
+        val diagnostic=RecordingDiagnostics.snapshot(this)
+        val lastSaved=maxOf(AmbientTracking.lastSaved,(diagnostic["saved_at"] as? Number)?.toLong() ?: 0).takeIf { it>0 }
         val gpsEnabled = getSystemService(LocationManager::class.java)
             .isProviderEnabled(LocationManager.GPS_PROVIDER)
         val power = getSystemService(android.os.PowerManager::class.java)
@@ -649,8 +675,12 @@ class MainActivity : ComponentActivity() {
             "系统 GPS 开启：" + gpsEnabled,
             "通知已允许：" + notifications.areNotificationsEnabled(),
             "系统省电白名单：" + power.isIgnoringBatteryOptimizations(packageName),
+            "当前屏幕亮起：" + power.isInteractive,
+            "当前 Doze 待机：" + power.isDeviceIdleMode,
+            "当前省电模式：" + power.isPowerSaveMode,
             "最近 GPS 信号：" + age(lastFix?.time),
             "最近 GPS 精度：" + (lastFix?.accuracy?.toInt()?.toString() ?: "未知") + "米",
+            "地图蓝点来源：" + (userFix?.provider?.takeIf { it in setOf("gps","network") } ?: "无"),
             "上次足迹写入：" + age(lastSaved),
             "本地足迹点：" + snapshot.realPointCount,
             "状态：" + trackingStatus.substringBefore("\n")
@@ -763,7 +793,7 @@ class MainActivity : ComponentActivity() {
 
     private fun updateMapLayers() {
         if (amapActive) {
-            amapController.render(snapshot,roadState)
+            amapController.render(mapTrackState,mapRoadState)
             return
         }
         val style = mapInstance?.style ?: return
@@ -794,7 +824,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun AmapNativeView() {
         val controller = remember { amapController }
-        val view = remember { controller.create(snapshot, userFix,roadState) }
+        val view = remember { controller.create(mapTrackState, userFix,mapRoadState) }
         pendingTripFocus?.let {
             controller.focus(it.first, it.second, it.third)
             pendingTripFocus = null

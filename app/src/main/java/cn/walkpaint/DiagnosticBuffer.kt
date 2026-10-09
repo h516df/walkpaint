@@ -14,6 +14,10 @@ internal class DiagnosticBuffer(initial: Map<String, Any?> = emptyMap()) {
             "start" -> { values["service_start_at"] = at; count("start_count") }
             "heartbeat" -> values["heartbeat_at"] = at
             "gps" -> { values["gps_callback_at"] = at; count("gps_count") }
+            "valid_gps" -> { values["valid_gps_at"] = at; count("valid_gps_count") }
+            "power" -> { values["power_at"] = at; values["power_state"] = reason }
+            "exit" -> { values["process_exit_at"] = at; values["process_exit_reason"] = reason }
+            "recovery" -> { values["recovery_at"] = at; values["recovery_reason"] = reason; count("recovery_count") }
             "saved" -> { values["saved_at"] = at; count("saved_count") }
             "filtered" -> {
                 values["filtered_at"] = at; values["filter_reason"] = reason; count("filtered_count")
@@ -28,7 +32,7 @@ internal class DiagnosticBuffer(initial: Map<String, Any?> = emptyMap()) {
             values["max_gap_ms"] = maxOf(gap, long("max_gap_ms"))
         }
         dirty = true
-        return gap != null || kind in setOf("start", "stop", "failure", "register")
+        return gap != null || kind in setOf("start", "stop", "failure", "register", "exit", "recovery", "power")
     }
 
     fun long(key: String): Long = (values[key] as? Number)?.toLong() ?: 0L
