@@ -1,3 +1,19 @@
+# 当前交付 — v0.11 / Issue #8（2026-10-09）
+
+本节优先于下方历史。唯一主写手串行从 v0.10 / PR #13 `0a5c6ada079b327f9948115146dfc8ad3477871d` 开发；工作区 `D:\Worktrees\WalkPaint\codex-issue8-road-colors`，分支 `agent/codex/issue8-road-colors`。原 canonical/#6/#7 工作区保持干净、未修改；本次 PR base `issue-7-map-follow`，依赖未合并 PR #13，不合并。草稿 PR 待创建。
+
+**状态：v0.11 本地生产 APK、103 项 JVM 与 MuMu 高德/MapLibre 实际入口通过；私有 APK 分发待 v0.11 具体确认。真机视觉/方向/长期后台与 #6 GPS P0 未验收。** 我的→涂色外观，五预设/六位自定义/恢复青绿，保存到本机并即时重绘全部已确认道路；不改未走灰线/蓝点/描边，保持相机与跟随；不改录制、DB/schema2、matcher/GPS门槛和备份格式。偏好不包含在轨迹备份。
+
+业务/验收源码 `d8cb3ba4ca8fc401756e040c56bd039b310ae9e5`；cn.walkpaint / code12 / 0.11 / 原签名 / arm64。`WalkPaint-v0.11-arm64-debug.apk`：70428652字节，SHA256 `ec5066db7c0424327597d1ca67105ced83cccaf82648e03f74492757fe0f5994`，实际安装相同。五张表换色前后完全相同、230→230点；跟随及重复走路回归添加公开模拟测试点到240，原行保留。正反向重复覆盖110.00→110.00米，蓝点位移0px，历史与320dp通过。两SDK各验证6色及相机/跟随；清理无错误。
+
+证据/公开Oxford截图/测试失败说明：[docs/evidence/V011.md](docs/evidence/V011.md)。早期颜色全轮SDK测试拿到销毁Activity，原失败JSON保留；修正测试后在同一生产APK上余项与跟随/重复走路通过，没有伪称全轮重跑。无GitHub Actions，不称CI通过。
+
+v0.10原私有下载保留。用户此前明确确认的是v0.10分发；先前v0.9自动审核要求具体包分发确认，不能以“继续开发”替代v0.11发布确认或换渠道绕过。v0.11当前本地候选，未建Release/上传。用户只需作分发决定；后续下载/同签名覆盖安装与真实使用需要本人手机系统确认，不能声称手机已更新。回退同签名、schema2、code>=12修复包，不卸载/清库。
+
+项目登记已有独立agent-rules草稿PR #29（Active），未合并；无新增项目状态变化。#6/#7/#8保持开放，本阶段范围已经达到软件验收边界，真机结果到来前不扩大任务。
+
+---
+
 # 当前交付 — v0.10 / Issue #7（2026-10-09）
 
 草稿 PR：[PR #13](https://github.com/h516df/walkpaint/pull/13)，已推送，未合并。仓库当前未配置GitHub Actions工作流，PR checks为空；100项本机JVM/构建/实际UI与SDK验证已完成，不能把空checks写成CI通过。

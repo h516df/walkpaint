@@ -1,0 +1,14 @@
+{
+  "AMap_sdk_colors_camera_follow_and_data": true,
+  "MapLibre_sdk_colors_camera_follow_and_data": true,
+  "past_confirmed_day_recolors_without_view_jump": true,
+  "restore_default_service_switch_and_small_320dp": true,
+  "all_five_database_tables_exactly_unchanged": true,
+  "initial_points": 230,
+  "final_points": 230,
+  "apk_sha256": "ec5066db7c0424327597d1ca67105ced83cccaf82648e03f74492757fe0f5994",
+  "installed_exact_apk": true,
+  "real_vivo_visual": "NOT_TESTED",
+  "pass": true,
+  "cleanup_errors": []
+}
