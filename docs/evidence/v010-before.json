@@ -1,0 +1,17 @@
+{
+  "public_anchor": {
+    "before": 217,
+    "after": 218,
+    "pass": true
+  },
+  "public_move_without_locate": {
+    "before": 218,
+    "after": 219,
+    "pass": true
+  },
+  "blue_dot_displacement_pixels": 299.27524383360446,
+  "position_follow_pass": false,
+  "reproduced_missing_follow": true,
+  "all_original_rows_retained": true,
+  "cleanup_errors": []
+}

@@ -1,0 +1,23 @@
+{
+  "offline_anchor": {
+    "before": 227,
+    "after": 228,
+    "pass": true
+  },
+  "offline_move": {
+    "before": 228,
+    "after": 229,
+    "pass": true
+  },
+  "offline_blue_displacement_pixels": 0.06316863085815234,
+  "offline_browsing": {
+    "before": 229,
+    "after": 230,
+    "pass": true
+  },
+  "offline_browsing_offset_pixels": 134.4935198739662,
+  "offline_follow_drag_recover": true,
+  "original_rows_retained": true,
+  "pass": true,
+  "cleanup_errors": []
+}

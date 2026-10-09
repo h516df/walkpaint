@@ -1,3 +1,15 @@
+# 当前交付 — v0.10 / Issue #7（2026-10-09）
+
+本节优先于下方历史。用户继续开发后，以 #6/v0.9 模拟器稳定基线5c3bcee串行实现 #7；唯一主写手，`D:\Worktrees\walkpaint-issue7-follow` / `issue-7-map-follow`。原 canonical checkout 与 #6 工作区干净、未修改。#6真机仍开放，#8还未开始。本次PR base为 `issue-6-gps-road-diagnostics`，依赖PR #9，不合并。
+
+**状态：v0.10候选生产APK、100项JVM、MuMu高德/离线实际UI、方向换算和SDK相机/监听生命周期全部通过；vivo手机旋转、长期后台与原GPS P0尚未验收。** 自动位置＋方向跟随，手动浏览暂停，原定位按钮恢复，历史保持；只改显示交互，不改RecordingService/DB/matcher/GPS保存门槛。原签名/schema2/code11，业务/测试 `3728c18b7e5ce834048e717d2ad63e6c31cdf909`。
+
+本地 `WalkPaint-v0.10-arm64-debug.apk`：70375792字节，SHA256 `cc510ff035a7b039828764d46b58d45179642715d92b101a2def4315956807d9`，安装指纹相同。原版偏移299px→新版0px；原219点全行保留到224，离线分项227→230；SDK专项所有五张数据库表不变。测试清理无错误。详细截图、失败记录、官方依据与未测项见 [docs/evidence/V010.md](docs/evidence/V010.md)。
+
+**APK未上传/Release未创建，手机未更新**；之前自动审批要求本次具体上传确认，不换渠道绕过。用户确认后可在私有GitHub上传、核对服务器digest/大小、开放私有预览并实际下载验SHA；原v0.8下载保留。手机只需覆盖安装、系统确认和实际使用，不需要USB/命令。回退同签名、schema2、code>=11修复包，不卸载/清库。#7不因模拟器通过关闭；下一代码任务是独立#8颜色自定义，仍单写手串行。
+
+---
+
 # 当前交付 — v0.9 / Issue #6（2026-10-09）
 
 本节优先于下方v0.8历史记录。唯一主写手，从核对一致的f987dc7/v0.8建独立分支 `issue-6-gps-road-diagnostics`，工作区 `D:\Worktrees\walkpaint-issue6-p0`。原 `D:\Projects\WalkPaint` / PR #1/#3/#5/main 未修改或合并。对应任务 https://github.com/h516df/walkpaint/issues/6。
