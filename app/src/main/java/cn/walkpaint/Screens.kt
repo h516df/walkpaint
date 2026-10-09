@@ -12,6 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -67,6 +68,7 @@ internal fun AppShell(
 @Composable
 private fun MapPage(notice: String?,day: String?,onShowAll: ()->Unit,onLocate: ()->Unit,
     onSettings: ()->Unit,mapContent: @Composable ()->Unit) {
+    val uriHandler=LocalUriHandler.current
     Box(Modifier.fillMaxSize()) {
         mapContent()
         Column(Modifier.align(Alignment.TopCenter).padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -85,9 +87,11 @@ private fun MapPage(notice: String?,day: String?,onShowAll: ()->Unit,onLocate: (
             }
         }
         // Keep the native SDK logo/copyright at the bottom unobscured.
-        Text("道路 © OpenStreetMap · ODbL",color=Ink.copy(alpha=0.8f),fontSize=10.sp,
+        Text("© OpenStreetMap contributors · ODbL 1.0",color=Ink.copy(alpha=0.8f),fontSize=10.sp,
             modifier=Modifier.align(Alignment.BottomStart).padding(start=8.dp,bottom=28.dp)
-                .background(PageBackground.copy(alpha=0.80f),RoundedCornerShape(3.dp)).padding(horizontal=4.dp,vertical=2.dp))
+                .background(PageBackground.copy(alpha=0.80f),RoundedCornerShape(3.dp))
+                .clickable { uriHandler.openUri("https://www.openstreetmap.org/copyright") }
+                .padding(horizontal=4.dp,vertical=2.dp))
     }
 }
 
