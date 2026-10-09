@@ -1,3 +1,16 @@
+# 当前交付 — v0.7 私有远程测试下载（2026-10-09）
+
+用户明确澄清“我是远程控制 Codex 的”，不在本机电脑旁。此前直接要求“你不放到 GitHub 私人仓库里面，我怎么下载啊”已授权该项目的私有下载分发；本次沿用会话既有授权提供测试包。先前“本轮未发布”是该时点状态，以下分发事实优先；不把分发当P0验收完成，不合并PR、不公开仓库、不上传私人轨迹。
+
+- 私有测试发布：https://github.com/h516df/walkpaint/releases/tag/v0.7，draft=false/prerelease=true，仓库isPrivate=true；标签v0.7固定已测试业务提交ec0d2b50d9d137f72f4370de71024944298334c4，后续文档不移动标签。
+- 手机APK：https://github.com/h516df/walkpaint/releases/download/v0.7/WalkPaint-v0.7-arm64-debug.apk，70348196字节，服务器SHA256与本机/模拟器安装指纹一致：8c9f47d6f9a08d4a9f1e3b5b74b8b9f89be595eb8baa7c63f4bafc9002d5b9dc。cn.walkpaint / code8 / schema2 / 原签名 / arm64-v8a，只覆盖安装，不卸载或清数据。
+- 下载只需手机浏览器登录有权限GitHub账号；安装后打开一次，手机系统需要的安装确认/定位授权由本人完成。用户正常外出使用，后续按真实反馈验收。电脑上的构建、检查、上传、代码与诊断分析由Agent完成，不要求用户到电脑旁、USB连接、执行命令或搬日志。无法直接读取手机时诚实保留未验收状态，不自动添加远程控制/遥测/GPS上传。
+- 76项JVM/隔离库与MuMu后台/关屏/道路/历史分项PASS；整链重开有一次FAIL且观测系统进程重启，原因未确定；同APK独立恢复/暂停/再保存专项PASS。vivo户外/长期后台/耗电及手机偏移尚未验收，Issue#2开放，PR#3仍草稿。不能宣称原手机断录已经修好。
+- 分发先建草稿、上传唯一手机包、核对服务器digest/大小，再启用下载。此前tag REST端点对草稿404，改用发布列表/id读取；正常草稿没有正式标签，不当成权限故障。发布实读 verification/issue-2-p0-recovery/publication.json；原测试、失败与final-audit保持原样，不回写历史结果。
+- 当前私有草稿PR https://github.com/h516df/walkpaint/pull/3 依赖PR#1，不合并。回退仍须兼容schema2、同签名、code>=8的修复包，不能直接装旧schema1或卸载降级。
+
+---
+
 # HANDOFF — Issue #2 P0 / v0.7 本地候选（2026-10-09）
 
 本节优先于下方历史暂停与 v0.3–v0.6 文档。用户明确要求读取 Issue #2 并继续 P0，开发已恢复。唯一写手，D:\Projects\WalkPaint，分支 issue-2-recording-health，基线 8bcddeff963529ff7cf9b41242d01df4fd492007（PR #1 的 v0.6 分支）。没有修改/合并 PR #1 或 main。最终运行验收对应代码提交 `ed5f86ecb211f198ede8bb434e3f26b547370c23`，构建之后未修改业务源码。

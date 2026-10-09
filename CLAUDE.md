@@ -13,5 +13,6 @@
 - 禁止svc wifi/data disable、卸载、清库、重启共享ADB。只做已有恢复通道的模拟器测试，finally恢复provider/Mock Location/原权限/位置开关/旋转/临时文件并实读。
 - 保存对应Git SHA/最终APK与已安装指纹、原行包含比较、截图与清理结果；verification/APK/凭据/私人GPS不提交或自动上传。catalogProbe只读目录与固定公开fixture，networkProbe默认关闭，禁止用真实GPS选网络测试区域。
 - 当前76项JVM、隔离库与P0 MuMu分项通过；整链重开曾FAIL并观测系统进程重启，原因未确定；同APK独立恢复专项PASS。不能称整链稳定通过。长时间Doze/厂商策略/重启/耗电/真实用户偏移仍未测；精确状态见HANDOFF，不能声称永不停止。
-- 按Issue #2要求不擅自合并、发布或上传私人轨迹。本轮新APK仅本地；可推独立分支并开依赖PR #1的草稿PR供复核，Issue #2保留开放直到真实验收。
+- 用户远程操作Codex；沿用此前明确私人仓库供下载的会话授权，现已提供v0.7私有测试下载：https://github.com/h516df/walkpaint/releases/tag/v0.7。不合并PR、不公开仓库、不上传私人轨迹；Issue #2保留开放直到真实验收。发布不等于手机已安装或后台修好。
+- 电脑侧构建/检查/分发由Agent完成。用户只做手机安装确认、授权和实际外出，不默认USB到本机或要求执行命令/搬日志。没有手机访问能力时保留未验收，不能偷偷加遥测/远控/位置上传。
 - 回退从schema2兼容源码构建同签名code>=8的修复包，不直接安装旧schema1版本。
