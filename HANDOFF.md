@@ -1,12 +1,14 @@
 # 当前交付 — v0.13 / #10 #11 #12 #17（2026-10-10）
 
-本节优先于下方历史。用户要求“你先都做完，再上传吧”：先完成软件整合/验收，再统一私有分发，不单发v0.12。唯一写手串行工作区 `D:\Workspaces\Codex\2026-10-10\new-chat\work\worktrees\WalkPaint\codex-issue11-updates` / `agent/codex/issue11-updates`，最终业务SHA `f6f4514a8b615568e19cb31e054ced443f592e23`，基线PR #16 c7bba2c；地图/反馈分支各只有自有新提交。原canonical/其他写手目录未修改。
+本节优先于下方历史。用户要求“你先都做完，再上传吧”：先完成软件整合/验收，再统一私有分发，不单发v0.12。唯一写手串行工作区 `D:\Workspaces\Codex\2026-10-10\new-chat\work\worktrees\WalkPaint\codex-issue11-updates` / `agent/codex/issue11-updates`，最终业务SHA `349cd9d528a5693aa49ebda2a040da487fa89a3c`，基线PR #16 c7bba2c；地图/反馈分支各只有自有新提交。原canonical/其他写手目录未修改。
 
-**状态：本轮软件范围完成、127 JVM/7 guard/Google实际UI与新GPS彩路通过，安装包本地就绪，私有上传尚未执行；PR未合并，用户手机未更新/未验收。** #11是明确浏览器降级MVP，不是自动检查下载。#6原vivoP0与#7/#8/#12真机仍开放。详见 [V013](docs/evidence/V013.md) 和内置中文 release-notes.json。
+**状态：本轮软件范围完成、129 JVM/7 guard/Google实际UI与新GPS彩路通过，安装包本地就绪，最终替换包待上传，既有草稿未开放；PR未合并，用户手机未更新/未验收。** #11是明确浏览器降级MVP，不是自动检查下载。#6原vivoP0与#7/#8/#12真机仍开放。详见 [V013](docs/evidence/V013.md) 和内置中文 release-notes.json。
 
-cn.walkpaint / code14 / 0.13 / 原签名 / schema2 / arm64，70238534字节，SHA256 `0d803b4b060807bb7512b90cfc683fd341604ce3f88ccd2b713709e6738804a9`。通用实际安装 `8fd4d1953ca3ade199ec0de4f0d089de4566bb8d408638c78d67bc7e08f08c71`；两包dex与说明一致，旧行保留。反馈脱敏/预览/复制/系统分享选择器/独立清空/关闭重开通过，未自动发送。私有发布页真实浏览器目标与未知最新版返回通过。正常25分钟新行程边界后，前后台/短时锁屏实际GPS写入，公开道路50.04米/7508彩路像素，六色相机跟随探针通过。Google高德缺ARM库根因已定位，已守卫回退MapLibre；ARM高德未在本轮验证。
+cn.walkpaint / code14 / 0.13 / 原签名 / schema2 / arm64，70238534字节，SHA256 `621efc671b464eecdde35b5d2604e13b7e43e5bd5616db0cf9e946c6036b58f4`。通用实际安装 `0264bfd34fc8d27a77d56458c5ce59ad06b5a2954b55fe6d18b9efe9fbf4135e`；两包dex与说明一致，旧行保留。反馈脱敏/预览/复制/系统分享选择器/独立清空/关闭重开通过，未自动发送。私有发布页真实浏览器目标与未知最新版返回通过。正常25分钟新行程边界后，前后台/短时锁屏实际GPS写入，公开道路50.04米/7508彩路像素，六色相机跟随探针通过。Google高德缺ARM库根因已定位，已守卫回退MapLibre；ARM高德未在本轮验证。
 
 仍不操作MuMu/手机，不改录制、DB、matcher门槛，不嵌认证、不建服务、不公开。上传完成必须读回服务器大小/digest并实际下载验SHA后再更新状态。旧v0.11下载保留，v0.12不另发布。登记agent-rules PR #29仍Active，无生命周期变化不写版本流水账。CI未配置。回退同签名/schema2/code>=14覆盖包，禁止卸载/清数据。
+
+迟到系统退出信息误删新线索已由349cd9d修正，129项通过。最终APK反馈/GPS/像素/SDK复验完成；浏览器/隔离库/320dp是f6f4514首轮候选上的未改UI证据，详细阶段与源SHA在V013/JSON中，不伪称全部整轮重跑。
 
 ---
 
