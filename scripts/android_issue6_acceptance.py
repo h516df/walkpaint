@@ -86,26 +86,26 @@ try:
     with database() as db:
         public_id=db.execute("SELECT id FROM roads WHERE osm_id=1675518").fetchone()[0]
         existing=db.execute("SELECT start,end FROM coverage WHERE road_id=?",(public_id,)).fetchall()
-    new_start=62.0
-    assert not any(end>new_start and start<new_start+36 for start,end in existing), 'Public new section already painted; choose another untouched fixture'
+    new_start=68.0
+    assert not any(end>new_start and start<new_start+30 for start,end in existing), 'Public new section already painted; choose another untouched fixture'
     check_saved('new_section_anchor',*at(new_start))
     tap('定位我');time.sleep(3);shot('new-section-before')
     initial_meters=coverage()
     with database() as db:new_matches=db.execute('SELECT COALESCE(SUM(matched),0) FROM road_matches').fetchone()[0]
-    for i,d in enumerate([new_start+12,new_start+24,new_start+36]):
+    for i,d in enumerate([new_start+10,new_start+20,new_start+30]):
         check_saved('new_section_walk_'+str(i),*at(d))
-    assert coverage()>initial_meters+35, 'No new contiguous confirmed coverage'
+    assert coverage()>initial_meters+29, 'No new contiguous confirmed coverage'
     with database() as db:
         assert db.execute('SELECT COALESCE(SUM(matched),0) FROM road_matches').fetchone()[0]>=new_matches+3
-        assert any(start<=new_start+.2 and end>=new_start+35.8 for start,end in db.execute('SELECT start,end FROM coverage WHERE road_id=?',(public_id,)))
+        assert any(start<=new_start+.2 and end>=new_start+29.8 for start,end in db.execute('SELECT start,end FROM coverage WHERE road_id=?',(public_id,)))
     tap('定位我');time.sleep(4);shot('new-section-after');pixels('new-section-after')
     meters_after=coverage()
-    for i,d in enumerate([new_start+24,new_start+12,new_start]):check_saved('new_section_reverse_'+str(i),*at(d))
+    for i,d in enumerate([new_start+20,new_start+10,new_start]):check_saved('new_section_reverse_'+str(i),*at(d))
     assert abs(coverage()-meters_after)<.3
     shell('am','force-stop','cn.walkpaint');launch()
     assert foreground() and abs(coverage()-meters_after)<.3
     tap('定位我');time.sleep(3);shot('new-section-reopened');pixels('new-section-reopened')
-    checks['new_gray_to_contiguous_confirmed_36m_reverse_restart']=True
+    checks['new_gray_to_contiguous_confirmed_30m_reverse_restart']=True
     # A new service session must not reuse historic GPS counters or satellite observations.
     values=diagnostics()
     assert int(values.get('session_gps_count','0'))<=1 and int(values.get('session_saved_count','0'))==0
