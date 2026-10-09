@@ -1,0 +1,65 @@
+{
+  "source_sha": "92a22262cd2283b35c5b54330b3e2d8b68d164ff",
+  "status": "CANDIDATE_READY_NOT_PUBLISHED",
+  "jvm_tests": 111,
+  "jvm_failures": 0,
+  "google_guard_tests": 7,
+  "google_avd": "WalkPaint_Google_API36",
+  "serial": "emulator-5556",
+  "android_api": 36,
+  "ui": {
+    "universal_apk_sha256": "1fb41afc85bc389efc68cfc1188b2f7aff868e0bc01fe4261b463c1bbff310e6",
+    "installed_apk_matches": true,
+    "upgrade_original_rows_retained": {
+      "trips": 1,
+      "points": 1,
+      "roads": 0,
+      "road_matches": 0,
+      "coverage": 0
+    },
+    "isolated_database_suite": true,
+    "profile_simple_off": true,
+    "foreground_denial_stays_off": true,
+    "one_toggle_sequential_system_permissions_and_return": true,
+    "actual_foreground_background_screen_off_commits": {
+      "before": 1,
+      "after": 4
+    },
+    "switch_off_stops_new_records_and_retains_history": true,
+    "already_authorized_enable_has_no_repeated_prompts": true,
+    "secondary_real_entries_preserved": true,
+    "cleanup_errors": [],
+    "existing_color_entry_works": true,
+    "320dp_profile": true,
+    "background_decline_honest_status_no_loop": true,
+    "all_original_rows_retained_at_end": true
+  },
+  "first_permission": {
+    "first_consent_cancel_and_single_system_request": true,
+    "first_permission_ui_changes_no_database_rows": true,
+    "original_onboarding_restored": true
+  },
+  "map_prompt": {
+    "map_preparation_deferral_survives_tab_switch": true,
+    "download_disclosure_and_cancel": true,
+    "map_prompt_original_rows_retained": true,
+    "original_tracking_preference_restored": true
+  },
+  "artifacts": {
+    "version": "0.12",
+    "version_code": 13,
+    "phone_bytes": 70188579,
+    "phone_sha256": "de5963bf3dcbdce1af4d051cc116d5aa20b2a0e283f2f865b2351239a7bae3d2",
+    "universal_sha256": "1fb41afc85bc389efc68cfc1188b2f7aff868e0bc01fe4261b463c1bbff310e6",
+    "same_dex": true,
+    "abis": [
+      "arm64-v8a"
+    ]
+  },
+  "signature_sha256": "21b74e3e2a10e12da8284d4e6bd7d99e55b00a385215902e94d7896f7a46c967",
+  "phone_installed": "NOT_VERIFIED",
+  "vivo_gps_and_long_background": "NOT_TESTED",
+  "google_map_rendering": "BLOCKED_BASELINE_BLACK_MAP",
+  "ci": "NOT_CONFIGURED",
+  "test_execution": "Core UI/recording run plus focused appearance resume on identical installed APK; first-permission and map-prompt separate focused passes."
+}
