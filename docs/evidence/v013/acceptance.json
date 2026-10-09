@@ -1,0 +1,89 @@
+{
+  "version": "0.13",
+  "version_code": 14,
+  "package": "cn.walkpaint",
+  "schema": 2,
+  "business_sha": "349cd9d528a5693aa49ebda2a040da487fa89a3c",
+  "phone": {
+    "sha256": "621efc671b464eecdde35b5d2604e13b7e43e5bd5616db0cf9e946c6036b58f4",
+    "bytes": 70238534,
+    "abi": [
+      "arm64-v8a"
+    ]
+  },
+  "universal": {
+    "sha256": "0264bfd34fc8d27a77d56458c5ce59ad06b5a2954b55fe6d18b9efe9fbf4135e",
+    "bytes": 124831073
+  },
+  "certificate_sha256": "21b74e3e2a10e12da8284d4e6bd7d99e55b00a385215902e94d7896f7a46c967",
+  "phone_universal_dex_identical": true,
+  "jvm_tests": 129,
+  "google_guard_tests": 7,
+  "feedback": {
+    "apk_sha256": "0264bfd34fc8d27a77d56458c5ce59ad06b5a2954b55fe6d18b9efe9fbf4135e",
+    "installed_apk_matches": true,
+    "source_sha": "349cd9d528a5693aa49ebda2a040da487fa89a3c",
+    "actual_report_category_description": true,
+    "copy_action": true,
+    "system_share_chooser": true,
+    "clear_keeps_database_rows": true,
+    "clear_persisted_after_restart": true,
+    "disable_persisted_after_restart": true,
+    "disable_keeps_database_rows": true
+  },
+  "updates": {
+    "upgrade_rows_retained": true,
+    "current_notes_and_truthful_unknown": true,
+    "browser_intent_trusted_url": true,
+    "browser_opened": true,
+    "no_fabricated_latest_after_browser": true,
+    "checking_updates_keeps_database": true
+  },
+  "roads": {
+    "apk_sha256": "0264bfd34fc8d27a77d56458c5ce59ad06b5a2954b55fe6d18b9efe9fbf4135e",
+    "source_sha": "349cd9d528a5693aa49ebda2a040da487fa89a3c",
+    "real_hardware_gps": true,
+    "old_points_retained": true,
+    "confirmed_metres": 50.04134529588797,
+    "actual_painted_pixels": 7508,
+    "painted_color": "#B56F77",
+    "sdk_color_and_camera": true,
+    "repeated_road_does_not_accumulate": true,
+    "mode": "GPS/row checks completed, then pixel and SDK continuation on identical APK; pixel assumption corrected to persisted custom color"
+  },
+  "earlier_unchanged_ui_checks": {
+    "business_sha": "f6f4514a8b615568e19cb31e054ced443f592e23",
+    "apk_sha256": "8fd4d1953ca3ade199ec0de4f0d089de4566bb8d408638c78d67bc7e08f08c71",
+    "scope": [
+      "private-browser update path",
+      "isolated database suite",
+      "320dp profile/feedback"
+    ]
+  },
+  "limitations": [
+    "vivo户外/长期后台/真实中国道路未验收",
+    "x86 Google AVD仅验收MapLibre；ARM高德未在本轮真实运行",
+    "更新为私有浏览器降级路径，未实现App内自动核对或下载",
+    "CI未配置，PR未合并"
+  ],
+  "publication": {
+    "repository_private": true,
+    "draft": false,
+    "prerelease": true,
+    "tag": "v0.13",
+    "target_sha": "349cd9d528a5693aa49ebda2a040da487fa89a3c",
+    "release_url": "https://github.com/h516df/walkpaint/releases/tag/v0.13",
+    "apk_url": "https://github.com/h516df/walkpaint/releases/download/v0.13/WalkPaint-v0.13-arm64-debug.apk",
+    "published_at": "2026-10-09T18:31:17Z",
+    "phone_size": 70238534,
+    "server_sha256": "621efc671b464eecdde35b5d2604e13b7e43e5bd5616db0cf9e946c6036b58f4",
+    "actual_download_sha256": "621efc671b464eecdde35b5d2604e13b7e43e5bd5616db0cf9e946c6036b58f4",
+    "actual_download_verified": true
+  },
+  "final_android_checks": {
+    "isolated_suite_keeps_real_database": true,
+    "profile_feedback_320dp": true,
+    "small_ui_keeps_real_database": true,
+    "viewport_restored": true
+  }
+}

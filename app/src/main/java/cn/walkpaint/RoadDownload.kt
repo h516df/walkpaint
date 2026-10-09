@@ -66,6 +66,7 @@ internal class RoadDownload(private val openConnection: () -> HttpURLConnection 
     URI(NearbyRoads.ENDPOINT).toURL().openConnection() as HttpURLConnection
 }) {
     @Volatile private var cancelled = false
+    val isCancelled get() = cancelled
     @Volatile private var connection: HttpURLConnection? = null
     fun cancel() { cancelled = true; connection?.disconnect() }
     fun fetch(area: NearbyRoads.Area): String {

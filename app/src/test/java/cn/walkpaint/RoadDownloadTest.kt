@@ -49,7 +49,9 @@ class RoadDownloadTest {
     @Test fun cancellationBeforeFetchSendsNothing() {
         var calls=0
         val job=RoadDownload { calls++; Reply() }
+        assertFalse(job.isCancelled)
         job.cancel()
+        assertTrue(job.isCancelled)
         assertThrows(IllegalStateException::class.java) { job.fetch(area) }
         assertEquals(0,calls)
     }

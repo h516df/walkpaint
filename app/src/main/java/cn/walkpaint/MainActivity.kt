@@ -94,6 +94,10 @@ class MainActivity : ComponentActivity() {
     private var feedbackHistory by mutableStateOf(RecordingDiagnostics.HistoryView(emptyList(),true,false))
     private var feedbackReport by mutableStateOf<String?>(null)
     private var feedbackBusy by mutableStateOf(false)
+    private var updateNotice by mutableStateOf<String?>(null)
+    private val currentRelease by lazy {
+        CurrentRelease.decode(assets.open("release-notes.json").bufferedReader().use { it.readText() })
+    }
     private var confirmEnable by mutableStateOf(false)
     private var showBackgroundPrompt by mutableStateOf(false)
     private var showFineSettings by mutableStateOf(false)
@@ -365,6 +369,7 @@ class MainActivity : ComponentActivity() {
                         onClosePreview={feedbackReport=null},onCopy={copyFeedback()},onShare={shareFeedback()},
                         onCollection={RecordingDiagnostics.collectHistory(this,it)},
                         onClear={RecordingDiagnostics.clearHistory(this)}) },
+                    updatesContent = { onBack -> UpdatesPage(currentRelease,updateNotice,onBack,::checkUpdates) },
                     mapContent = { if (amapActive) AmapNativeView() else NativeMapView() }
                 )
 
@@ -742,7 +747,7 @@ class MainActivity : ComponentActivity() {
                     updateUi()
                 }
             } }.onFailure { e -> runOnUiThread {
-                RecordingDiagnostics.problem(this,ProblemCode.ROAD_DOWNLOAD_FAILED)
+                if(!job.isCancelled) RecordingDiagnostics.problem(this,ProblemCode.ROAD_DOWNLOAD_FAILED)
                 if(!isDestroyed) {
                     roadBusy=false; roadDownload=null
                     android.util.Log.w("WalkPaintRoads", "failure="+e.javaClass.simpleName+";cause="+(e.cause?.javaClass?.simpleName ?: "none"))
@@ -851,6 +856,16 @@ class MainActivity : ComponentActivity() {
         val intent=Intent(Intent.ACTION_SEND).apply { type="text/plain";putExtra(Intent.EXTRA_TEXT,text) }
         try { startActivity(Intent.createChooser(intent,"分享反馈报告")) }
         catch(_:android.content.ActivityNotFoundException) { toast("没有可用分享应用，可复制报告") }
+    }
+    private fun checkUpdates() {
+        val connectivity=getSystemService(android.net.ConnectivityManager::class.java)
+        val capabilities=connectivity.getNetworkCapabilities(connectivity.activeNetwork)
+        val available=capabilities?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)==true &&
+            capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        updateNotice=UpdateDestination.notice(available)
+        if(!available) return
+        try { startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(UpdateDestination.URL)).addCategory(Intent.CATEGORY_BROWSABLE)) }
+        catch(_:android.content.ActivityNotFoundException) { updateNotice=UpdateDestination.NO_BROWSER }
     }
 
     private fun openAppSettings() {

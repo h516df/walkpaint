@@ -44,4 +44,19 @@ class ProblemHistoryTest {
         assertEquals(2,h.snapshot(1+9*60_000L).size)
         assertEquals(10L,h.snapshot(1+9*60_000L).sumOf { it.count })
     }
+    @Test fun lateSystemExitDoesNotEraseNewerRecoveryOrFailureClues() {
+        val h=ProblemHistory(now=10_000)
+        h.record(ProblemCode.RECOVERY,10_000)
+        h.record(ProblemCode.PROCESS_EXIT,5_000,10_000)
+        assertEquals(2,h.snapshot(10_000).size)
+        assertEquals(ProblemCode.RECOVERY,h.snapshot(10_000).first().code)
+    }
+    @Test fun expiredOrFutureSystemEventsCannotAdvanceOrReviveHistory() {
+        val now=ProblemHistory.KEEP_MS+1000
+        val h=ProblemHistory(now=now);h.record(ProblemCode.RECOVERY,now)
+        h.record(ProblemCode.PROCESS_EXIT,1,now)
+        h.record(ProblemCode.PROCESS_EXIT,now+1000,now)
+        assertEquals(1,h.snapshot(now).size)
+        assertEquals(ProblemCode.RECOVERY,h.snapshot(now).single().code)
+    }
 }
