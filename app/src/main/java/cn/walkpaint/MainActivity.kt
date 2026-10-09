@@ -91,8 +91,14 @@ class MainActivity : ComponentActivity() {
     private var showDiagnostics by mutableStateOf(false)
     private var diagnosticText by mutableStateOf("")
     private var confirmEnable by mutableStateOf(false)
-    private var promptLocation by mutableStateOf(false)
+    private var showBackgroundPrompt by mutableStateOf(false)
+    private var showFineSettings by mutableStateOf(false)
+    private var backgroundDeferred = false
+    private var notificationAttempted = false
+    private var profileNotice by mutableStateOf<String?>(null)
     private var pendingSettingsEnable = false
+    private var pendingBackgroundSettings = false
+    private var recordingCode = "PAUSED"
     private val refreshExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
     private val refreshing = java.util.concurrent.atomic.AtomicBoolean(false)
     private var roadState by mutableStateOf(RoadState())
@@ -143,22 +149,45 @@ class MainActivity : ComponentActivity() {
     }
 
     private val locationPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { _ ->
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
             if (AmbientTracking.hasFineLocation(this)) {
                 beginVisibleLocation()
-                if (pendingEnable || AmbientTracking.enabled(this)) {
-                    AmbientTracking.setEnabled(this, true)
-                    AmbientTracking.start(this)
-                    requestNotification()
-                } else if (pendingCenter) centerUser()
-            } else toast("需要精确定位才能看到当前位置和绘制足迹")
-            if (AmbientTracking.hasFineLocation(this)) pendingSettingsEnable = false
-            pendingEnable = false
+                if(pendingEnable) continueEnable()
+                else if(pendingCenter) centerUser()
+            } else {
+                if(pendingEnable) { pendingEnable=false; showFineSettings=true }
+                else toast("需要允许精确定位，才能查看当前位置")
+                pendingCenter=false
+            }
             updateUi()
         }
 
+    private val backgroundPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+            backgroundDeferred=!AmbientTracking.hasBackgroundLocation(this)
+            if(pendingEnable) continueEnable()
+        }
+
     private val notificationPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { _ -> updateUi() }
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+            if(pendingEnable) continueEnable()
+            updateUi()
+        }
+
+    private val permissionSettingsLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            val waiting=pendingSettingsEnable
+            pendingSettingsEnable=false
+            if(waiting && pendingEnable) {
+                if(AmbientTracking.hasFineLocation(this)) {
+                    // Returning without "always allow" is a valid decline, never a prompt loop.
+                    if(pendingBackgroundSettings) backgroundDeferred=!AmbientTracking.hasBackgroundLocation(this)
+                    pendingBackgroundSettings=false
+                    continueEnable()
+                } else { pendingEnable=false; toast("尚未允许精确定位，自动记录未开启") }
+            }
+            updateUi()
+        }
 
     private val roadPackLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if(uri != null) {
@@ -227,16 +256,18 @@ class MainActivity : ComponentActivity() {
         roadColor=roadAppearance.color
         pendingEnable = savedInstanceState?.getBoolean("pendingEnable") ?: false
         pendingSettingsEnable = savedInstanceState?.getBoolean("pendingSettingsEnable") ?: false
+        pendingBackgroundSettings = savedInstanceState?.getBoolean("pendingBackgroundSettings") ?: false
+        backgroundDeferred = savedInstanceState?.getBoolean("backgroundDeferred") ?: false
+        notificationAttempted = savedInstanceState?.getBoolean("notificationAttempted") ?: false
+        confirmEnable = savedInstanceState?.getBoolean("confirmEnable") ?: false
+        showBackgroundPrompt = savedInstanceState?.getBoolean("showBackgroundPrompt") ?: false
+        showFineSettings = savedInstanceState?.getBoolean("showFineSettings") ?: false
         MapLibre.getInstance(applicationContext)
         val mapPref = getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE)
         onlineMap = mapPref.getBoolean("openfreemap_basemap_consent", false)
         amapConsent = mapPref.getBoolean("amap_sdk_consent", false)
         showAmapConsent = BuildConfig.AMAP_KEY.isNotBlank() &&
             !amapConsent && !mapPref.getBoolean("amap_sdk_decision_seen", false)
-        if (!AmbientTracking.enabled(this) &&
-            !getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE).getBoolean("auto_notice_v3_seen", false)) {
-            promptLocation = true
-        }
         updateUi()
         setContent {
             MaterialTheme(
@@ -259,6 +290,7 @@ class MainActivity : ComponentActivity() {
                     trackingStatus = trackingStatus,
                     recordingTitle = recordingTitle,
                     recordingHealthy = recordingHealthy,
+                    profileNotice = profileNotice, onResolveTracking = { resolveTracking() },
                     mapNotice = mapNotice, dailyRoads = dailyRoads,
                     needsBackground = trackingEnabled && !backgroundGranted,
                     selectedDay = selectedDay,
@@ -267,8 +299,9 @@ class MainActivity : ComponentActivity() {
                     onShowAll = { clearDaySelection() },
                     onLocate = { clearDaySelection(); centerUser() },
                     onToggleTracking = { requested ->
-                        if (requested) confirmEnable = true
+                        if (requested) beginEnable()
                         else {
+                            pendingEnable=false;pendingSettingsEnable=false
                             AmbientTracking.stop(this)
                             updateUi()
                         }
@@ -337,14 +370,14 @@ class MainActivity : ComponentActivity() {
 
                 if(showRoadPack) AlertDialog(
                     onDismissRequest = { if(!roadBusy) showRoadPack = false },
-                    title = { Text("附近道路") },
+                    title = { Text("地图数据") },
                     text = { Column(Modifier.verticalScroll(rememberScrollState())) {
                         Text(roadState.summary)
                         Spacer(Modifier.height(12.dp))
                         Text("先下载附近约1.2公里范围的道路，之后离线记录和上色；走到新区域时再下载。路口、精度差或道路缺失时可能少涂。也可以导入已有道路文件。")
                         Spacer(Modifier.height(12.dp))
                         Button(enabled=!roadBusy, onClick={ prepareNearbyRoads() }, modifier=Modifier.fillMaxWidth()) {
-                            Text("下载附近道路")
+                            Text("准备这里的地图")
                         }
                         if(roadBusy) {
                             Spacer(Modifier.height(8.dp))
@@ -356,7 +389,7 @@ class MainActivity : ComponentActivity() {
                     } },
                     confirmButton = { Button(enabled=!roadBusy,onClick={
                         roadPackLauncher.launch(arrayOf("application/geo+json","application/json","text/plain","*/*"))
-                    }) { Text("选择道路包文件") } },
+                    }) { Text("导入地图文件") } },
                     dismissButton = { TextButton(enabled=!roadBusy,onClick={
                         showRoadPack=false
                         val fix=userFix?.takeIf {
@@ -372,7 +405,7 @@ class MainActivity : ComponentActivity() {
 
                 downloadArea?.let { area -> AlertDialog(
                     onDismissRequest={ downloadArea=null },
-                    title={ Text("下载附近道路") },
+                    title={ Text("准备这里的地图") },
                     text={ Text("本次向 Overpass 道路服务（overpass-api.de）发送附近约1.2公里范围和 IP。区域中心约按100米取整，不发送完整足迹或历史路线。仅本次下载，不会自动联网更新；完成后道路保存在本机并匹配已有足迹。网络失败可重试，原足迹和道路保留。\n\n© OpenStreetMap contributors · ODbL-1.0") },
                     confirmButton={ Button(onClick={ downloadArea=null; downloadNearbyRoads(area) }) { Text("同意并下载本次") } },
                     dismissButton={ TextButton(onClick={ downloadArea=null }) { Text("暂不下载") } }
@@ -387,31 +420,7 @@ class MainActivity : ComponentActivity() {
                     confirmButton = { TextButton(onClick = { copyTrackingDiagnostics() }) { Text("复制诊断") } },
                     dismissButton = { TextButton(onClick = { showDiagnostics = false }) { Text("关闭") } }
                 )
-                if (promptLocation) AlertDialog(
-                    onDismissRequest = {
-                        promptLocation = false
-                        getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE)
-                            .edit().putBoolean("auto_notice_v3_seen", true).apply()
-                    },
-                    title = { Text("自动记录走过的足迹", fontWeight = FontWeight.Bold, color = Ink) },
-                    text = { Text("允许精确定位后即启动自动足迹，使用前台服务、持续 GPS 和持续通知，会增加电耗，可在“我的”里随时暂停。定位点只保存在本机；系统省电策略可能中断记录。") },
-                    confirmButton = {
-                        Button(onClick = {
-                            promptLocation = false
-                            getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE)
-                                .edit().putBoolean("auto_notice_v3_seen", true).apply()
-                            enableFromChoice()
-                        }) { Text("同意并开启自动足迹") }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = {
-                            promptLocation = false
-                            getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE)
-                                .edit().putBoolean("auto_notice_v3_seen", true).apply()
-                        }) { Text("稍后再说") }
-                    }
-                )
-                if (showAmapConsent && !promptLocation && !confirmEnable) AlertDialog(
+                if (showAmapConsent && !confirmEnable && !pendingEnable && !showBackgroundPrompt && !showFineSettings) AlertDialog(
                     onDismissRequest = {
                         showAmapConsent = false
                         getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE).edit()
@@ -449,21 +458,41 @@ class MainActivity : ComponentActivity() {
                     }
                 )
                 if (confirmEnable) AlertDialog(
-                    onDismissRequest = { confirmEnable = false },
-                    title = { Text("开启自动足迹？", color = Ink, fontWeight = FontWeight.Bold) },
-                    text = {
-                        Text(
-                            "允许精确定位后即启动自动足迹，使用前台服务、持续 GPS 和持续通知，会增加电耗，可在我的里随时暂停。" +
-                                "系统省电或强制停止可能中断记录；重启恢复通常需要“始终允许定位”。"
-                        )
-                    },
-                    confirmButton = {
-                        Button(onClick = {
-                            confirmEnable = false
-                            enableFromChoice()
-                        }) { Text("启用自动足迹") }
-                    },
-                    dismissButton = { TextButton(onClick = { confirmEnable = false }) { Text("暂不开启") } }
+                    onDismissRequest = { confirmEnable=false;pendingEnable=false },
+                    title = { Text("开启自动记录") },
+                    text = { Text("为了在出门和锁屏后记录走过的路，需要允许精确定位。足迹保存在本机，记录时会保留通知，可能增加耗电；你随时可以关闭。地图联网另行征求同意。") },
+                    confirmButton = { Button(onClick={
+                        confirmEnable=false
+                        getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE).edit()
+                            .putBoolean("auto_notice_v3_seen",true).apply()
+                        continueEnable()
+                    }) { Text("同意并继续") } },
+                    dismissButton = { TextButton(onClick={confirmEnable=false;pendingEnable=false}) { Text("暂不开启") } }
+                )
+                if(showBackgroundPrompt) AlertDialog(
+                    onDismissRequest={showBackgroundPrompt=false;pendingEnable=false},
+                    title={Text("允许后台定位")},
+                    text={Text("为了锁屏后继续记录，以及在中断后尝试恢复，请在系统位置权限中选择“"+
+                        (if(Build.VERSION.SDK_INT>=30) packageManager.backgroundPermissionOptionLabel else "始终允许")+
+                        "”。也可以先使用已有授权；后台恢复可能受限。")},
+                    confirmButton={Button(onClick={
+                        showBackgroundPrompt=false
+                        if(Build.VERSION.SDK_INT==29) backgroundPermissionLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                        else { pendingSettingsEnable=true;pendingBackgroundSettings=true;permissionSettingsLauncher.launch(appSettingsIntent()) }
+                    }) {Text("去允许")}},
+                    dismissButton={TextButton(onClick={
+                        showBackgroundPrompt=false;backgroundDeferred=true;continueEnable()
+                    }) {Text("先这样记录")}}
+                )
+                if(showFineSettings) AlertDialog(
+                    onDismissRequest={showFineSettings=false;pendingEnable=false},
+                    title={Text("需要允许精确定位")},
+                    text={Text("目前自动记录未开启。你可以在系统位置权限中开启精确定位；不授权也能查看原有足迹。")},
+                    confirmButton={Button(onClick={
+                        showFineSettings=false;pendingEnable=true;pendingSettingsEnable=true;pendingBackgroundSettings=false
+                        permissionSettingsLauncher.launch(appSettingsIntent())
+                    }) {Text("去设置")}},
+                    dismissButton={TextButton(onClick={showFineSettings=false;pendingEnable=false}) {Text("稍后")}}
                 )
             }
         }
@@ -493,6 +522,8 @@ class MainActivity : ComponentActivity() {
             .isProviderEnabled(LocationManager.GPS_PROVIDER)
         val status = RecordingStatus.assess(RecordingDiagnostics.signals(this, repository.lastError))
         recordingTitle=status.title; recordingHealthy=status.healthy
+        recordingCode=status.code
+        profileNotice=TrackingSetup.notice(status.code,backgroundGranted,notificationsGranted())
         mapNotice=MapNotice.from(status,recordedAt("gps_callback_at") > 0 && recordedAt("gps_callback_at") >= recordedAt("service_start_at"))
         val diagnosis = status.title + " · " + status.hint
         val gpsLabel = when {
@@ -550,26 +581,56 @@ class MainActivity : ComponentActivity() {
         updateLocationLayer()
     }
 
-    private fun enableFromChoice() {
-        getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE).edit()
-            .putBoolean("auto_notice_v3_seen", true).apply()
-        if (AmbientTracking.hasFineLocation(this)) {
-            AmbientTracking.setEnabled(this, true)
-            AmbientTracking.start(this)
-            requestNotification()
-            updateUi()
-        } else {
-            pendingEnable = true
-            pendingSettingsEnable = true
-            askLocation()
+    private fun notificationsGranted() = Build.VERSION.SDK_INT < 33 ||
+        checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
+    private fun appSettingsIntent() = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:$packageName"))
+
+    private fun beginEnable() {
+        if(pendingEnable) return
+        pendingEnable=true;backgroundDeferred=false;notificationAttempted=false
+        if(!AmbientTracking.hasFineLocation(this) &&
+            !getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE).getBoolean("auto_notice_v3_seen",false)) {
+            confirmEnable=true
+        } else continueEnable()
+    }
+
+    private fun continueEnable() {
+        if(!pendingEnable) return
+        when(TrackingSetup.next(Build.VERSION.SDK_INT,AmbientTracking.hasFineLocation(this),
+            AmbientTracking.hasBackgroundLocation(this),notificationsGranted(),backgroundDeferred,notificationAttempted)) {
+            TrackingSetup.Step.LOCATION -> {
+                val prefs=getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE)
+                if(prefs.getBoolean("fine_request_seen",false) &&
+                    !shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)) {
+                    pendingEnable=false;showFineSettings=true
+                } else {
+                    prefs.edit().putBoolean("fine_request_seen",true).apply()
+                    askLocation()
+                }
+            }
+            TrackingSetup.Step.BACKGROUND -> showBackgroundPrompt=true
+            TrackingSetup.Step.NOTIFICATIONS -> {
+                notificationAttempted=true
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            TrackingSetup.Step.START -> {
+                pendingEnable=false;pendingSettingsEnable=false
+                AmbientTracking.setEnabled(this,true)
+                AmbientTracking.start(this)
+                updateUi()
+            }
         }
     }
 
-    private fun requestNotification() {
-        if (Build.VERSION.SDK_INT >= 33 &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
+    private fun resolveTracking() {
+        if(!AmbientTracking.hasFineLocation(this)) beginEnable()
+        else if(!getSystemService(LocationManager::class.java).isProviderEnabled(LocationManager.GPS_PROVIDER))
+            startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+        else if(recordingCode in setOf("SAVE_FAILED","REGISTER_FAILED","SERVICE_STOPPED")) openRecordingDiagnostics()
+        else if(!AmbientTracking.hasBackgroundLocation(this)) beginEnable()
+        else if(!notificationsGranted()) openAppSettings()
+        else openRecordingDiagnostics()
     }
 
     private fun askLocation() {
@@ -944,17 +1005,18 @@ class MainActivity : ComponentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBoolean("pendingEnable", pendingEnable)
         outState.putBoolean("pendingSettingsEnable", pendingSettingsEnable)
+        outState.putBoolean("pendingBackgroundSettings",pendingBackgroundSettings)
+        outState.putBoolean("backgroundDeferred",backgroundDeferred)
+        outState.putBoolean("notificationAttempted",notificationAttempted)
+        outState.putBoolean("confirmEnable",confirmEnable)
+        outState.putBoolean("showBackgroundPrompt",showBackgroundPrompt)
+        outState.putBoolean("showFineSettings",showFineSettings)
         super.onSaveInstanceState(outState)
     }
 
     override fun onResume() {
         super.onResume()
         activityResumed=true;syncHeadingLifecycle()
-        if (pendingSettingsEnable && AmbientTracking.hasFineLocation(this)) {
-            pendingSettingsEnable = false
-            AmbientTracking.setEnabled(this, true)
-            requestNotification()
-        }
         updateUi()
         beginVisibleLocation()
         if (AmbientTracking.enabled(this) && AmbientTracking.hasFineLocation(this) && !AmbientTracking.running) {
