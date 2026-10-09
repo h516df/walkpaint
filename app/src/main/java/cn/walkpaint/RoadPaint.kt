@@ -22,8 +22,13 @@ internal object RoadMatcher {
     private fun valid(p: TrackPoint) = p.lat.isFinite() && p.lon.isFinite() &&
         p.lat in -85.0..85.0 && p.lon in -180.0..180.0
 
-    fun match(fix: TrackPoint, roads: List<RoadSegment>): RoadMatch? {
-        if (!valid(fix) || !fix.accuracy.isFinite() || fix.accuracy !in 1f..20f) return null
+    internal data class Inspection(val match: RoadMatch?, val reason: String, val candidates: Int)
+
+    fun match(fix: TrackPoint, roads: List<RoadSegment>): RoadMatch? = inspect(fix, roads).match
+
+    fun inspect(fix: TrackPoint, roads: List<RoadSegment>): Inspection {
+        if (!valid(fix) || !fix.accuracy.isFinite() || fix.accuracy !in 1f..20f)
+            return Inspection(null, "无效端点或精度", 0)
         val radius = max(8.0, fix.accuracy.toDouble()).coerceAtMost(20.0)
         val candidates = roads.filter { it.stableId.isNotBlank() && it.points.size >= 2 &&
             it.points.all(::valid) }.distinctBy { it.stableId }.flatMap { road ->
@@ -48,11 +53,16 @@ internal object RoadMatcher {
             }
             matches
         }.sortedBy { it.error }
-        val first = candidates.firstOrNull() ?: return null
-        // Parallel roads / intersections cannot be resolved from a GPS dot alone.
-        if (candidates.drop(1).any { it.error - first.error < 4.0 &&
-            (it.road.stableId != first.road.stableId || abs(it.along-first.along) > 10.0) }) return null
-        return first
+        val first = candidates.firstOrNull() ?: return Inspection(null, "附近目录有道路，但端点距道路超出匹配半径", 0)
+        // Preserve the 4m ambiguity guard, including self-crossings on one way.
+        val rivals = candidates.drop(1).filter { it.error - first.error < 4.0 &&
+            (it.road.stableId != first.road.stableId || abs(it.along-first.along) > 10.0) }
+        val reason = when {
+            rivals.any { it.road.stableId != first.road.stableId } -> "多条道路歧义（平行路或路口）"
+            rivals.isNotEmpty() -> "同一道路几何歧义（回折或自交）"
+            else -> "端点可唯一匹配"
+        }
+        return Inspection(first.takeIf { rivals.isEmpty() }, reason, candidates.size)
     }
 
     fun traversed(a: TrackPoint, b: TrackPoint, roads: List<RoadSegment>): PaintedInterval? {

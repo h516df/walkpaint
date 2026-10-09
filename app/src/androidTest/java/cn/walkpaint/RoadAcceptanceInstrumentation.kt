@@ -13,8 +13,34 @@ import java.util.UUID
 class RoadAcceptanceInstrumentation : Instrumentation() {
     private var networkProbe=false
     private var catalogProbe=false
+    private var fixtureProbe=false
     override fun onStart() {
         val result = Bundle()
+        if(fixtureProbe) {
+            // Only fixed public fixture sections; no real-GPS-derived lookup or database writes.
+            try {
+                FootprintDatabase(targetContext).use { repo ->
+                    val state=repo.roadSnapshot()
+                    val catalog=RoadCatalog(state.roads)
+                    val fixture=context.assets.open("oxford-roads.geojson").bufferedReader().use { RoadPackCodec.decode(it.readText()) }
+                    for ((index,road) in fixture.roads.withIndex()) {
+                        for (start in 10..(road.length.toInt()-40) step 5) {
+                            if(state.intervals.any { it.roadId==road.stableId && it.to>start && it.from<start+30 }) continue
+                            val points=listOf(0.0,10.0,20.0,30.0).mapIndexed { i,d ->
+                                RoadCoverage(listOf(PaintedInterval(road.stableId,0.0,start+d))).highlighted(road).single().last().copy(time=1000L+i*10000,accuracy=5f)
+                            }
+                            if(points.zipWithNext().all { (a,b) -> catalog.traversed(a,b)?.roadId==road.stableId }) {
+                                result.putString("stream","PUBLIC_UNPAINTED_FIXTURE_PASS fixture=$index start=$start")
+                                finish(Activity.RESULT_OK,result)
+                                return
+                            }
+                        }
+                    }
+                    error("No unpainted unambiguous public fixture remains")
+                }
+            } catch(e:Exception) { result.putString("stream","PUBLIC_FIXTURE_PROBE_FAIL_${e.javaClass.simpleName}");finish(Activity.RESULT_CANCELED,result) }
+            return
+        }
         if(catalogProbe) {
             try {
                 val repo=FootprintDatabase(targetContext)
@@ -57,6 +83,30 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
         val prefs=mutableSetOf<String>()
         var resultCode=Activity.RESULT_CANCELED
         try {
+            // Real Android main Handler: a transient provider exception must leave a next tick.
+            val latch=java.util.concurrent.CountDownLatch(1)
+            val attempts=java.util.concurrent.atomic.AtomicInteger()
+            val failures=java.util.concurrent.atomic.AtomicInteger()
+            val handler=android.os.Handler(android.os.Looper.getMainLooper())
+            val loop=HealthCheckLoop({attempts.get()<2}, {
+                if(attempts.incrementAndGet()==1) throw SecurityException("isolated provider probe")
+                latch.countDown()
+            }, {failures.incrementAndGet()}, {handler.postDelayed(it,20)})
+            handler.post(loop)
+            check(latch.await(5,java.util.concurrent.TimeUnit.SECONDS))
+            check(attempts.get()==2 && failures.get()==1)
+            handler.removeCallbacks(loop)
+            // No preferences or live service fault injection; isolated stage evidence.
+            val stages=DiagnosticBuffer(mapOf("gps_count" to 136L,"saved_count" to 43L))
+            stages.record("start","ISOLATED_SESSION",1000)
+            stages.satellites(10,0,2000)
+            check(stages.long("session_gps_count")==0L && stages.long("session_saved_count")==0L)
+            stages.record("gps","GPS_CALLBACK",3000)
+            stages.record("valid_gps","VALID_GPS_RECEIVED",3001)
+            stages.record("saved","SQLITE_SAVED",3002)
+            check(stages.long("session_gps_count")==1L && stages.long("session_valid_gps_count")==1L && stages.long("session_saved_count")==1L)
+            stages.record("start","ISOLATED_RESTART",4000)
+            check(stages.long("session_gps_count")==0L && stages.long("gnss_at")==0L)
             fun testContext(name:String): Context = object: ContextWrapper(targetContext) {
                 override fun getDatabasePath(n:String)=File(root,"$name-$n")
                 override fun getFilesDir()=File(root,"$name-files").apply { mkdirs() }
@@ -187,5 +237,5 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
         // finish() can terminate the instrumented process immediately; cleanup must precede it.
         finish(resultCode,result)
     }
-    override fun onCreate(arguments:Bundle?) { catalogProbe=arguments?.getString("catalogProbe")=="true"; networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments); start() }
+    override fun onCreate(arguments:Bundle?) { fixtureProbe=arguments?.getString("fixtureProbe")=="true"; catalogProbe=arguments?.getString("catalogProbe")=="true"; networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments); start() }
 }

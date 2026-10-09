@@ -1,0 +1,142 @@
+{
+  "initial_points": 198,
+  "tested_source_sha": "ba4802ade8c9c1251da4e41b40bc268f4b48b2ba",
+  "source_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "isolated_database_migration_failure_backup_daily": true,
+  "confirmed_public_movement_0": {
+    "before": 198,
+    "after": 199,
+    "pass": true
+  },
+  "confirmed_public_movement_1": {
+    "before": 199,
+    "after": 200,
+    "pass": true
+  },
+  "confirmed_public_movement_2": {
+    "before": 200,
+    "after": 201,
+    "pass": true
+  },
+  "confirmed_public_movement_3": {
+    "before": 201,
+    "after": 202,
+    "pass": true
+  },
+  "fresh_confirmed_pairs": 3,
+  "new_section_anchor": {
+    "before": 202,
+    "after": 203,
+    "pass": true
+  },
+  "new_section_walk_0": {
+    "before": 203,
+    "after": 204,
+    "pass": true
+  },
+  "new_section_walk_1": {
+    "before": 204,
+    "after": 205,
+    "pass": true
+  },
+  "new_section_walk_2": {
+    "before": 205,
+    "after": 206,
+    "pass": true
+  },
+  "colored_road_pixels_on_real_map": 3655,
+  "new_section_reverse_0": {
+    "before": 206,
+    "after": 207,
+    "pass": true
+  },
+  "new_section_reverse_1": {
+    "before": 207,
+    "after": 208,
+    "pass": true
+  },
+  "new_section_reverse_2": {
+    "before": 208,
+    "after": 209,
+    "pass": true
+  },
+  "new_gray_to_contiguous_confirmed_30m_reverse_restart": true,
+  "session_restart_no_historic_callback_or_satellite_claim": true,
+  "return_public_anchor": {
+    "before": 209,
+    "after": 210,
+    "pass": true
+  },
+  "normal_home_clean_and_amap_rendered": true,
+  "reverse_duplicate_0": {
+    "before": 210,
+    "after": 211,
+    "pass": true
+  },
+  "reverse_duplicate_1": {
+    "before": 211,
+    "after": 212,
+    "pass": true
+  },
+  "reverse_duplicate_2": {
+    "before": 212,
+    "after": 213,
+    "pass": true
+  },
+  "repeat_deduplicated": true,
+  "background_save": {
+    "before": 213,
+    "after": 214,
+    "pass": true
+  },
+  "screen_off_save": {
+    "before": 214,
+    "after": 215,
+    "pass": true
+  },
+  "background_screen_off_save": true,
+  "poor_fix_not_stored": {
+    "before": 215,
+    "after": 215,
+    "pass": true
+  },
+  "no_fix_without_permanent_status_card": true,
+  "road_management_actual_picker_entry": true,
+  "backup_restore_real_picker_entry": true,
+  "coordinate_free_match_diagnosis_real_ui": true,
+  "power_settings_entry": true,
+  "paused_no_write": {
+    "before": 215,
+    "after": 215,
+    "pass": true
+  },
+  "pause_resume_revoke_preserved_history": true,
+  "no_permission_focuses_existing_painted_roads": true,
+  "permission_notice_settings_and_real_grant": true,
+  "after_permission_new_fix": {
+    "before": 215,
+    "after": 216,
+    "pass": true
+  },
+  "interruption_notice_clicks_settings": true,
+  "after_gap_no_false_paint": {
+    "before": 216,
+    "after": 217,
+    "pass": true
+  },
+  "small_320dp_navigation_no_overlap": true,
+  "all_original_rows_retained": true,
+  "all_existing_roads_matches_and_coverage_retained": true,
+  "final_points": 217,
+  "painted_meters": 109.99992743301601,
+  "apk_sha256": "580e5eefb37f6eff81a9a9a127c95fb9bb1cf12054724e007abcb453d5a9823c",
+  "installed_exact_apk": true,
+  "real_vivo": "NOT_TESTED",
+  "doze_oem_reboot_battery": "NOT_TESTED",
+  "backup_roundtrip": "ISOLATED_DATABASE_PASS; real UI picker opening/cancel only",
+  "pass": true,
+  "cleanup_errors": [],
+  "viewport_restored": true,
+  "mock_restored": true,
+  "apk_business_commit": "ba4802a"
+}
