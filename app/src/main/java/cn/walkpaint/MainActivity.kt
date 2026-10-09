@@ -318,10 +318,13 @@ class MainActivity : ComponentActivity() {
                     }) { Text("选择道路包文件") } },
                     dismissButton = { TextButton(enabled=!roadBusy,onClick={
                         showRoadPack=false
-                        roadState.roads.firstOrNull()?.points?.let { p ->
-                            pendingTripFocus=Triple(p[p.size/2].lat,p[p.size/2].lon,17.0)
+                        val fix=userFix?.takeIf {
+                            NearbyRoads.usableFix(android.os.SystemClock.elapsedRealtimeNanos()-it.elapsedRealtimeNanos,it.accuracy)
+                        }?.let { TrackPoint(it.latitude,it.longitude,it.time,it.accuracy) }
+                        RoadMapFocus.choose(snapshot,fix,roadState)?.let { p ->
+                            pendingTripFocus=Triple(p.lat,p.lon,17.0)
                             currentTab=0
-                            focusCoordinate(p[p.size/2].lat,p[p.size/2].lon,17.0)
+                            focusCoordinate(p.lat,p.lon,17.0)
                         }
                     }) { Text("查看地图") } }
                 )
@@ -600,6 +603,7 @@ class MainActivity : ComponentActivity() {
             } }.onFailure { e -> runOnUiThread {
                 if(!isDestroyed) {
                     roadBusy=false; roadDownload=null
+                    android.util.Log.w("WalkPaintRoads", "failure="+e.javaClass.simpleName+";cause="+(e.cause?.javaClass?.simpleName ?: "none"))
                     roadMessage=when(e) {
                         is java.net.SocketTimeoutException -> "下载超时，请稍后重试；原足迹和道路保留"
                         is java.io.IOException -> "下载未完成，请检查网络后重试；原足迹和道路保留"

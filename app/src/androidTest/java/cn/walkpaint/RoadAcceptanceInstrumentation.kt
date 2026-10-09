@@ -11,8 +11,27 @@ import java.util.UUID
 
 /** Isolated databases only. Never clears or replaces the installed footprint database. */
 class RoadAcceptanceInstrumentation : Instrumentation() {
+    private var networkProbe=false
     override fun onStart() {
         val result = Bundle()
+        if(networkProbe) {
+            val lines=mutableListOf<String>()
+            try {
+                val pack=RoadDownload().fetch(NearbyRoads.area(51.754,-1.255))
+                lines += "production_fetch=PASS:${RoadPackCodec.decode(pack).roads.size}"
+            } catch(e:Exception) { lines += "production_fetch="+e.javaClass.simpleName+":"+(e.message?.take(200) ?: "") }
+            for(host in listOf("https://overpass-api.de/api/status","https://overpass.private.coffee/api/status","https://api.openstreetmap.org/api/0.6/capabilities.json")) {
+                val c=java.net.URI(host).toURL().openConnection() as java.net.HttpURLConnection
+                try {
+                    c.connectTimeout=10000; c.readTimeout=10000; c.instanceFollowRedirects=false
+                    lines += host+" HTTP "+c.responseCode
+                } catch(e:Exception) { lines += host+" "+e.javaClass.simpleName+":"+(e.message?.take(200) ?: "") }
+                finally { c.disconnect() }
+            }
+            result.putString("stream",lines.joinToString("\n"))
+            finish(Activity.RESULT_OK,result)
+            return
+        }
         val root=File(targetContext.cacheDir,"road-test-${UUID.randomUUID()}").apply { mkdirs() }
         val databases=mutableListOf<FootprintDatabase>()
         val prefs=mutableSetOf<String>()
@@ -141,5 +160,5 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
         // finish() can terminate the instrumented process immediately; cleanup must precede it.
         finish(resultCode,result)
     }
-    override fun onCreate(arguments:Bundle?) { super.onCreate(arguments); start() }
+    override fun onCreate(arguments:Bundle?) { networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments); start() }
 }

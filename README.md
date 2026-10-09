@@ -4,7 +4,7 @@ Android 私人足迹 App，**v0.6 本地测试版**：在应用内单次同意�
 
 ## 本地运行
 
-- 手机安装包：[WalkPaint-v0.6-arm64-debug.apk](WalkPaint-v0.6-arm64-debug.apk)，通用包：[WalkPaint-v0.6-universal-debug.apk](WalkPaint-v0.6-universal-debug.apk)。包名 cn.walkpaint，versionCode7，versionName0.6，沿用原签名。最终安装复验当前受模拟器网络/窗口授权阻塞，见 HANDOFF。
+- 手机安装包：[WalkPaint-v0.6-arm64-debug.apk](WalkPaint-v0.6-arm64-debug.apk)，通用包：[WalkPaint-v0.6-universal-debug.apk](WalkPaint-v0.6-universal-debug.apk)。包名 cn.walkpaint，versionCode7，versionName0.6，沿用原签名。最终手机包已在MuMu覆盖安装与真实下载入口验收通过；真机后台尚未验收，见 HANDOFF。
 - 已有旧版请**覆盖安装**，不要卸载或清除数据。SQLite schema1→2 只增加道路、覆盖和匹配表，保留全部旧 trips/points。旧 schema1 APK 不支持直接降级打开新库。
 - 首次主动同意自动记录并授权精确位置后，前台定位服务尝试连续记录，保留常驻通知；“我的”可暂停、查看无坐标诊断。系统省电/强停可能中断，强停后需手动打开。
 - 地图顶部或“我的 → 下载 / 查看附近道路”：取得当前位置后，点“下载附近道路”，阅读区域/IP说明并选择“同意并下载本次”；约1.2公里范围的道路保存到本机。之后离线走路、看确认匹配的道路变青绿；新区域需再次下载。没有自动联网刷新、自动重试或足迹上传。也可点“选择道路包文件”打开系统文件选择器。文件必须含合法来源声明、完整 WGS84 LineString、真实 OSM way ID 与版本。详见 [道路包说明](docs/ROAD_PACK.md)。仓库提供 [牛津真实道路测试包](app/src/test/resources/oxford-roads.geojson)，仅覆盖固定公开测试区域，不能给其他地区涂色。
@@ -22,7 +22,7 @@ OSM 道路数据：© OpenStreetMap contributors，按 [ODbL 1.0](https://openda
 
 ## 验证与限制
 
-JDK21、SDK36、AGP9.0.1、Gradle9.1.0。构建：gradlew.bat :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest --offline --console=plain。55 项 JVM 测试通过；Android 隔离数据库测试验证 v1 保留升级、道路重复导入/错误回滚、备份恢复与重复 trip 去重。
+JDK21、SDK36、AGP9.0.1、Gradle9.1.0。构建：gradlew.bat :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest --offline --console=plain。59 项 JVM 测试通过；Android 隔离数据库测试验证 v1 保留升级、道路重复导入/错误回滚、备份恢复与重复 trip 去重。
 
 v0.5 可靠性修复已在原 APK 复现故障，并在最终 APK 的独立 Android 测试库验证：损坏道路不丢点、不锁死后续记录，覆盖中途失败没有部分提交，有效道路重新导入恢复，真实 GPS 写入失败仍报错。仅 MuMu 覆盖安装验收，原83点全部保留，新增1个模拟测试点；最终已安装 APK 指纹、实际截图及离线选择重启验证见 [HANDOFF.md](HANDOFF.md)，本地证据 verification/v05-reliability。
 
@@ -30,4 +30,4 @@ v0.5 可靠性修复已在原 APK 复现故障，并在最终 APK 的独立 Andr
 
 匹配采用保守投影，不猜跨路口路由；1–20米精度、≤45秒点间隔、每对3–120米、≤8米/秒。路口/平行路/自交处可能少涂。高密度城市、长期数据规模、驾车速度、真实手机定位漂移和 vivo 长期锁屏/耗电尚未验收。不宣称解决系统杀后台，也不宣称用户手机已更新。本轮只本地构建、验证和提交，不推送、不发布。
 
-当前 v0.6 下载初版已在模拟器真实入口通过下载、重复去重、重开保留；断网测试切断了模拟器ADB，清理和最终APK安装复验尚待窗口授权恢复。不能把部分测试称为最终交付。证据及准确APK对应关系见 [HANDOFF.md](HANDOFF.md)。
+当前 v0.6 最终手机包已在模拟器真实入口通过下载、重复去重、重开保留、GPS保存和覆盖升级；清理与安装指纹实读通过。59项测试，真机长期后台/国内网络可达性尚未验收；不能称用户手机已更新。证据及准确APK对应关系见 [HANDOFF.md](HANDOFF.md)。

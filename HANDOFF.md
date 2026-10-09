@@ -1,4 +1,37 @@
-# HANDOFF — v0.6 附近道路下载（2026-10-09，当前任务）
+# HANDOFF — v0.6 最终本地包验收通过（2026-10-09）
+
+> 本节为当前状态，覆盖下方历史未复验/窗口授权/网络恢复阻塞。唯一写手，D:\Projects\WalkPaint，feat/v06-nearby-roads；基线6b9f8d3，下载功能提交1096926，地图修复/收尾提交见git log。**最终手机APK在MuMu真实入口验收通过；未安装到用户真机、未推送或发布。等待私有分发许可和真机验收，不能说用户手机已生效或后台已保证。**
+
+## 当前产物
+
+- 手机包：[WalkPaint-v0.6-arm64-debug.apk](WalkPaint-v0.6-arm64-debug.apk)，70311554字节，SHA256 `c308e9f11c7540e42753e8bba5c1bb61d1c57dbb48147a01e13b2ed83a235300`。cn.walkpaint/code7/name0.6/schema2，ZIP仅arm64-v8a。
+- 同源码通用包：[WalkPaint-v0.6-universal-debug.apk](WalkPaint-v0.6-universal-debug.apk)，SHA256 `ba6f144431161b3bdb8caaac67df0c850768a22d97804f679bbca1ecd5287ff4`。通用包已构建，最终运行验收采用手机arm64包，不能把ABI不同的指纹混用。
+- apksigner成功，旧证书SHA256 21b74e3e2a10e12da8284d4e6bd7d99e55b00a385215902e94d7896f7a46c967未变。只覆盖安装，不卸载、清数据或降schema1。
+
+## 本轮完成与准确证据
+
+- 应用内单次同意区域/IP后下载附近约1.2公里小区域的完整OSM道路；不上传完整足迹、不自动更新/重试/换主机。下载文件仍走已有8MB/2000way校验和原子本地导入、历史重匹配。只使用overpass-api.de；底图联网授权独立。
+- 从真实渲染发现“查看地图”选择第一条catalog道路，把涂色移出视口；已修为新鲜当前位置→最近真实足迹→已有覆盖/导入几何，不以演示点代替真实位置。RoadMapFocusTest覆盖当前定位、最新真实轨迹、空数据和导入几何后备。
+- 当前源码**59项JVM回归，0失败**；包括完整/不完整道路响应、网络/HTTP/限额/预取消、定位新鲜度和地图聚焦，以及原GPS/道路算法。离线testDebugUnitTest/assembleDebug/assembleDebugAndroidTest通过。
+- **最终手机包**真实UI下载/确认取消/重复去重/重开保留通过，verification/v06-final/acceptance.json，V06_NEARBY_ROADS_UI_NETWORK_PASS，SHA对应上述c308e9f1。1980道路重复下载仍1980，原GPS全行保留，累计约42米。人工查看downloaded-road-map.png，蓝点、灰路和青绿覆盖正常。
+- **同一个最终手机包**覆盖升级和最后定位/地图smoke通过，verification/v06-arm64-complete/acceptance.json，V05_FINAL_APK_SMOKE_PASS：89旧点和所有trips/points行保留，新增一个明确模拟GPS到90；真实文件选择器导入、数据库隔离迁移/故障隔离/备份去重、前台服务、新定位保存、状态文案和地图青绿3392像素验证通过。没有重复旧版长断档链路或真机后台试走；准确边界保持。
+- **安装指纹和清理实读通过**：verification/v06-delivery/final-audit.json；读取安装base.apk SHA完全等于最终手机包；code7，90点、1980路，integrity_check=ok，shell Mock Location=default，测试cache/prefs=0，Wi-Fi=1。没有用户数据导出或手机操作。
+
+## 排障记录和限制
+
+- 初版断网测试切断MuMu自身ADB，finally未完成；原失败证据保留在v06-nearby。后来发现模拟器进程已经关闭，官方管理器只启动索引0后，窗口/ADB恢复；不再需要用户窗口授权。网络与模拟定位清理实读已完成，不把“发出恢复命令”当结果。v06脚本已移除切断模拟器网络的步骤。
+- 最终下载复验曾出现IOException，先保留失败证据，再通过隔离Android网络探针确认同生产客户端可返回1980条道路，并记录仅异常类型/原因类的安全日志（不含经纬度、正文、凭据）。之后同最终界面成功下载两次并通过重开。**连接失败根因未确认，不归因于模拟器、服务或时序；没有修改用户电脑代理/网络，也未更换生产服务。**
+- Android网络探针仅在测试APK明确networkProbe=true时请求固定公开Oxford区域，并读取公开服务状态；不导入、修改足迹，不从真实GPS选区域，默认数据库隔离回归不会触发联网。它不能代替UI证据。
+- 真实断网UI、过期定位UI未通过；已用确定性传输/定位边界测试验证逻辑，标明未测。初版模拟器下载成功不证明用户国内网络可达；OSM缺路/服务繁忙仍可能少涂或下载失败。没有全球/整城自动下载、高德Key、复杂道路真机误匹配或长期规模保证。
+- 真机未连接、未安装；户外定位、vivo省电/Doze/杀后台/重启和耗电等待实机证据。由Agent继续处理可自动完成的步骤；用户只需下载/安装确认、位置授权及必要的实际走路。
+
+## 下一步与回退
+
+用户允许后才将代码/安装包上传现有私有h516df/walkpaint并发私有Release，给手机可点击下载链接；不要在获得许可前push/tag/release。发布说明已准备 verification/v06-delivery/release-notes.md。旧APK/源码和前轮指纹产物保留；必要时从父提交构建schema2兼容、同签名、code>=7的修复包，不通过卸载/清库降级。
+
+---
+
+# HANDOFF — v0.6 附近道路下载（历史：恢复前状态）
 
 > 用户通过截图明确要求接手并继续做到正常使用。本节覆盖旧“已暂停”等状态。唯一写手；D:\Projects\WalkPaint；任务分支 feat/v06-nearby-roads，从已核对的干净提交 6b9f8d3 继续。本地提交，不 push、不发布、不操作用户手机。**状态：本地安装包已生成，真实下载初版通过；最终安装复验和测试状态清理待模拟器网络/窗口授权恢复。不能称最终交付或用户手机已经可用。**
 
