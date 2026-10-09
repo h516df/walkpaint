@@ -18,8 +18,8 @@ android {
         applicationId = "cn.walkpaint"
         minSdk = 26
         targetSdk = 36
-        versionCode = 8
-        versionName = "0.7"
+        versionCode = 9
+        versionName = "0.8"
         testInstrumentationRunner = "cn.walkpaint.RoadAcceptanceInstrumentation"
         // Optional phone-sized APK; the default universal debug APK remains emulator-compatible.
         if (providers.gradleProperty("walkpaintArm64Only").orNull == "true") {

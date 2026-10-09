@@ -4,6 +4,9 @@ import android.content.Context
 import android.location.Location
 import android.os.Bundle
 import android.graphics.Color
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
 import com.amap.api.maps.AMap
 import com.amap.api.maps.CameraUpdateFactory
 import com.amap.api.maps.CoordinateConverter
@@ -26,8 +29,17 @@ internal class AmapMapController(private val context: Context) {
     private var map: AMap? = null
     private var currentMarker: Marker? = null
     private var latestPosition: Location? = null
-    private val accent = Color.rgb(18, 145, 134)
-    private val demo = Color.rgb(133, 104, 197)
+    private val density = context.resources.displayMetrics.density
+    private val blueDot by lazy {
+        val bitmap = Bitmap.createBitmap((32*density).toInt(),(32*density).toInt(),Bitmap.Config.ARGB_8888)
+        val canvas=Canvas(bitmap)
+        val paint=Paint(Paint.ANTI_ALIAS_FLAG)
+        val center=bitmap.width/2f
+        paint.color=Color.argb(40,48,139,211); canvas.drawCircle(center,center,14*density,paint)
+        paint.color=Color.WHITE;canvas.drawCircle(center,center,6*density,paint)
+        paint.color=Color.rgb(48,139,211);canvas.drawCircle(center,center,4.5f*density,paint)
+        BitmapDescriptorFactory.fromBitmap(bitmap)
+    }
 
     fun create(state: TrackState, location: Location?, roads: RoadState): MapView {
         check(BuildConfig.AMAP_KEY.isNotBlank()) { "高德地图 Key 尚未设置" }
@@ -39,6 +51,9 @@ internal class AmapMapController(private val context: Context) {
         currentView = view
         map = view.map
         map?.uiSettings?.isZoomControlsEnabled = false
+        map?.uiSettings?.isCompassEnabled = false
+        map?.uiSettings?.isRotateGesturesEnabled = false
+        map?.uiSettings?.isTiltGesturesEnabled = false
         latestPosition = location
         render(state,roads)
         val p = location?.let { toAmap(it.latitude, it.longitude) }
@@ -51,34 +66,13 @@ internal class AmapMapController(private val context: Context) {
         val a = map ?: return
         a.clear()
         currentMarker = null
-        fun draw(tracks: List<Track>, color: Int) {
-            tracks.forEach { trip ->
-                trip.points.groupBy { it.segment }.values.forEach { segment ->
-                    if (segment.isEmpty()) return@forEach
-                    val converted = segment.map { toAmap(it.lat, it.lon) }
-                    a.addCircle(
-                        CircleOptions().center(converted.first()).radius(6.0)
-                            .strokeColor(Color.WHITE).strokeWidth(2f).fillColor(color)
-                    )
-                    if (converted.size >= 2) {
-                        a.addPolyline(PolylineOptions().addAll(converted).width(13f).color(color))
-                    }
-                }
-            }
-        }
-        // GPS is a thin gray reference, never the colored road coverage.
-        state.realTracks.forEach { trip -> trip.points.groupBy { it.segment }.values.forEach { points ->
-            if(points.size >= 2) a.addPolyline(PolylineOptions().addAll(points.map { toAmap(it.lat,it.lon) })
-                .width(2f).color(Color.GRAY))
-        } }
         roads.roads.forEach { road ->
-            a.addPolyline(PolylineOptions().addAll(road.points.map { toAmap(it.lat,it.lon) }).width(4f).color(Color.GRAY))
+            a.addPolyline(PolylineOptions().addAll(road.points.map { toAmap(it.lat,it.lon) }).width(2.5f*density).color(UnexploredRoadArgb))
             roads.coverage.highlighted(road).forEach { line ->
-                a.addPolyline(PolylineOptions().addAll(line.map { toAmap(it.lat,it.lon) }).width(12f).color(Color.WHITE))
-                a.addPolyline(PolylineOptions().addAll(line.map { toAmap(it.lat,it.lon) }).width(8f).color(accent))
+                a.addPolyline(PolylineOptions().addAll(line.map { toAmap(it.lat,it.lon) }).width(7f*density).color(Color.argb(220,244,247,245)))
+                a.addPolyline(PolylineOptions().addAll(line.map { toAmap(it.lat,it.lon) }).width(5f*density).color(ExploredRoadArgb))
             }
         }
-        draw(state.tracks.filter { it.demo }, demo)
         updateUser(latestPosition)
     }
 
@@ -91,8 +85,8 @@ internal class AmapMapController(private val context: Context) {
         if (marker == null) {
             currentMarker = a.addMarker(
                 MarkerOptions().position(coordinate)
-                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE))
-                    .anchor(0.5f, 0.85f).title("我的位置")
+                    .icon(blueDot)
+                    .anchor(0.5f, 0.5f)
             )
         } else {
             marker.position = coordinate
