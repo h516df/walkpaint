@@ -66,7 +66,20 @@
     "更新为私有浏览器降级路径，未实现App内自动核对或下载",
     "CI未配置，PR未合并"
   ],
-  "publication": "not_uploaded_yet",
+  "publication": {
+    "repository_private": true,
+    "draft": false,
+    "prerelease": true,
+    "tag": "v0.13",
+    "target_sha": "349cd9d528a5693aa49ebda2a040da487fa89a3c",
+    "release_url": "https://github.com/h516df/walkpaint/releases/tag/v0.13",
+    "apk_url": "https://github.com/h516df/walkpaint/releases/download/v0.13/WalkPaint-v0.13-arm64-debug.apk",
+    "published_at": "2026-10-09T18:31:17Z",
+    "phone_size": 70238534,
+    "server_sha256": "621efc671b464eecdde35b5d2604e13b7e43e5bd5616db0cf9e946c6036b58f4",
+    "actual_download_sha256": "621efc671b464eecdde35b5d2604e13b7e43e5bd5616db0cf9e946c6036b58f4",
+    "actual_download_verified": true
+  },
   "final_android_checks": {
     "isolated_suite_keeps_real_database": true,
     "profile_feedback_320dp": true,
