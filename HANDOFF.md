@@ -1,6 +1,6 @@
 # HANDOFF — v0.6 最终本地包验收通过（2026-10-09）
 
-> 本节为当前状态，覆盖下方历史未复验/窗口授权/网络恢复阻塞。唯一写手，D:\Projects\WalkPaint，feat/v06-nearby-roads；基线6b9f8d3，下载功能提交1096926，地图修复/收尾提交见git log。**最终手机APK在MuMu真实入口验收通过；未安装到用户真机、未推送或发布。等待私有分发许可和真机验收，不能说用户手机已生效或后台已保证。**
+> 本节为当前状态，覆盖下方历史未复验/窗口授权/网络恢复阻塞。唯一写手，D:\Projects\WalkPaint，feat/v06-nearby-roads；基线6b9f8d3，下载功能提交1096926，地图修复/收尾提交见git log。**最终手机APK在MuMu真实入口验收通过，现已推送代码并发布到私有GitHub；未安装到用户真机，不能说用户手机已生效或后台已保证。**
 
 ## 当前产物
 
@@ -27,7 +27,9 @@
 
 ## 下一步与回退
 
-用户允许后才将代码/安装包上传现有私有h516df/walkpaint并发私有Release，给手机可点击下载链接；不要在获得许可前push/tag/release。发布说明已准备 verification/v06-delivery/release-notes.md。旧APK/源码和前轮指纹产物保留；必要时从父提交构建schema2兼容、同签名、code>=7的修复包，不通过卸载/清库降级。
+用户随后明确要求放进私有GitHub供下载，分发授权已获得并执行。代码提交a81063d推至feat/v06-nearby-roads；草稿PR https://github.com/h516df/walkpaint/pull/1 未合并。v0.6标签固定a81063d，私有预览发布 https://github.com/h516df/walkpaint/releases/tag/v0.6；draft=false，仓库isPrivate=true。手机APK资产uploaded/70311554字节，服务器digest与c308e9f1验收包完全一致。直达手机下载 https://github.com/h516df/walkpaint/releases/download/v0.6/WalkPaint-v0.6-arm64-debug.apk 。私有访问需手机浏览器登录有权限账号。
+
+首次并发上传两包时通用包HTTP408且两资产未保存；查实际为空后仅对gh子进程使用HTTP/1，单独上传手机包成功。通用包保留本机，不虚称已上传；备用ZIP同APK内部指纹，仅本机保留未发布。发布实读证据 verification/v06-delivery/publication.json。发布后文档提交另行push，不移动已验收v0.6标签，不强行合并main。旧APK/源码和前轮指纹产物保留；必要时从父提交构建schema2兼容、同签名、code>=7的修复包，不通过卸载/清库降级。
 
 ---
 

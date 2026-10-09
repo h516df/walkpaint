@@ -2,9 +2,10 @@
 
 Android 私人足迹 App，**v0.6 本地测试版**：在应用内单次同意后下载附近 OSM 道路，也可导入本地文件；GPS 匹配真实道路几何，持久累计走过的道路区间，重复/反向重走不重复计数。青绿为已确认道路，灰色为未涂道路和细 GPS 参考；包外、路口歧义、断档和差精度保持未确认。**尚未完成用户手机户外及长期后台验收。**
 
-## 本地运行
+## 下载与运行
 
-- 手机安装包：[WalkPaint-v0.6-arm64-debug.apk](WalkPaint-v0.6-arm64-debug.apk)，通用包：[WalkPaint-v0.6-universal-debug.apk](WalkPaint-v0.6-universal-debug.apk)。包名 cn.walkpaint，versionCode7，versionName0.6，沿用原签名。最终手机包已在MuMu覆盖安装与真实下载入口验收通过；真机后台尚未验收，见 HANDOFF。
+- 手机下载：[v0.6 APK（约70MB）](https://github.com/h516df/walkpaint/releases/download/v0.6/WalkPaint-v0.6-arm64-debug.apk)；[私有发布页](https://github.com/h516df/walkpaint/releases/tag/v0.6)。在手机浏览器登录有权限的GitHub账号后下载。
+- 本机安装包：[WalkPaint-v0.6-arm64-debug.apk](WalkPaint-v0.6-arm64-debug.apk)，通用包：[WalkPaint-v0.6-universal-debug.apk](WalkPaint-v0.6-universal-debug.apk)。包名 cn.walkpaint，versionCode7，versionName0.6，沿用原签名。最终手机包已在MuMu覆盖安装与真实下载入口验收通过；真机后台尚未验收，见 HANDOFF。
 - 已有旧版请**覆盖安装**，不要卸载或清除数据。SQLite schema1→2 只增加道路、覆盖和匹配表，保留全部旧 trips/points。旧 schema1 APK 不支持直接降级打开新库。
 - 首次主动同意自动记录并授权精确位置后，前台定位服务尝试连续记录，保留常驻通知；“我的”可暂停、查看无坐标诊断。系统省电/强停可能中断，强停后需手动打开。
 - 地图顶部或“我的 → 下载 / 查看附近道路”：取得当前位置后，点“下载附近道路”，阅读区域/IP说明并选择“同意并下载本次”；约1.2公里范围的道路保存到本机。之后离线走路、看确认匹配的道路变青绿；新区域需再次下载。没有自动联网刷新、自动重试或足迹上传。也可点“选择道路包文件”打开系统文件选择器。文件必须含合法来源声明、完整 WGS84 LineString、真实 OSM way ID 与版本。详见 [道路包说明](docs/ROAD_PACK.md)。仓库提供 [牛津真实道路测试包](app/src/test/resources/oxford-roads.geojson)，仅覆盖固定公开测试区域，不能给其他地区涂色。
@@ -28,6 +29,6 @@ v0.5 可靠性修复已在原 APK 复现故障，并在最终 APK 的独立 Andr
 
 真实入口验收：python scripts/android_v05_acceptance.py --output verification/v05-final，仅允许 MuMu 127.0.0.1:16384 或 emulator-*；覆盖安装、原有行比较、实际系统文件选择器、公开真实道路上的模拟 GPS、累计去重、差精度/断档拒绝、进程重开和实际地图截图。脚本会增加**明确属于模拟器的 GPS 测试点**，不会卸载、清数据或操作用户手机。证据、APK 指纹和实际完成状态见 [HANDOFF.md](HANDOFF.md)。
 
-匹配采用保守投影，不猜跨路口路由；1–20米精度、≤45秒点间隔、每对3–120米、≤8米/秒。路口/平行路/自交处可能少涂。高密度城市、长期数据规模、驾车速度、真实手机定位漂移和 vivo 长期锁屏/耗电尚未验收。不宣称解决系统杀后台，也不宣称用户手机已更新。本轮只本地构建、验证和提交，不推送、不发布。
+匹配采用保守投影，不猜跨路口路由；1–20米精度、≤45秒点间隔、每对3–120米、≤8米/秒。路口/平行路/自交处可能少涂。高密度城市、长期数据规模、驾车速度、真实手机定位漂移和 vivo 长期锁屏/耗电尚未验收。不宣称解决系统杀后台，也不宣称用户手机已更新。代码分支及手机安装包已按用户授权上传私有GitHub；草稿PR未合并，v0.6为预览发布，用户真机验收尚未完成。
 
 当前 v0.6 最终手机包已在模拟器真实入口通过下载、重复去重、重开保留、GPS保存和覆盖升级；清理与安装指纹实读通过。59项测试，真机长期后台/国内网络可达性尚未验收；不能称用户手机已更新。证据及准确APK对应关系见 [HANDOFF.md](HANDOFF.md)。
