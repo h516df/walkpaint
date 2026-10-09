@@ -1,3 +1,7 @@
+# Android 真实渲染证据
+
+最新：[v0.8 界面与验收](V08.md)。以下保留 v0.7 原证据及边界。
+
 # Issue #2 模拟器证据
 
 三个截图来自明确测试的 MuMu/API35 和固定公开 Oxford OSM 道路上的模拟 GPS，并非用户真机或私人实走轨迹。道路 © OpenStreetMap contributors / ODbL-1.0；原始公开fixture见 app/src/test/resources/oxford-roads.geojson。

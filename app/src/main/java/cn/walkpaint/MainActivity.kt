@@ -56,13 +56,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private val Ink = Color(0xFF193D40)
-private val Muted = Color(0xFF758C89)
-private val Accent = Color(0xFF187F78)
-private val AccentSoft = Color(0xFFDFF2ED)
-private val Lilac = Color(0xFF8271C7)
-private val PageBackground = Color(0xFFF4F8F6)
-
 class MainActivity : ComponentActivity() {
     private val repository by lazy { (application as WalkPaintApp).repository }
     private var currentTab by mutableIntStateOf(0)
@@ -71,6 +64,10 @@ class MainActivity : ComponentActivity() {
     private var trackingStatus by mutableStateOf("正在检查位置状态")
     private var recordingTitle by mutableStateOf("正在检查记录状态")
     private var recordingHealthy by mutableStateOf(false)
+    private var mapNotice by mutableStateOf<String?>(null)
+    private var dailyRoads by mutableStateOf<Map<String,RoadState>>(emptyMap())
+    private val dailyRoadCache=DailyRoadCache()
+    private var dailyRoadDate = ""
     private var trackingEnabled by mutableStateOf(false)
     private var trackingRunning by mutableStateOf(false)
     private var backgroundGranted by mutableStateOf(false)
@@ -228,8 +225,8 @@ class MainActivity : ComponentActivity() {
             MaterialTheme(
                 colorScheme = lightColorScheme(
                     primary = Accent, onPrimary = Color.White,
-                    background = PageBackground, surface = Color.White,
-                    onSurface = Ink, secondary = Lilac, surfaceContainerLow = PageBackground
+                    background = PageBackground, surface = PageBackground,
+                    onSurface = Ink, secondary = Accent, surfaceContainerLow = PageBackground
                 )
             ) {
                 AppShell(
@@ -242,6 +239,7 @@ class MainActivity : ComponentActivity() {
                     trackingStatus = trackingStatus,
                     recordingTitle = recordingTitle,
                     recordingHealthy = recordingHealthy,
+                    mapNotice = mapNotice, dailyRoads = dailyRoads,
                     needsBackground = trackingEnabled && !backgroundGranted,
                     selectedDay = selectedDay,
                     mapRoadState = mapRoadState,
@@ -283,7 +281,9 @@ class MainActivity : ComponentActivity() {
                     },
                     onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
                     onBackgroundSettings = { openAppSettings() },
-                    onCopyDiagnostics = { diagnosticText = trackingDiagnostics(); showDiagnostics = true },
+                    onPowerSettings = { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) },
+                    onRevoke = { AmbientTracking.stop(this); updateUi() },
+                    onCopyDiagnostics = { openRecordingDiagnostics() },
                     internalBackupCount = repository.backupFiles().size,
                     mapProviderLabel = if (amapActive) "高德地图" else if(onlineMap) "OpenFreeMap" else "本地离线道路",
                     onChooseAmap = { showAmapConsent = true },
@@ -415,9 +415,13 @@ class MainActivity : ComponentActivity() {
                     dismissButton = {
                         TextButton(onClick = {
                             showAmapConsent = false
+                            amapConsent=false; onlineMap=false
+                            com.amap.api.maps.MapsInitializer.updatePrivacyAgree(applicationContext,false)
                             getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE).edit()
-                                .putBoolean("amap_sdk_decision_seen", true).apply()
-                        }) { Text("暂不用") }
+                                .putBoolean("amap_sdk_decision_seen", true)
+                                .putBoolean("amap_sdk_consent", false)
+                                .putBoolean("openfreemap_basemap_consent", false).apply()
+                        }) { Text(if(amapConsent) "撤回并用离线地图" else "暂不用") }
                     }
                 )
                 if (confirmEnable) AlertDialog(
@@ -447,7 +451,7 @@ class MainActivity : ComponentActivity() {
         trackingEnabled = AmbientTracking.enabled(this)
         trackingRunning = AmbientTracking.running
         backgroundGranted = AmbientTracking.hasBackgroundLocation(this)
-        userFix = chooseMapFix(listOfNotNull(AmbientTracking.lastGps, AmbientTracking.lastFix,userFix))
+        userFix = if(AmbientTracking.hasFineLocation(this)) chooseMapFix(listOfNotNull(AmbientTracking.lastGps, AmbientTracking.lastFix,userFix)) else null
         val latestGps = AmbientTracking.lastGps
         val recentGps = latestGps?.takeIf { it.hasAccuracy() && it.accuracy >= 1f && now - it.time in 0L..60_000L }
         val diagnostic = RecordingDiagnostics.snapshot(this)
@@ -465,6 +469,7 @@ class MainActivity : ComponentActivity() {
             .isProviderEnabled(LocationManager.GPS_PROVIDER)
         val status = RecordingStatus.assess(RecordingDiagnostics.signals(this, repository.lastError))
         recordingTitle=status.title; recordingHealthy=status.healthy
+        mapNotice=MapNotice.from(status,recordedAt("gps_callback_at") > 0 && recordedAt("gps_callback_at") >= recordedAt("service_start_at"))
         val diagnosis = status.title + " · " + status.hint
         val gpsLabel = when {
             recentGps != null -> "GPS ±" + recentGps.accuracy.toInt() + "米"
@@ -489,7 +494,7 @@ class MainActivity : ComponentActivity() {
                 else ""
             }
         }
-        if (lastRevision != repository.revision && refreshing.compareAndSet(false, true)) {
+        if ((lastRevision != repository.revision || dailyRoadDate != DailyFootprints.key(System.currentTimeMillis())) && refreshing.compareAndSet(false, true)) {
             val day=selectedDay
             refreshExecutor.execute {
                 try {
@@ -499,7 +504,9 @@ class MainActivity : ComponentActivity() {
                     next.totalMeters; FootprintInsights.traveledDays(next); FootprintInsights.exploredCells(next)
                     val road = repository.roadSnapshot()
                     val roadBase = road.geoJson(false)
-                    val displayedRoad = if(day==null) road else repository.roadSnapshotForDay(day)
+                    val today = DailyFootprints.key(System.currentTimeMillis())
+                    val daily = dailyRoadCache.refresh(next,road,day) { repository.roadSnapshotForDay(it) }
+                    val displayedRoad = if(day==null) road else daily[day] ?: repository.roadSnapshotForDay(day)
                     val displayedTrack = DailyFootprints.select(next,day)
                     val painted = displayedRoad.geoJson(true)
                     val real = geoJson(displayedTrack.realTracks)
@@ -507,6 +514,7 @@ class MainActivity : ComponentActivity() {
                     runOnUiThread {
                         if(selectedDay!=day) return@runOnUiThread
                         snapshot = next; lastRevision = revision
+                        dailyRoads=daily; dailyRoadDate=today
                         mapTrackState=displayedTrack; mapRoadState=displayedRoad
                         realGeoJson = real; demoGeoJson = demo
                         roadState = road; roadJson = roadBase; paintedJson = painted
@@ -690,8 +698,20 @@ class MainActivity : ComponentActivity() {
             "\n\n持续 GPS 已启用，不长期持有 CPU 唤醒锁；常规诊断每30秒批量保存，异常退出最多损失末尾30秒诊断（不影响 SQLite 足迹）。vivo 等厂商需允许后台运行；强制停止后须手动打开 App，不能保证永不断录。"
     }
 
+    private fun openRecordingDiagnostics() {
+        val base=trackingDiagnostics()
+        val state=snapshot; val roads=roadState
+        diagnosticText=base + "\n\n正在整理道路匹配原因…"
+        showDiagnostics=true
+        refreshExecutor.execute {
+            val details=runCatching { RoadMatchDiagnostics.report(state,roads) }
+                .getOrDefault("道路复算暂不可用，原始记录保留")
+            runOnUiThread { diagnosticText=base + "\n\n" + details }
+        }
+    }
+
     private fun copyTrackingDiagnostics() {
-        val clip = ClipData.newPlainText("WalkPaint 定位诊断", trackingDiagnostics())
+        val clip = ClipData.newPlainText("WalkPaint 定位诊断", diagnosticText)
         getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
         toast("诊断已复制，不包含经纬度和个人路线")
     }
@@ -716,51 +736,21 @@ class MainActivity : ComponentActivity() {
             if (mapWidget !== view) return@getMapAsync
             mapInstance = loaded
             val builder = if(onlineMap) Style.Builder().fromUri("https://tiles.openfreemap.org/styles/liberty")
-                else Style.Builder().fromJson("""{"version":8,"sources":{},"layers":[{"id":"local-background","type":"background","paint":{"background-color":"#f4f8f6"}}]}""")
+                else Style.Builder().fromJson("""{"version":8,"sources":{},"layers":[{"id":"local-background","type":"background","paint":{"background-color":"#F4F7F5"}}]}""")
             loaded.setStyle(builder) { style ->
                 if (mapWidget !== view) return@setStyle
-                style.addSource(GeoJsonSource("wp-real", realGeoJson))
-                style.addSource(GeoJsonSource("wp-demo", demoGeoJson))
                 style.addSource(GeoJsonSource("wp-user", userJson(userFix)))
                 style.addSource(GeoJsonSource("wp-roads", roadJson))
                 style.addSource(GeoJsonSource("wp-painted", paintedJson))
-                style.addLayer(LineLayer("wp-real-outline", "wp-real").withProperties(
-                    PropertyFactory.lineColor(android.graphics.Color.WHITE),
-                    PropertyFactory.lineWidth(2f),
-                    PropertyFactory.lineOpacity(0.25f),
-                    PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
-                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND)
-                ))
-                style.addLayer(LineLayer("wp-real-line", "wp-real").withProperties(
-                    PropertyFactory.lineColor(android.graphics.Color.GRAY),
-                    PropertyFactory.lineWidth(1.5f),
-                    PropertyFactory.lineOpacity(0.45f),
-                    PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
-                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND)
-                ))
-                style.addLayer(CircleLayer("wp-real-seeds", "wp-real").withProperties(
-                    PropertyFactory.circleColor(android.graphics.Color.GRAY),
-                    PropertyFactory.circleRadius(2f),
-                    PropertyFactory.circleOpacity(0.45f),
-                    PropertyFactory.circleStrokeColor(android.graphics.Color.WHITE),
-                    PropertyFactory.circleStrokeWidth(1.5f)
-                ))
                 style.addLayer(LineLayer("wp-road-base","wp-roads").withProperties(
-                    PropertyFactory.lineColor(android.graphics.Color.rgb(132,146,150)),
+                    PropertyFactory.lineColor(UnexploredRoadArgb),
                     PropertyFactory.lineWidth(3f),PropertyFactory.lineOpacity(0.85f)))
                 style.addLayer(LineLayer("wp-painted-outline","wp-painted").withProperties(
-                    PropertyFactory.lineColor(android.graphics.Color.WHITE),PropertyFactory.lineWidth(9f),
+                    PropertyFactory.lineColor(android.graphics.Color.WHITE),PropertyFactory.lineWidth(8f),
                     PropertyFactory.lineCap(Property.LINE_CAP_ROUND),PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)))
                 style.addLayer(LineLayer("wp-painted-line","wp-painted").withProperties(
-                    PropertyFactory.lineColor(android.graphics.Color.rgb(0,137,115)),PropertyFactory.lineWidth(6f),
+                    PropertyFactory.lineColor(ExploredRoadArgb),PropertyFactory.lineWidth(6f),
                     PropertyFactory.lineCap(Property.LINE_CAP_ROUND),PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)))
-                style.addLayer(LineLayer("wp-demo-line", "wp-demo").withProperties(
-                    PropertyFactory.lineColor(android.graphics.Color.rgb(133, 104, 197)),
-                    PropertyFactory.lineWidth(6f),
-                    PropertyFactory.lineOpacity(0.8f),
-                    PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
-                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND)
-                ))
                 style.addLayer(CircleLayer("wp-user-halo", "wp-user").withProperties(
                     PropertyFactory.circleColor(android.graphics.Color.rgb(29, 132, 211)),
                     PropertyFactory.circleRadius(16f),
@@ -797,8 +787,6 @@ class MainActivity : ComponentActivity() {
             return
         }
         val style = mapInstance?.style ?: return
-        style.getSourceAs<GeoJsonSource>("wp-real")?.setGeoJson(realGeoJson)
-        style.getSourceAs<GeoJsonSource>("wp-demo")?.setGeoJson(demoGeoJson)
         style.getSourceAs<GeoJsonSource>("wp-roads")?.setGeoJson(roadJson)
         style.getSourceAs<GeoJsonSource>("wp-painted")?.setGeoJson(paintedJson)
     }
