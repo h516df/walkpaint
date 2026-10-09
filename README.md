@@ -2,6 +2,12 @@
 
 Android 道路探索涂色应用：授权一次，日常自动记录；走过的真实道路逐渐上色。首页近全屏高德地图，柔和青绿道路、小蓝点、定位按钮和轻薄导航；成果在足迹，记录管理和诊断在我的。重复经过去重，歧义/漂移/断档保守拒绝；不显示 GPS 折线或用演示轨迹冒充涂色。
 
+## v0.11 私有测试下载（道路涂色外观）
+
+我的 → 涂色外观新增青绿、雾蓝、灰紫、石墨、赭金五种预设，支持六位颜色代码与恢复默认。旧的已确认道路立即换色，选择保存在本机；相机/跟随和灰色未走道路/蓝点保持。高德与离线实际入口、103项JVM、小屏/重开/同签名覆盖安装、重复走路去重通过。[实际截图与验收边界](docs/evidence/V011.md)。
+
+[手机 APK（约70MB）](https://github.com/h516df/walkpaint/releases/download/v0.11/WalkPaint-v0.11-arm64-debug.apk) · [私有预览发布](https://github.com/h516df/walkpaint/releases/tag/v0.11)。用户本轮明确确认后已分发，服务器大小/digest与实际下载指纹一致。手机浏览器登录有权限GitHub账号后下载、覆盖安装并打开一次，勿卸载/清库。code12/schema2/原签名；**手机是否安装尚未核实**。[草稿 PR #15](https://github.com/h516df/walkpaint/pull/15)，已推送、未合并，依赖未合并PR #13；无GitHub Actions，不称CI通过。真实vivo颜色、方向、长期后台和原GPS P0仍未验收。覆盖安装，不卸载/清库；回退需同签名code>=12/schema2修复包。
+
 ## v0.10 私有测试下载（地图跟随）
 
 [草稿 PR #13](https://github.com/h516df/walkpaint/pull/13)，不合并；本仓库未配置GitHub Actions，当前验证为本机自动测试与真实模拟器入口。

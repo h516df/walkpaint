@@ -32,7 +32,7 @@ internal fun AppShell(
     onBackgroundSettings: () -> Unit, onPowerSettings: () -> Unit, onRevoke: () -> Unit,
     onCopyDiagnostics: () -> Unit, internalBackupCount: Int, mapProviderLabel: String,
     onChooseAmap: () -> Unit, onOnlineMap: () -> Unit, roadState: RoadState,
-    onRoadPack: () -> Unit, mapContent: @Composable () -> Unit
+    onRoadPack: () -> Unit, roadColor:Int, onRoadAppearance:()->Unit, mapContent: @Composable () -> Unit
 ) {
     Scaffold(containerColor=PageBackground, bottomBar={
         Surface(color=PageBackground.copy(alpha=0.98f)) {
@@ -59,7 +59,7 @@ internal fun AppShell(
                 else -> ProfilePage(automatic,trackingStatus,recordingTitle,needsBackground,
                     onToggleTracking,onRevoke,onBackgroundSettings,onPowerSettings,onCopyDiagnostics,
                     roadState,roadAreaHint,onRoadPack,onExport,onImport,internalBackupCount,
-                    mapProviderLabel,onChooseAmap,onOnlineMap)
+                    mapProviderLabel,onChooseAmap,onOnlineMap,roadColor,onRoadAppearance)
             }
         }
     }
@@ -197,10 +197,13 @@ private val ExploredRoadColor=androidx.compose.ui.graphics.Color(ExploredRoadArg
 private fun ProfilePage(automatic:Boolean,status:String,title:String,needsBackground:Boolean,
     onToggle:(Boolean)->Unit,onRevoke:()->Unit,onPermissions:()->Unit,onPower:()->Unit,onDiagnostics:()->Unit,
     roads:RoadState,areaHint:String,onRoadPack:()->Unit,onExport:()->Unit,onImport:()->Unit,backupCount:Int,
-    provider:String,onAmap:()->Unit,onOnline:()->Unit) {
+    provider:String,onAmap:()->Unit,onOnline:()->Unit,roadColor:Int,onAppearance:()->Unit) {
     var revokeConfirm by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
         item { Heading("我的","放心探索，足迹由自己保管。") }
+        item { Section("地图外观") {
+            SettingRow("涂色外观",RoadPaintColor.name(roadColor)+" · "+RoadPaintColor.hex(roadColor),onAppearance)
+        } }
         item {
             Section("自动足迹") {
                 Row(verticalAlignment=Alignment.CenterVertically) {

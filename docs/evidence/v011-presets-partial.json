@@ -1,0 +1,37 @@
+{
+  "original_rows_retained_before_color_phase": true,
+  "original_points_before_setup": 230,
+  "color_phase_recording_paused": true,
+  "baseline_confirmed_pixels": 2198,
+  "baseline_gray_pixels": 25470,
+  "baseline_blue_pixels": 282,
+  "青绿": {
+    "color": "#579B8C",
+    "confirmed_pixels": 2198,
+    "geometry_overlap": 1.0
+  },
+  "雾蓝": {
+    "color": "#647D9E",
+    "confirmed_pixels": 2199,
+    "geometry_overlap": 1.0
+  },
+  "灰紫": {
+    "color": "#887A9D",
+    "confirmed_pixels": 2200,
+    "geometry_overlap": 0.9995450409463148
+  },
+  "石墨": {
+    "color": "#657778",
+    "confirmed_pixels": 2198,
+    "geometry_overlap": 1.0
+  },
+  "赭金": {
+    "color": "#A38556",
+    "confirmed_pixels": 2195,
+    "geometry_overlap": 0.9986351228389445
+  },
+  "invalid_input_preserves_choice_and_custom_applies": true,
+  "restart_and_same_signature_overwrite_keep_color": true,
+  "error": "ROAD_COLOR_SDK_FAIL: IllegalStateException: confirmed road SDK rendering not ready\r\n",
+  "cleanup_errors": []
+}

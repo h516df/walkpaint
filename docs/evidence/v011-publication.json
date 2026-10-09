@@ -1,0 +1,18 @@
+{
+  "tag": "v0.11",
+  "source_sha": "d8cb3ba4ca8fc401756e040c56bd039b310ae9e5",
+  "release_id": 408045573,
+  "private": true,
+  "draft": false,
+  "prerelease": true,
+  "release_url": "https://github.com/h516df/walkpaint/releases/tag/v0.11",
+  "asset_name": "WalkPaint-v0.11-arm64-debug.apk",
+  "asset_bytes": 70428652,
+  "asset_sha256": "ec5066db7c0424327597d1ca67105ced83cccaf82648e03f74492757fe0f5994",
+  "server_digest": "sha256:ec5066db7c0424327597d1ca67105ced83cccaf82648e03f74492757fe0f5994",
+  "download_url": "https://github.com/h516df/walkpaint/releases/download/v0.11/WalkPaint-v0.11-arm64-debug.apk",
+  "actual_download_hash_pass": true,
+  "phone_installed": "NOT_VERIFIED",
+  "real_vivo_visual": "NOT_TESTED",
+  "real_vivo_heading": "NOT_TESTED"
+}

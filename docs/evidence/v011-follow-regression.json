@@ -1,0 +1,49 @@
+{
+  "isolated_schema_roads_backup_android_heading_axes": true,
+  "public_anchor": {
+    "before": 230,
+    "after": 231,
+    "pass": true
+  },
+  "public_move_without_locate": {
+    "before": 231,
+    "after": 232,
+    "pass": true
+  },
+  "blue_dot_displacement_pixels": 0.0,
+  "position_follow_pass": true,
+  "while_browsing_move": {
+    "before": 232,
+    "after": 233,
+    "pass": true
+  },
+  "real_drag_pauses_following": true,
+  "existing_locate_button_restores_following": true,
+  "poor_precision_not_recorded": {
+    "before": 233,
+    "after": 233,
+    "pass": true
+  },
+  "unreliable_position_does_not_move_camera": true,
+  "history_live_move": {
+    "before": 233,
+    "after": 234,
+    "pass": true
+  },
+  "history_holds_view_then_exit_resumes": true,
+  "background_recording_unchanged": {
+    "before": 234,
+    "after": 235,
+    "pass": true
+  },
+  "foreground_resume_map": true,
+  "small_320dp_real_map": true,
+  "all_original_rows_retained": true,
+  "initial_points": 230,
+  "final_points": 235,
+  "apk_sha256": "ec5066db7c0424327597d1ca67105ced83cccaf82648e03f74492757fe0f5994",
+  "installed_exact_apk": true,
+  "real_vivo_heading": "NOT_TESTED",
+  "pass": true,
+  "cleanup_errors": []
+}

@@ -31,6 +31,9 @@ internal class AmapMapController(private val context: Context, private val onGes
     private var currentMarker: Marker? = null
     private var latestPosition: Location? = null
     private var initialFocusPending = true
+    private var exploredColor=ExploredRoadArgb
+    private val paintedLines=mutableListOf<com.amap.api.maps.model.Polyline>()
+    private var retainedCamera:com.amap.api.maps.model.CameraPosition?=null
     private val density = context.resources.displayMetrics.density
     private val blueDot by lazy {
         val bitmap = Bitmap.createBitmap((32*density).toInt(),(32*density).toInt(),Bitmap.Config.ARGB_8888)
@@ -43,7 +46,8 @@ internal class AmapMapController(private val context: Context, private val onGes
         BitmapDescriptorFactory.fromBitmap(bitmap)
     }
 
-    fun create(state: TrackState, location: Location?, roads: RoadState): MapView {
+    fun create(state: TrackState, location: Location?, roads: RoadState, color:Int=ExploredRoadArgb): MapView {
+        exploredColor=color
         check(BuildConfig.AMAP_KEY.isNotBlank()) { "高德地图 Key 尚未设置" }
         MapsInitializer.updatePrivacyShow(context.applicationContext, true, true)
         MapsInitializer.updatePrivacyAgree(context.applicationContext, true)
@@ -74,18 +78,20 @@ internal class AmapMapController(private val context: Context, private val onGes
         latestPosition = location
         initialFocusPending = true
         render(state,roads)
+        retainedCamera?.let { map?.moveCamera(CameraUpdateFactory.newCameraPosition(it));initialFocusPending=false }
         return view
     }
 
     fun render(state: TrackState, roads: RoadState) {
         val a = map ?: return
         a.clear()
+        paintedLines.clear()
         currentMarker = null
         roads.roads.forEach { road ->
             a.addPolyline(PolylineOptions().addAll(road.points.map { toAmap(it.lat,it.lon) }).width(2.5f*density).color(UnexploredRoadArgb))
             roads.coverage.highlighted(road).forEach { line ->
                 a.addPolyline(PolylineOptions().addAll(line.map { toAmap(it.lat,it.lon) }).width(7f*density).color(Color.argb(220,244,247,245)))
-                a.addPolyline(PolylineOptions().addAll(line.map { toAmap(it.lat,it.lon) }).width(5f*density).color(ExploredRoadArgb))
+                paintedLines += a.addPolyline(PolylineOptions().addAll(line.map { toAmap(it.lat,it.lon) }).width(5f*density).color(exploredColor))
             }
         }
         updateUser(latestPosition)
@@ -96,6 +102,11 @@ internal class AmapMapController(private val context: Context, private val onGes
                 initialFocusPending=false
             }
         }
+    }
+
+    fun setExploredColor(color:Int) {
+        exploredColor=color
+        paintedLines.forEach { it.color=color }
     }
 
     fun updateUser(location: Location?) {
@@ -135,6 +146,8 @@ internal class AmapMapController(private val context: Context, private val onGes
 
     fun release(view: MapView) {
         if (view !== currentView) return
+        retainedCamera=map?.cameraPosition
+        paintedLines.clear()
         currentMarker = null
         map = null
         currentView = null

@@ -59,6 +59,10 @@ import java.util.Locale
 class MainActivity : ComponentActivity() {
     private val repository by lazy { (application as WalkPaintApp).repository }
     private var currentTab by mutableIntStateOf(0)
+    private val roadAppearance by lazy { RoadAppearance(this) }
+    private var roadColor by mutableIntStateOf(ExploredRoadArgb)
+    private var showRoadAppearance by mutableStateOf(false)
+    private var retainedMapCamera:org.maplibre.android.camera.CameraPosition?=null
     private var snapshot by mutableStateOf(TrackState())
     private var userFix by mutableStateOf<Location?>(null)
     private var trackingStatus by mutableStateOf("正在检查位置状态")
@@ -220,6 +224,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        roadColor=roadAppearance.color
         pendingEnable = savedInstanceState?.getBoolean("pendingEnable") ?: false
         pendingSettingsEnable = savedInstanceState?.getBoolean("pendingSettingsEnable") ?: false
         MapLibre.getInstance(applicationContext)
@@ -302,6 +307,8 @@ class MainActivity : ComponentActivity() {
                     onCopyDiagnostics = { openRecordingDiagnostics() },
                     internalBackupCount = repository.backupFiles().size,
                     mapProviderLabel = if (amapActive) "高德地图" else if(onlineMap) "OpenFreeMap" else "本地离线道路",
+                    roadColor = roadColor,
+                    onRoadAppearance = { showRoadAppearance=true },
                     onChooseAmap = { showAmapConsent = true },
                     onOnlineMap = { showOnlineConsent = true },
                     roadState = roadState,
@@ -309,6 +316,7 @@ class MainActivity : ComponentActivity() {
                     mapContent = { if (amapActive) AmapNativeView() else NativeMapView() }
                 )
 
+                if(showRoadAppearance) RoadColorDialog(roadColor,::chooseRoadColor) { showRoadAppearance=false }
                 if(showOnlineConsent) AlertDialog(
                     onDismissRequest={ showOnlineConsent=false },
                     title={ Text("联网显示底图？") },
@@ -766,7 +774,7 @@ class MainActivity : ComponentActivity() {
                     PropertyFactory.lineColor(android.graphics.Color.WHITE),PropertyFactory.lineWidth(8f),
                     PropertyFactory.lineCap(Property.LINE_CAP_ROUND),PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)))
                 style.addLayer(LineLayer("wp-painted-line","wp-painted").withProperties(
-                    PropertyFactory.lineColor(ExploredRoadArgb),PropertyFactory.lineWidth(6f),
+                    PropertyFactory.lineColor(roadColor),PropertyFactory.lineWidth(6f),
                     PropertyFactory.lineCap(Property.LINE_CAP_ROUND),PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)))
                 style.addLayer(CircleLayer("wp-user-halo", "wp-user").withProperties(
                     PropertyFactory.circleColor(android.graphics.Color.rgb(29, 132, 211)),
@@ -786,6 +794,10 @@ class MainActivity : ComponentActivity() {
                         LatLng(selected.first, selected.second), selected.third))
                     pendingTripFocus = null
                     firstMapCenter = false
+                } else if(retainedMapCamera!=null) {
+                    loaded.moveCamera(CameraUpdateFactory.newCameraPosition(retainedMapCamera!!))
+                    if(fix!=null && follow.mode==MapFollowState.Mode.FOLLOWING) updatePosition(fix,true)
+                    else firstMapCenter=false
                 } else if (fix != null && follow.mode==MapFollowState.Mode.FOLLOWING) {
                     updatePosition(fix, true)
                 } else {
@@ -796,6 +808,14 @@ class MainActivity : ComponentActivity() {
             }
         }
         return view
+    }
+
+    private fun chooseRoadColor(color:Int) {
+        roadAppearance.save(color)
+        roadColor=color
+        amapController.setExploredColor(color)
+        mapInstance?.style?.getLayerAs<LineLayer>("wp-painted-line")
+            ?.setProperties(PropertyFactory.lineColor(color))
     }
 
     private fun updateMapLayers() {
@@ -867,7 +887,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun AmapNativeView() {
         val controller = remember { amapController }
-        val view = remember { controller.create(mapTrackState, userFix,mapRoadState) }
+        val view = remember { controller.create(mapTrackState, userFix,mapRoadState,roadColor) }
         pendingTripFocus?.let {
             controller.focus(it.first, it.second, it.third)
             pendingTripFocus = null
@@ -913,6 +933,7 @@ class MainActivity : ComponentActivity() {
             onDispose {
                 lifecycle.removeObserver(observer)
                 headingSensor.stop()
+                retainedMapCamera=mapInstance?.cameraPosition
                 runCatching { view.onPause(); view.onStop(); view.onDestroy() }
                 if (mapWidget === view) { mapWidget = null; mapInstance = null }
             }
