@@ -1,8 +1,8 @@
 # 当前交付 — WalkPaint v0.8 UI（2026-10-09）
 
-本节优先于历史交接。用户要求一个主写手连续完成地图优先的 UI，已从最新 v0.7 高德基线 bffb1d4 继续；唯一工作目录 D:\Projects\WalkPaint，分支 feat/v08-map-first，base issue-2-recording-health。main 和 PR #1/#3 未合并或修改。状态：**UI / 实际 APK / 模拟器验收 PASS；私有 GitHub 分发收尾；真实 vivo 与 Issue #2 原问题未完成。**
+本节优先于历史交接。用户要求一个主写手连续完成地图优先的 UI，已从最新 v0.7 高德基线 bffb1d4 继续；唯一工作目录 D:\Projects\WalkPaint，分支 feat/v08-map-first，base issue-2-recording-health。草稿PR：https://github.com/h516df/walkpaint/pull/5，Refs #2/#4，依赖#3/#1，不自动合并。main 和 PR #1/#3 未合并或修改。状态：**UI / 实际 APK / 模拟器验收 PASS；私有 GitHub 下载已开放；真实 vivo 与 Issue #2 原问题未完成。**
 
-- 业务源码 `f127d0a3f7bd0a5c7131655690bba7e1b57043d4`，APK versionCode9 / 0.8 / cn.walkpaint / schema2 / 原签名 / arm64。大小 70344528，SHA256 `28dc325e8005a4cab4219a91b45cf74517318be575820589eaab787ad7dcc197`，本地/模拟器安装相同。私有预览渠道 https://github.com/h516df/walkpaint/releases/tag/v0.8，资产名 WalkPaint-v0.8-arm64-debug.apk；分发前必须再核对服务器 digest 与 private=true，未核对前不说已开放。旧 v0.7 与 v0.7-amap-key-test 保留。
+- 业务源码 `f127d0a3f7bd0a5c7131655690bba7e1b57043d4`，APK versionCode9 / 0.8 / cn.walkpaint / schema2 / 原签名 / arm64。大小 70344528，SHA256 `28dc325e8005a4cab4219a91b45cf74517318be575820589eaab787ad7dcc197`，本地/模拟器安装相同。私有预览渠道 https://github.com/h516df/walkpaint/releases/tag/v0.8，资产名 WalkPaint-v0.8-arm64-debug.apk；已核对服务器 digest/大小/状态与本地安装包一致，private=true，draft=false/prerelease=true，标签固定业务提交f127d0a；publication.json保存实读。旧 v0.7 与 v0.7-amap-key-test 保留。
 - 首页地图、真实道路区间、蓝点、定位按钮、轻薄导航；常驻标题/统计/录制卡/开关/GPS 参考/演示路线全部移除。正常无状态；明确异常才有小提示到我的，首次未获得回调不误说断录。
 - 足迹展示累计/今天真实道路、下载区域内进度、每日历史；不拿 GPS 距离/网格当探索。我的管理自动记录、暂停/恢复/撤回、权限/省电、道路下载/导入、备份/恢复、诊断、地图及隐私。高德授权撤回回退合法离线。每日缓存仅刷新变化日期，道路目录变化时重建；最近31天外仍能点选查看，不删除历史。
 - 无定位或权限失效时，异步历史加载后一次聚焦已走道路；修复默认北京视角，不覆盖用户后续手动视角。原始 GPS / OSM 为 WGS84，高德仅显示边界转换一次。
