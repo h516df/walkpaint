@@ -29,7 +29,7 @@ internal class AmapMapController(private val context: Context) {
     private val accent = Color.rgb(18, 145, 134)
     private val demo = Color.rgb(133, 104, 197)
 
-    fun create(state: TrackState, location: Location?): MapView {
+    fun create(state: TrackState, location: Location?, roads: RoadState): MapView {
         check(BuildConfig.AMAP_KEY.isNotBlank()) { "高德地图 Key 尚未设置" }
         MapsInitializer.updatePrivacyShow(context.applicationContext, true, true)
         MapsInitializer.updatePrivacyAgree(context.applicationContext, true)
@@ -40,14 +40,14 @@ internal class AmapMapController(private val context: Context) {
         map = view.map
         map?.uiSettings?.isZoomControlsEnabled = false
         latestPosition = location
-        render(state)
+        render(state,roads)
         val p = location?.let { toAmap(it.latitude, it.longitude) }
             ?: state.realTracks.lastOrNull()?.points?.lastOrNull()?.let { toAmap(it.lat, it.lon) }
         if (p != null) map?.moveCamera(CameraUpdateFactory.newLatLngZoom(p, 16f))
         return view
     }
 
-    fun render(state: TrackState) {
+    fun render(state: TrackState, roads: RoadState) {
         val a = map ?: return
         a.clear()
         currentMarker = null
@@ -66,7 +66,18 @@ internal class AmapMapController(private val context: Context) {
                 }
             }
         }
-        draw(state.realTracks, accent)
+        // GPS is a thin gray reference, never the colored road coverage.
+        state.realTracks.forEach { trip -> trip.points.groupBy { it.segment }.values.forEach { points ->
+            if(points.size >= 2) a.addPolyline(PolylineOptions().addAll(points.map { toAmap(it.lat,it.lon) })
+                .width(2f).color(Color.GRAY))
+        } }
+        roads.roads.forEach { road ->
+            a.addPolyline(PolylineOptions().addAll(road.points.map { toAmap(it.lat,it.lon) }).width(4f).color(Color.GRAY))
+            roads.coverage.highlighted(road).forEach { line ->
+                a.addPolyline(PolylineOptions().addAll(line.map { toAmap(it.lat,it.lon) }).width(12f).color(Color.WHITE))
+                a.addPolyline(PolylineOptions().addAll(line.map { toAmap(it.lat,it.lon) }).width(8f).color(accent))
+            }
+        }
         draw(state.tracks.filter { it.demo }, demo)
         updateUser(latestPosition)
     }

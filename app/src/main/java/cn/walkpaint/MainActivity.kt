@@ -45,12 +45,12 @@ import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
 import org.maplibre.android.maps.MapLibreMap
 import org.maplibre.android.maps.MapView
+import org.maplibre.android.maps.Style
 import org.maplibre.android.style.layers.CircleLayer
 import org.maplibre.android.style.layers.LineLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.sources.GeoJsonSource
-import org.maplibre.android.style.sources.VectorSource
 import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -83,8 +83,14 @@ class MainActivity : ComponentActivity() {
     private var pendingSettingsEnable = false
     private val refreshExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
     private val refreshing = java.util.concurrent.atomic.AtomicBoolean(false)
-    private var roadProbeAt = 0L
-    private var roadSourceStatus = "道路源尚未加载；当前只显示 GPS 轨迹"
+    private var roadState by mutableStateOf(RoadState())
+    private var roadBusy by mutableStateOf(false)
+    private var roadMessage by mutableStateOf("")
+    private var showRoadPack by mutableStateOf(false)
+    private var onlineMap by mutableStateOf(false)
+    private var showOnlineConsent by mutableStateOf(false)
+    private var paintedJson = RoadState().geoJson(true)
+    private var roadJson = RoadState().geoJson(false)
     private var realGeoJson = geoJson(emptyList())
     private var demoGeoJson = geoJson(emptyList())
     private var pendingEnable by mutableStateOf(false)
@@ -129,6 +135,31 @@ class MainActivity : ComponentActivity() {
 
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { _ -> updateUi() }
+
+    private val roadPackLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if(uri != null) {
+            roadBusy = true; roadMessage = "正在校验道路包并匹配历史足迹…"
+            refreshExecutor.execute {
+                runCatching {
+                    val memory = ByteArrayOutputStream()
+                    contentResolver.openInputStream(uri)?.use { input ->
+                        val buffer = ByteArray(16384)
+                        while(true) {
+                            val n = input.read(buffer); if(n < 0) break
+                            require(memory.size()+n <= RoadPackCodec.MAX_BYTES) { "道路包超过8MB" }
+                            memory.write(buffer,0,n)
+                        }
+                    } ?: error("无法读取文件")
+                    repository.importRoadPack(memory.toString("UTF-8"))
+                }.onSuccess { n -> runOnUiThread {
+                    roadBusy = false; roadMessage = "已导入 $n 条真实道路，历史足迹已重新匹配"
+                    updateUi()
+                } }.onFailure { e -> runOnUiThread {
+                    roadBusy = false; roadMessage = "导入失败：" + (e.message?.take(120) ?: "文件格式无效")
+                } }
+            }
+        }
+    }
 
     private val exportLauncher =
         registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
@@ -234,9 +265,49 @@ class MainActivity : ComponentActivity() {
                     onBackgroundSettings = { openAppSettings() },
                     onCopyDiagnostics = { diagnosticText = trackingDiagnostics(); showDiagnostics = true },
                     internalBackupCount = repository.backupFiles().size,
-                    mapProviderLabel = if (amapActive) "高德地图" else "OpenFreeMap",
+                    mapProviderLabel = if (amapActive) "高德地图" else if(onlineMap) "OpenFreeMap" else "本地离线道路",
                     onChooseAmap = { showAmapConsent = true },
+                    onOnlineMap = { showOnlineConsent = true },
+                    roadState = roadState,
+                    onRoadPack = { showRoadPack = true },
                     mapContent = { if (amapActive) AmapNativeView() else NativeMapView() }
+                )
+
+                if(showOnlineConsent) AlertDialog(
+                    onDismissRequest={ showOnlineConsent=false },
+                    title={ Text("联网显示底图？") },
+                    text={ Text("OpenFreeMap 将收到当前及浏览地图区域、IP 和地图请求；区域可能反映私人位置。不会上传足迹文件，也不从瓦片采集道路。默认本地离线显示，拒绝仍可记录、匹配和涂色。") },
+                    confirmButton={ Button(onClick={
+                        onlineMap=true; showOnlineConsent=false
+                        // Recreate only the map view after explicit consent.
+                        currentTab=2
+                    }) { Text("本次同意联网") } },
+                    dismissButton={ TextButton(onClick={
+                        onlineMap=false; showOnlineConsent=false; currentTab=2
+                    }) { Text("使用离线道路") } }
+                )
+
+                if(showRoadPack) AlertDialog(
+                    onDismissRequest = { if(!roadBusy) showRoadPack = false },
+                    title = { Text("本地真实道路包") },
+                    text = { Column(Modifier.verticalScroll(rememberScrollState())) {
+                        Text(roadState.summary)
+                        Spacer(Modifier.height(12.dp))
+                        Text("选择合法来源的 OSM ODbL GeoJSON 道路包。必须含完整 WGS84 LineString、OSM way ID、版本与来源声明，最多8MB / 2000条。\n本机匹配，不上传 GPS；不会从公共地图瓦片采集道路。包外、路口歧义、差精度和断档保留为未确认。")
+                        Text("© OpenStreetMap contributors · ODbL-1.0", fontSize=12.sp)
+                        if(roadMessage.isNotBlank()) Text(roadMessage,color=Ink)
+                    } },
+                    confirmButton = { Button(enabled=!roadBusy,onClick={
+                        roadPackLauncher.launch(arrayOf("application/geo+json","application/json","text/plain","*/*"))
+                    }) { Text(if(roadBusy) "正在导入…" else "选择道路包文件") } },
+                    dismissButton = { TextButton(enabled=!roadBusy,onClick={
+                        showRoadPack=false
+                        roadState.roads.firstOrNull()?.points?.let { p ->
+                            pendingTripFocus=Triple(p[p.size/2].lat,p[p.size/2].lon,17.0)
+                            currentTab=0
+                            focusCoordinate(p[p.size/2].lat,p[p.size/2].lon,17.0)
+                        }
+                    }) { Text("查看地图") } }
                 )
 
                 if (showDiagnostics) AlertDialog(
@@ -363,7 +434,7 @@ class MainActivity : ComponentActivity() {
                 "定位时间异常，请检查手机日期、时间和自动同步设置"
             recentGps == null -> "自动监测已开启 · 请到室外等待卫星定位"
             recentGps.accuracy > 35f -> "定位误差较大，等待更精准信号"
-            savedAge != null && savedAge in 0L..30_000L -> "刚刚保存新足迹 · 继续行走会出现彩色路线"
+            savedAge != null && savedAge in 0L..30_000L -> "刚刚保存新足迹 · 仅确认匹配的道路上色"
             else -> "GPS 正常监听 · 未检测到新的可靠位移"
         }
         val gpsLabel = when {
@@ -381,18 +452,21 @@ class MainActivity : ComponentActivity() {
                     val next = repository.snapshot()
                     // Compute expensive history/geometry work away from the UI thread.
                     next.totalMeters; FootprintInsights.traveledDays(next); FootprintInsights.exploredCells(next)
+                    val road = repository.roadSnapshot()
+                    val roadBase = road.geoJson(false)
+                    val painted = road.geoJson(true)
                     val real = geoJson(next.realTracks)
                     val demo = geoJson(next.tracks.filter { it.demo })
                     runOnUiThread {
                         snapshot = next; lastRevision = revision
                         realGeoJson = real; demoGeoJson = demo
+                        roadState = road; roadJson = roadBase; paintedJson = painted
                         updateMapLayers()
                     }
                 } finally { refreshing.set(false) }
             }
         }
         updateLocationLayer()
-        probeRoadSource()
     }
 
     private fun enableFromChoice() {
@@ -514,7 +588,7 @@ class MainActivity : ComponentActivity() {
             "状态：" + trackingStatus.substringBefore("\n")
         )
         return rows.joinToString("\n") + "\n\n" + RecordingDiagnostics.summary(this) +
-            "\n\n" + roadSourceStatus + "\n道路累计未启用；不把 GPS 直线作为道路。" +
+            "\n\n道路包：${roadState.roads.size} 条；确认段 ${roadState.matched}；未确认段 ${roadState.unmapped}。本机匹配，无瓦片数据采集。" +
             "\n\n持续 GPS 已启用，不长期持有 CPU 唤醒锁；常规诊断每30秒批量保存，异常退出最多损失末尾30秒诊断（不影响 SQLite 足迹）。vivo 等厂商需允许后台运行；强制停止后须手动打开 App，不能保证永不断录。"
     }
 
@@ -543,32 +617,45 @@ class MainActivity : ComponentActivity() {
         view.getMapAsync { loaded ->
             if (mapWidget !== view) return@getMapAsync
             mapInstance = loaded
-            loaded.setStyle("https://tiles.openfreemap.org/styles/liberty") { style ->
+            val builder = if(onlineMap) Style.Builder().fromUri("https://tiles.openfreemap.org/styles/liberty")
+                else Style.Builder().fromJson("""{"version":8,"sources":{},"layers":[{"id":"local-background","type":"background","paint":{"background-color":"#f4f8f6"}}]}""")
+            loaded.setStyle(builder) { style ->
                 if (mapWidget !== view) return@setStyle
                 style.addSource(GeoJsonSource("wp-real", realGeoJson))
                 style.addSource(GeoJsonSource("wp-demo", demoGeoJson))
                 style.addSource(GeoJsonSource("wp-user", userJson(userFix)))
+                style.addSource(GeoJsonSource("wp-roads", roadJson))
+                style.addSource(GeoJsonSource("wp-painted", paintedJson))
                 style.addLayer(LineLayer("wp-real-outline", "wp-real").withProperties(
                     PropertyFactory.lineColor(android.graphics.Color.WHITE),
-                    PropertyFactory.lineWidth(7f),
-                    PropertyFactory.lineOpacity(0.9f),
+                    PropertyFactory.lineWidth(2f),
+                    PropertyFactory.lineOpacity(0.25f),
                     PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                     PropertyFactory.lineCap(Property.LINE_CAP_ROUND)
                 ))
                 style.addLayer(LineLayer("wp-real-line", "wp-real").withProperties(
-                    PropertyFactory.lineColor(android.graphics.Color.rgb(0, 153, 144)),
-                    PropertyFactory.lineWidth(4f),
-                    PropertyFactory.lineOpacity(1f),
+                    PropertyFactory.lineColor(android.graphics.Color.GRAY),
+                    PropertyFactory.lineWidth(1.5f),
+                    PropertyFactory.lineOpacity(0.45f),
                     PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
                     PropertyFactory.lineCap(Property.LINE_CAP_ROUND)
                 ))
                 style.addLayer(CircleLayer("wp-real-seeds", "wp-real").withProperties(
-                    PropertyFactory.circleColor(android.graphics.Color.rgb(0, 153, 144)),
-                    PropertyFactory.circleRadius(3f),
-                    PropertyFactory.circleOpacity(1f),
+                    PropertyFactory.circleColor(android.graphics.Color.GRAY),
+                    PropertyFactory.circleRadius(2f),
+                    PropertyFactory.circleOpacity(0.45f),
                     PropertyFactory.circleStrokeColor(android.graphics.Color.WHITE),
                     PropertyFactory.circleStrokeWidth(1.5f)
                 ))
+                style.addLayer(LineLayer("wp-road-base","wp-roads").withProperties(
+                    PropertyFactory.lineColor(android.graphics.Color.rgb(132,146,150)),
+                    PropertyFactory.lineWidth(3f),PropertyFactory.lineOpacity(0.85f)))
+                style.addLayer(LineLayer("wp-painted-outline","wp-painted").withProperties(
+                    PropertyFactory.lineColor(android.graphics.Color.WHITE),PropertyFactory.lineWidth(9f),
+                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND),PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)))
+                style.addLayer(LineLayer("wp-painted-line","wp-painted").withProperties(
+                    PropertyFactory.lineColor(android.graphics.Color.rgb(0,137,115)),PropertyFactory.lineWidth(6f),
+                    PropertyFactory.lineCap(Property.LINE_CAP_ROUND),PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)))
                 style.addLayer(LineLayer("wp-demo-line", "wp-demo").withProperties(
                     PropertyFactory.lineColor(android.graphics.Color.rgb(133, 104, 197)),
                     PropertyFactory.lineWidth(6f),
@@ -606,35 +693,16 @@ class MainActivity : ComponentActivity() {
         return view
     }
 
-    private fun probeRoadSource() {
-        val now = android.os.SystemClock.elapsedRealtime()
-        if (now - roadProbeAt < 10_000 || amapActive) return
-        val style = mapInstance?.style ?: return
-        roadProbeAt = now
-        try {
-            val roads = style.sources.filterIsInstance<VectorSource>().flatMap {
-                it.querySourceFeatures(arrayOf("transportation"), null)
-            }.filter {
-                it.geometry()?.type() in listOf("LineString", "MultiLineString") &&
-                    it.hasProperty("class") && it.getStringProperty("class") in
-                    listOf("motorway", "trunk", "primary", "secondary", "tertiary", "minor", "service", "path", "track")
-            }
-            val withId = roads.count { !it.id().isNullOrBlank() }
-            roadSourceStatus = "开放道路几何：${roads.size} 个瓦片要素 · 自带 ID：$withId" +
-                "\n瓦片 ID 的跨缩放/裁剪稳定性未验收；本版未接入真实道路涂色。"
-        } catch (e: Exception) {
-            roadSourceStatus = "道路源查询失败：" + e.javaClass.simpleName + "；仍显示 GPS 轨迹。"
-        }
-    }
-
     private fun updateMapLayers() {
         if (amapActive) {
-            amapController.render(snapshot)
+            amapController.render(snapshot,roadState)
             return
         }
         val style = mapInstance?.style ?: return
         style.getSourceAs<GeoJsonSource>("wp-real")?.setGeoJson(realGeoJson)
         style.getSourceAs<GeoJsonSource>("wp-demo")?.setGeoJson(demoGeoJson)
+        style.getSourceAs<GeoJsonSource>("wp-roads")?.setGeoJson(roadJson)
+        style.getSourceAs<GeoJsonSource>("wp-painted")?.setGeoJson(paintedJson)
     }
 
     private fun updateLocationLayer() {
@@ -658,7 +726,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun AmapNativeView() {
         val controller = remember { amapController }
-        val view = remember { controller.create(snapshot, userFix) }
+        val view = remember { controller.create(snapshot, userFix,roadState) }
         pendingTripFocus?.let {
             controller.focus(it.first, it.second, it.third)
             pendingTripFocus = null

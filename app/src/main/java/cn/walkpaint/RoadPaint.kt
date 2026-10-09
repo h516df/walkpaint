@@ -5,7 +5,8 @@ import kotlin.math.*
 /** Caller must supply a stable, dataset-version-qualified segment ID and WGS84 geometry.
  * Tile clipping/zoom geometry hashes are deliberately NOT persistent road identities.
  */
-internal data class RoadSegment(val stableId: String, val geometry: List<TrackPoint>) {
+internal data class RoadSegment(val stableId: String, val geometry: List<TrackPoint>, val osmVersion: Int = 1,
+    val highway: String = "road") {
     // A road traversed backwards still uses the same increasing distance axis.
     val points: List<TrackPoint> = if (geometry.size > 1 &&
         compareValuesBy(geometry.first(), geometry.last(), { it.lat }, { it.lon }) > 0)
@@ -25,9 +26,9 @@ internal object RoadMatcher {
         if (!valid(fix) || !fix.accuracy.isFinite() || fix.accuracy !in 1f..20f) return null
         val radius = max(8.0, fix.accuracy.toDouble()).coerceAtMost(20.0)
         val candidates = roads.filter { it.stableId.isNotBlank() && it.points.size >= 2 &&
-            it.points.all(::valid) }.distinctBy { it.stableId }.mapNotNull { road ->
+            it.points.all(::valid) }.distinctBy { it.stableId }.flatMap { road ->
             var offset = 0.0
-            var best: RoadMatch? = null
+            val matches = mutableListOf<RoadMatch>()
             road.points.zipWithNext().forEach { (a, b) ->
                 // Local equirectangular projection; bounded to nearby road edges.
                 val scale = 111_195.0
@@ -41,16 +42,16 @@ internal object RoadMatcher {
                 if (denominator > 0) {
                     val t = (-(ax * dx + ay * dy) / denominator).coerceIn(0.0, 1.0)
                     val error = hypot(ax + t * dx, ay + t * dy)
-                    if (error <= radius && (best == null || error < best!!.error))
-                        best = RoadMatch(road, offset + t * length, error)
+                    if (error <= radius) matches += RoadMatch(road, offset + t * length, error)
                 }
                 offset += length
             }
-            best
+            matches
         }.sortedBy { it.error }
         val first = candidates.firstOrNull() ?: return null
         // Parallel roads / intersections cannot be resolved from a GPS dot alone.
-        if (candidates.size > 1 && candidates[1].error - first.error < 4.0) return null
+        if (candidates.drop(1).any { it.error - first.error < 4.0 &&
+            (it.road.stableId != first.road.stableId || abs(it.along-first.along) > 10.0) }) return null
         return first
     }
 
@@ -62,9 +63,21 @@ internal object RoadMatcher {
         if (start.road.stableId != end.road.stableId) return null
         val distance = abs(end.along - start.along)
         val observed = Geo.meters(a, b)
-        if (distance < 3.0 || observed < 3.0 || distance > delta / 1000.0 * 8.0 ||
+        if (distance < 3.0 || distance > 120.0 || observed < 3.0 || distance > delta / 1000.0 * 8.0 ||
             distance > observed * 1.8 + 10.0) return null
-        return PaintedInterval(start.road.stableId, min(start.along, end.along), max(start.along, end.along))
+        val interval = PaintedInterval(start.road.stableId, min(start.along, end.along), max(start.along, end.along))
+        // Even same-way endpoints must not bridge an ambiguous junction/self-crossing.
+        val line = RoadCoverage(listOf(interval)).highlighted(start.road).single()
+        for ((p,q) in line.zipWithNext()) {
+            val steps = ceil(Geo.meters(p,q)/5.0).toInt().coerceAtLeast(1)
+            for(i in 0..steps) {
+                val t = i.toDouble()/steps
+                val sample = p.copy(lat=p.lat+(q.lat-p.lat)*t,lon=p.lon+(q.lon-p.lon)*t,
+                    accuracy=max(a.accuracy,b.accuracy))
+                if(match(sample,roads)?.road?.stableId != start.road.stableId) return null
+            }
+        }
+        return interval
     }
 }
 

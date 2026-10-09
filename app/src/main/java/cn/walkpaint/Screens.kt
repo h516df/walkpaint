@@ -82,6 +82,9 @@ internal fun AppShell(
     internalBackupCount: Int,
     mapProviderLabel: String,
     onChooseAmap: () -> Unit,
+    onOnlineMap: () -> Unit,
+    roadState: RoadState,
+    onRoadPack: () -> Unit,
     mapContent: @Composable () -> Unit
 ) {
     Scaffold(
@@ -106,13 +109,13 @@ internal fun AppShell(
             when (selectedTab) {
                 0 -> MapPage(
                     state, fix, automatic, running, trackingStatus,
-                    onLocate, onToggleTracking, onDemo, mapProviderLabel, mapContent
+                    onLocate, onToggleTracking, onDemo, mapProviderLabel, roadState, onRoadPack, mapContent
                 )
                 1 -> TripsPage(state, onTrip)
                 else -> ProfilePage(
                     state, automatic, running, trackingStatus, needsBackground,
                     internalBackupCount, onToggleTracking, onExport, onImport, onBackgroundSettings,
-                    onCopyDiagnostics, mapProviderLabel, onChooseAmap
+                    onCopyDiagnostics, mapProviderLabel, onChooseAmap, roadState, onRoadPack, onOnlineMap
                 )
             }
         }
@@ -130,6 +133,8 @@ private fun MapPage(
     onToggle: (Boolean) -> Unit,
     onDemo: () -> Unit,
     mapProviderLabel: String,
+    roadState: RoadState,
+    onRoadPack: () -> Unit,
     mapContent: @Composable () -> Unit
 ) {
     var detailsExpanded by remember { mutableStateOf(false) }
@@ -156,22 +161,25 @@ private fun MapPage(
                     Column(Modifier.weight(1f)) {
                         Text("足迹涂色", color = Ink, fontSize = 19.sp, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(3.dp))
-                        Text("GPS 足迹预览 · 道路涂色尚未接通", color = Muted, fontSize = 11.sp)
+                        Text("真实道路累计 · 本机匹配", color = Muted, fontSize = 12.sp)
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        val distanceLabel = when {
-                            state.totalMeters < 1.0 && state.realPointCount > 0 -> "已记录起点"
-                            state.totalMeters < 1000 -> "%.0f 米".format(Locale.CHINA, state.totalMeters)
-                            else -> "%.2f km".format(Locale.CHINA, state.totalMeters / 1000)
-                        }
+                        val distanceLabel = "%.0f 米已涂色".format(Locale.CHINA, roadState.meters)
                         Text(distanceLabel, color = Accent, fontWeight = FontWeight.Bold, fontSize = 19.sp)
                         Spacer(Modifier.height(2.dp))
                         Text(
-                            FootprintInsights.traveledDays(state).toString() + " 天 · " +
-                                FootprintInsights.exploredCells(state).toString() + " 格",
+                            "${roadState.roads.size} 条导入道路",
                             color = Muted, fontSize = 11.sp
                         )
                     }
+                }
+            }
+            Surface(onClick=onRoadPack, color=Color.White.copy(alpha=0.96f),shape=RoundedCornerShape(13.dp)) {
+                Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                    Text(if(roadState.roads.isEmpty()) "导入真实道路包 ›" else "青绿：已涂道路 · 灰：未涂 / GPS参考 ›",
+                        color=Accent,fontWeight=FontWeight.SemiBold,fontSize=13.sp)
+                    Text(roadState.summary,color=Ink,fontSize=12.sp)
+                    Text("道路 © OpenStreetMap contributors · ODbL-1.0",color=Muted,fontSize=11.sp)
                 }
             }
             if (fix == null) {
@@ -251,7 +259,7 @@ private fun MapPage(
                             Surface(onClick = onDemo, color = Color(0xFFF1EFFF),
                                 shape = RoundedCornerShape(12.dp)) {
                                 Text(
-                                    if (state.tracks.any { it.demo }) "清除演示路线" else "试看涂色效果",
+                                    if (state.tracks.any { it.demo }) "清除 GPS 演示" else "查看 GPS 演示",
                                     color = Lilac, fontSize = 12.sp,
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp)
                                 )
@@ -262,7 +270,7 @@ private fun MapPage(
                         Spacer(Modifier.height(7.dp))
                         Text(
                             if (mapProviderLabel == "高德地图") "© 高德"
-                            else "OpenFreeMap · © OpenStreetMap contributors",
+                            else "$mapProviderLabel · © OpenStreetMap contributors · ODbL",
                             color = Muted, fontSize = 10.sp
                         )
                     }
@@ -335,7 +343,7 @@ private fun TripsPage(state: TrackState, onTrip: (Track) -> Unit) {
                 WhiteCard {
                     Text("还没有真实足迹", fontSize = 17.sp, color = Ink, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(8.dp))
-                    Text("打开地图，首次授权自动记录后，日常走路会在这里留下彩色记录。", color = Muted, fontSize = 13.sp)
+                    Text("首次授权后自动记录足迹；道路上色需导入本地道路包并确认匹配。", color = Muted, fontSize = 13.sp)
                 }
             }
         } else {
@@ -381,7 +389,10 @@ private fun ProfilePage(
     onBackgroundSettings: () -> Unit,
     onCopyDiagnostics: () -> Unit,
     mapProviderLabel: String,
-    onChooseAmap: () -> Unit
+    onChooseAmap: () -> Unit,
+    roadState: RoadState,
+    onRoadPack: () -> Unit,
+    onOnlineMap: () -> Unit
 ) {
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -448,9 +459,18 @@ private fun ProfilePage(
         }
         item {
             WhiteCard {
+                Text("真实道路涂色",color=Ink,fontWeight=FontWeight.Bold,fontSize=17.sp)
+                Text(roadState.summary,color=Ink,fontSize=13.sp)
+                Spacer(Modifier.height(8.dp))
+                Text("本地导入合法 OSM 道路包；累计去重，不上传 GPS。路口、断档、包外保留未确认。",color=Muted,fontSize=12.sp)
+                OutlinedButton(onClick=onRoadPack) { Text("导入 / 查看道路包") }
+            }
+        }
+        item {
+            WhiteCard {
                 Text("备份与恢复", color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                 Spacer(Modifier.height(6.dp))
-                Text("备份文件可保存到手机或云盘。恢复采用合并方式，不清空现有足迹。",
+                Text("备份含足迹和道路包；恢复合并并重算涂色，不清空现有足迹。",
                     color = Muted, fontSize = 12.sp)
                 Spacer(Modifier.height(15.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -470,7 +490,8 @@ private fun ProfilePage(
                 Spacer(Modifier.height(8.dp))
                 Text("当前底图：$mapProviderLabel", color = Accent, fontWeight = FontWeight.Medium, fontSize = 13.sp)
                 Spacer(Modifier.height(5.dp))
-                Text("高德需配置专属开发者 Key 并同意隐私政策。目前使用开放地图，历史轨迹仍保存在本机。", color = Muted, fontSize = 12.sp)
+                Text("默认离线显示道路包。联网底图会发送浏览区域，须单独同意；高德还需专属 Key 与 SDK 隐私同意。", color = Muted, fontSize = 12.sp)
+                OutlinedButton(onClick=onOnlineMap) { Text("联网底图 / 离线道路") }
                 if (BuildConfig.AMAP_KEY.isNotBlank() && mapProviderLabel != "高德地图") {
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(onClick = onChooseAmap) { Text("切换到高德地图") }
@@ -478,11 +499,11 @@ private fun ProfilePage(
                 Spacer(Modifier.height(11.dp))
                 HorizontalDivider(color = PageBackground)
                 Spacer(Modifier.height(9.dp))
-                Text("当前显示 GPS 轨迹；道路匹配与累计核心已测试，但尚未接通真实道路涂色。", color = Muted, fontSize = 12.sp)
+                Text("道路来自自己导入的完整 OSM 包，和在线底图独立；包外区域不会假装已涂色。", color = Muted, fontSize = 12.sp)
             }
         }
         item {
-            Text("V0.4 预览版 · 精度受 GPS 和电池策略影响 · 定位点只存本机，地图瓦片在线请求第三方服务。",
+            Text("V0.5 本地测试版 · 定位和匹配只存本机；联网底图需单独同意。",
                 color = Muted, fontSize = 11.sp, modifier = Modifier.padding(6.dp))
         }
     }

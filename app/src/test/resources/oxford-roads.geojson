@@ -1,0 +1,218 @@
+{
+  "type": "FeatureCollection",
+  "walkpaint": {
+    "version": 1,
+    "coordinates": "WGS84",
+    "license": "ODbL-1.0",
+    "attribution": "© OpenStreetMap contributors",
+    "name": "Oxford public OSM roads - acceptance fixture",
+    "source": "https://api.openstreetmap.org/api/0.6/map.json?bbox=-1.256,51.753,-1.254,51.755",
+    "retrieved": "2026-10-09"
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "osm_way_id": 1675518,
+        "osm_version": 17,
+        "highway": "service",
+        "name": "Brasenose Lane"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -1.2559086,
+            51.7534174
+          ],
+          [
+            -1.2554942,
+            51.7534867
+          ],
+          [
+            -1.2550655,
+            51.753529
+          ],
+          [
+            -1.2544626,
+            51.7535898
+          ],
+          [
+            -1.2544115,
+            51.7536012
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "osm_way_id": 1675892,
+        "osm_version": 23,
+        "highway": "residential",
+        "name": "Catte Street"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -1.254456,
+            51.7549464
+          ],
+          [
+            -1.2543597,
+            51.7548541
+          ],
+          [
+            -1.2542469,
+            51.7547276
+          ],
+          [
+            -1.2541467,
+            51.7545954
+          ],
+          [
+            -1.2540537,
+            51.7544695
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "osm_way_id": 1675893,
+        "osm_version": 20,
+        "highway": "pedestrian",
+        "name": "Radcliffe Square"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -1.2535192,
+            51.7531032
+          ],
+          [
+            -1.2538307,
+            51.7530597
+          ],
+          [
+            -1.2541881,
+            51.7530139
+          ],
+          [
+            -1.2544115,
+            51.7536012
+          ],
+          [
+            -1.2544682,
+            51.7537593
+          ],
+          [
+            -1.2542616,
+            51.7537903
+          ],
+          [
+            -1.2541652,
+            51.7538053
+          ],
+          [
+            -1.2538494,
+            51.7538545
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "osm_way_id": 1675894,
+        "osm_version": 18,
+        "highway": "cycleway",
+        "name": "St Mary's Passage"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -1.2541881,
+            51.7530139
+          ],
+          [
+            -1.2542261,
+            51.7529737
+          ],
+          [
+            -1.2541176,
+            51.7525502
+          ],
+          [
+            -1.254093,
+            51.7524947
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "osm_way_id": 4884545,
+        "osm_version": 8,
+        "highway": "cycleway",
+        "name": "Brasenose Lane"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -1.2562259,
+            51.7533631
+          ],
+          [
+            -1.2561594,
+            51.7533744
+          ],
+          [
+            -1.2561465,
+            51.7533766
+          ],
+          [
+            -1.2559086,
+            51.7534174
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "osm_way_id": 895264517,
+        "osm_version": 4,
+        "highway": "residential",
+        "name": "Catte Street"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            -1.2540537,
+            51.7544695
+          ],
+          [
+            -1.2539807,
+            51.7543516
+          ],
+          [
+            -1.2539093,
+            51.7541273
+          ],
+          [
+            -1.2538429,
+            51.7539187
+          ]
+        ]
+      }
+    }
+  ]
+}

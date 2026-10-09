@@ -17,7 +17,7 @@ import java.util.UUID
  * Future schema upgrades belong in onUpgrade; old v0.1 tracks.json is migrated once.
  */
 class FootprintDatabase(private val context: Context) :
-    SQLiteOpenHelper(context, "footprints.db", null, 1) {
+    SQLiteOpenHelper(context, "footprints.db", null, 2) {
 
     @Volatile var lastError: String? = null
         private set
@@ -26,6 +26,7 @@ class FootprintDatabase(private val context: Context) :
     @Volatile var revision: Long = 0
         private set
     private var cached: TrackState? = null
+    private var roadCatalog: RoadCatalog? = null
     private val preferences = context.getSharedPreferences("footprint_settings", Context.MODE_PRIVATE)
 
     override fun onConfigure(db: SQLiteDatabase) {
@@ -38,11 +39,97 @@ class FootprintDatabase(private val context: Context) :
         db.execSQL("CREATE TABLE IF NOT EXISTS points (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE, lat REAL NOT NULL, lon REAL NOT NULL, time INTEGER NOT NULL, accuracy REAL NOT NULL, segment INTEGER NOT NULL DEFAULT 0)")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_trip_time ON points(trip_id,time,id)")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_points_time ON points(time)")
+        createRoadTables(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         // Explicit migrations here; never drop user track tables.
-        if (oldVersion != newVersion) throw IllegalStateException("需要显式数据库迁移：$oldVersion → $newVersion")
+        if (oldVersion == 1 && newVersion == 2) createRoadTables(db)
+        else throw IllegalStateException("需要显式数据库迁移：$oldVersion → $newVersion")
+    }
+
+    private fun createRoadTables(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS roads (id TEXT PRIMARY KEY, osm_id INTEGER UNIQUE NOT NULL, geometry TEXT NOT NULL, source TEXT NOT NULL, name TEXT NOT NULL, osm_version INTEGER NOT NULL, highway TEXT NOT NULL)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS coverage (road_id TEXT NOT NULL REFERENCES roads(id) ON DELETE CASCADE, start REAL NOT NULL, end REAL NOT NULL, PRIMARY KEY(road_id,start), CHECK(start>=0 AND end>start))")
+        db.execSQL("CREATE TABLE IF NOT EXISTS road_matches (point_id INTEGER PRIMARY KEY REFERENCES points(id) ON DELETE CASCADE, matched INTEGER NOT NULL)")
+    }
+
+    private fun catalog(): RoadCatalog = roadCatalog ?: RoadCatalog(readRoads()).also { roadCatalog = it }
+    private fun readRoads(): List<RoadSegment> = readableDatabase.rawQuery("SELECT id,geometry,osm_version,highway FROM roads ORDER BY id",null).use { c ->
+        buildList { while(c.moveToNext()) {
+            val coordinates = org.json.JSONArray(c.getString(1))
+            add(RoadSegment(c.getString(0),(0 until coordinates.length()).map { i ->
+                val p = coordinates.getJSONArray(i); TrackPoint(p.getDouble(1),p.getDouble(0),0,5f)
+            },c.getInt(2),c.getString(3)))
+        } }
+    }
+    private fun intervals(db: SQLiteDatabase, roadId: String? = null): List<PaintedInterval> =
+        db.rawQuery("SELECT road_id,start,end FROM coverage" + if(roadId == null) " ORDER BY road_id,start" else " WHERE road_id=? ORDER BY start",
+            roadId?.let { arrayOf(it) }).use { c -> buildList {
+            while(c.moveToNext()) add(PaintedInterval(c.getString(0),c.getDouble(1),c.getDouble(2)))
+        } }
+    private fun saveInterval(db: SQLiteDatabase, interval: PaintedInterval) {
+        val merged = RoadCoverage(intervals(db,interval.roadId) + interval).snapshot()
+        db.delete("coverage","road_id=?",arrayOf(interval.roadId))
+        merged.forEach { v -> db.insertOrThrow("coverage",null,ContentValues().apply {
+            put("road_id",v.roadId); put("start",v.from); put("end",v.to)
+        }) }
+    }
+    private fun paintPair(db: SQLiteDatabase, pointId: Long, a: TrackPoint, b: TrackPoint) {
+        val interval = catalog().traversed(a,b)
+        db.insertWithOnConflict("road_matches",null,ContentValues().apply {
+            put("point_id",pointId); put("matched",if(interval == null) 0 else 1)
+        },SQLiteDatabase.CONFLICT_REPLACE)
+        if(interval != null) saveInterval(db,interval)
+    }
+    private fun rebuildCoverage(db: SQLiteDatabase) {
+        db.delete("road_matches",null,null)
+        db.delete("coverage",null,null)
+        var previous: TrackPoint? = null
+        var previousTrip: String? = null
+        db.rawQuery("SELECT p.id,p.trip_id,p.lat,p.lon,p.time,p.accuracy,p.segment FROM points p JOIN trips t ON t.id=p.trip_id WHERE t.demo=0 ORDER BY p.trip_id,p.time,p.id",null).use { c ->
+            while(c.moveToNext()) {
+                val trip = c.getString(1)
+                val point = TrackPoint(c.getDouble(2),c.getDouble(3),c.getLong(4),c.getFloat(5),c.getInt(6))
+                if(previousTrip == trip && previous != null) paintPair(db,c.getLong(0),previous!!,point)
+                previous = point; previousTrip = trip
+            }
+        }
+    }
+    @Synchronized internal fun roadSnapshot(): RoadState {
+        val counts = readableDatabase.rawQuery("SELECT COUNT(*),COALESCE(SUM(matched),0) FROM road_matches",null).use {
+            it.moveToFirst(); it.getInt(0) to it.getInt(1)
+        }
+        return RoadState(catalog().roads,intervals(readableDatabase),counts.first,counts.first-counts.second,counts.second)
+    }
+    private fun putPack(db: SQLiteDatabase, pack: RoadPack) {
+        pack.roads.forEach { r ->
+            val osmId = r.stableId.split(":")[2].toLong()
+            val old = db.rawQuery("SELECT id FROM roads WHERE osm_id=?",arrayOf(osmId.toString())).use {
+                if(it.moveToFirst()) it.getString(0) else null
+            }
+            if(old != null && old != r.stableId) db.delete("roads","id=?",arrayOf(old))
+            db.insertWithOnConflict("roads",null,ContentValues().apply {
+                put("id",r.stableId); put("osm_id",osmId); put("geometry",RoadPackCodec.coordinates(r.points).toString())
+                put("source",pack.source); put("name",pack.name)
+                put("osm_version",r.osmVersion); put("highway",r.highway)
+            },SQLiteDatabase.CONFLICT_IGNORE)
+        }
+    }
+    @Synchronized internal fun importRoadPack(text: String): Int {
+        ensureWritable()
+        val pack = RoadPackCodec.decode(text) // Validate the ENTIRE file before changing anything.
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            putPack(db,pack)
+            roadCatalog = null
+            require(catalog().roads.size <= 5000) { "累计道路超过5000条，请使用较小区域包" }
+            rebuildCoverage(db)
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction(); roadCatalog = null }
+        revision++
+        return pack.roads.size
     }
 
     init {
@@ -154,12 +241,13 @@ class FootprintDatabase(private val context: Context) :
                     put("id", id); put("started", now.time); put("demo", 0)
                 })
             }
-            db.insertOrThrow("points", null, ContentValues().apply {
+            val pointId = db.insertOrThrow("points", null, ContentValues().apply {
                 put("trip_id", id)
                 put("lat", now.lat); put("lon", now.lon)
                 put("time", now.time); put("accuracy", now.accuracy)
                 put("segment", stored.segment)
             })
+            if (!newTrip && previous != null) paintPair(db,pointId,previous,stored)
             db.setTransactionSuccessful()
         } catch (e: Exception) {
             lastError = "足迹写入失败。请检查存储空间并尽快备份"
@@ -197,13 +285,34 @@ class FootprintDatabase(private val context: Context) :
         revision++
     }
 
-    @Synchronized fun exportBackup(): String = TrackCodec.encode(snapshot())
+    @Synchronized fun exportBackup(): String = org.json.JSONObject(TrackCodec.encode(snapshot())).apply {
+        put("roadBackupVersion",1)
+        val packs = org.json.JSONArray()
+        readableDatabase.rawQuery("SELECT DISTINCT name,source FROM roads",null).use { c ->
+            while(c.moveToNext()) {
+                val name = c.getString(0); val source = c.getString(1)
+                val ids = readableDatabase.rawQuery("SELECT id FROM roads WHERE name=? AND source=?",arrayOf(name,source)).use { q ->
+                    buildSet { while(q.moveToNext()) add(q.getString(0)) }
+                }
+                catalog().roads.filter { it.stableId in ids }.chunked(2000).forEach { chunk ->
+                    packs.put(org.json.JSONObject(RoadPackCodec.encode(RoadPack(name,source,chunk))))
+                }
+            }
+        }
+        put("roadPacks",packs)
+        // Coverage is reproducibly derived from the preserved tracks and full geometries.
+    }.toString()
 
     /** Merge, never overwrite existing trips or a running auto-tracking session. */
     @Synchronized fun importBackup(text: String): Int {
         ensureWritable()
         require(text.length <= 80 * 1024 * 1024) { "备份文件过大" }
         val imported = TrackCodec.decode(text)
+        val root = org.json.JSONObject(text)
+        val packs = root.optJSONArray("roadPacks")?.let { a ->
+            require(root.getInt("roadBackupVersion") == 1 && a.length() <= 5000)
+            (0 until a.length()).map { RoadPackCodec.decode(a.getJSONObject(it).toString()) }
+        }.orEmpty()
         require(imported.tracks.size <= 50000) { "足迹数量异常" }
         require(imported.tracks.sumOf { it.points.size.toLong() } <= 3_000_000) { "定位点数量过大" }
         val originalIds = snapshot().tracks.map { it.id }.toHashSet()
@@ -212,7 +321,7 @@ class FootprintDatabase(private val context: Context) :
         db.beginTransaction()
         try {
             for (t in imported.tracks) {
-                if (t.id in originalIds || t.demo) continue
+                if (t.demo || !originalIds.add(t.id)) continue
                 require(t.points.all { p ->
                     p.lat in -90.0..90.0 && p.lon in -180.0..180.0 &&
                         p.lat.isFinite() && p.lon.isFinite() && p.accuracy.isFinite()
@@ -220,8 +329,12 @@ class FootprintDatabase(private val context: Context) :
                 insertTrip(db, t)
                 added++
             }
+            packs.forEach { putPack(db,it) }
+            roadCatalog = null
+            require(catalog().roads.size <= 5000) { "累计道路超过5000条" }
+            rebuildCoverage(db)
             db.setTransactionSuccessful()
-        } finally { db.endTransaction() }
+        } finally { db.endTransaction(); roadCatalog = null }
         cached = null
         revision++
         return added

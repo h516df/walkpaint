@@ -1,3 +1,50 @@
+# HANDOFF — v0.5 真实道路涂色本地交付（2026-10-09）
+
+> 当前授权是继续开发并本地交付；本节优先于下方历史暂停及 v0.4 记录。唯一写手，工作目录 D:\Projects\WalkPaint，分支 feat/v05-real-road-coverage，起点 5446e20c2efbde480498159e7f21cb739879b874（v0.4）。本地可运行道路切片已验证；没有 push、release、付费服务、第三方足迹上传或用户手机操作。最终本地提交 SHA 请以该分支 git log -1 为准。
+
+## 已实现
+
+- Android 系统 OpenDocument 选择本地 OSM ODbL GeoJSON，先校验整包再事务导入。校验 WGS84、完整 LineString、正整数 OSM way ID / version、highway、来源及许可声明，拒绝公共瓦片源与异常尺寸。导入器不能离线证明提供者的来源声明真实；格式、使用权和真实 fixture 来源见 [ROAD_PACK.md](docs/ROAD_PACK.md)。
+- 持久身份是 OSM way ID + 规范方向完整几何 SHA256；保存实际 OSM 版本。反向/重复导入身份一致，同 way 几何改变则更新道路、从原轨迹重新匹配，不复用旧距离轴。删除了公开瓦片道路探测，不 querySourceFeatures、不采集/保存 OpenFreeMap 要素或瓦片 ID。
+- RoadPaint.kt 接到实际定位入库路径；RoadCatalog 是有容量上限的本地网格索引，沿候选真实曲线收集全部附近道路并每≤5米检查内部交叉/自交歧义。精度1–20米、同 trip/segment、点间隔≤45秒、每对3–120米、≤8米/秒、路程/直线比约束；不猜跨路口路由。严格约束可能少涂，户外误匹配仍需真机实走评估。
+- schema1→2 仅增加 roads、coverage、road_matches，原 trips/points 及 row IDs 不动。定位点、匹配状态、覆盖区间同一事务提交；累计区间取并集，重复/反向/跨天不重复算长度，未走区间留白，演示 trip 不参与道路覆盖。
+- MapLibre 实际显示灰色完整道路与青绿色覆盖区间；GPS 是灰色细参考，位置蓝点单独显示。展示累计涂色米数 / 已导入道路长度、way 数与未确认定位段，不把包外区域当完成。高德显示层也接到道路几何，但无 Key，未验收。
+- 默认真正离线道路样式，无在线瓦片/字体源。联网底图须本次单独同意发送视口区域/IP；本轮验收全用离线地图，没有上传私人 GPS 或下载私人区域。高德保留原独立隐私同意。
+- 本机自动快照及手动 JSON 备份包含轨迹、道路包；恢复兼容旧轨迹 JSON，合并后重新计算覆盖。修复同一导入文件内重复 trip ID 可导致重复 points 的问题。没有实际导出任何用户数据库/轨迹到设备外；备份往返测试用独立 UUID cache 数据库。
+
+## APK、签名与构建
+
+- 最终 APK：[app-debug.apk](app/build/outputs/apk/debug/app-debug.apk)，cn.walkpaint，versionCode6，versionName0.5，schema2。
+- SHA256：8c75e08553ed41ad8e55719c470306581cf74f9da2bce5eb4776d2da59f4ef6d。
+- apksigner verify --print-certs 成功；证书 SHA256：21b74e3e2a10e12da8284d4e6bd7d99e55b00a385215902e94d7896f7a46c967，与 v0.4 一致。保留的旧 APK：verification/v05/v04-before.apk，旧 APK SHA256 468a7e3b17011dca9aac603bf4d8438efa92cd0ae1b33fae4ef81e6260ee4eed。
+- JDK21 / SDK36 / AGP9.0.1 / Gradle9.1.0；testDebugUnitTest、assembleDebug、assembleDebugAndroidTest 均通过。最终构建日志 verification/v05-final/final-gradle.log；**41 项 JVM 单测，失败0、错误0**。包含真实 OSM fixture、4米 GPS 偏移投影、反向重复、交叉口内部桥接拒绝、极高纬索引跨格交叉、精度/断档/速度等。
+
+## 真实入口验证与证据边界
+
+- 仅 MuMu 127.0.0.1:16384，Android15/API35；它是模拟器，**不是 vivo 真机**。脚本固定拒绝其他手机串号，不卸载、不清数据、不重建已有数据库。SQLite 快照只在内存比较，未输出原始私人坐标；verification、APK、缓存忽略 Git。
+- 原 v0.4 已安装 schema1、48点；首次真实升级运行 schema2 后所有原 trips/points 全行保留，记录 verification/v05/v1-upgrade-evidence.json。该次后续差精度测试数据设置失败，不能把该次当完整链路通过。最终 APK 的 v1→v2 迁移又在独立 Android 测试库验证，保留测试 trip、两点及 IDs17/18；没有对真实库降级或伪造旧行。
+- 完整道路链路：python scripts/android_v05_acceptance.py --output verification/v05-final。**V05_REAL_ROAD_EMULATOR_PASS**；真实系统文件选择器导入6条 OSM 官方来源道路（总长约486米），注入偏离道路4米的公开测试 GPS，累计42.643米、反向/重复不增加覆盖；25米精度被录制器接受而道路匹配拒绝；>45秒断档不桥接；强停手动重开和重复导入保持累计；原70点全保留，新增12点到82。真实地图表面3441个道路色像素，并人工查看 [最终道路截图](verification/v05-final/final-road-map.png)，灰色 GPS 与青绿道路实际分开。结果 verification/v05-final/acceptance.json，cleanup_errors=[]。
+- 完整链路对应 APK SHA256 **b2d4ea17fd10c8dd1cf2481154a40d7206a08c1349a33d0ab8803f90b6f6a0fc**。之后仅修正3处 UI 文案：不承诺任何保存点都会涂色、空列表说明道路包前提、演示明确为 GPS。道路/数据库/定位算法未再改变。
+- **最终 APK 复验通过**：python scripts/android_v05_acceptance.py --quick --output verification/v05-delivery，V05_FINAL_APK_SMOKE_PASS。覆盖安装最终指纹 APK，真实文件选择器再次导入；最终 APK 的隔离数据库升级、错误回滚、备份往返、重复 trip 去重测试成功；82→83新增1个模拟 GPS 点，82个原点及所有 trip/point 行保留，覆盖仍42.643米；3442个真实道路色像素，并人工查看 [最终 APK 截图](verification/v05-delivery/final-apk-map.png) 和 DOM，确认“仅确认匹配的道路上色”实际显示。结果 verification/v05-delivery/acceptance.json，cleanup_errors=[]；本次没有重跑完整长断档链路，边界如上。
+- 当前模拟器83点，相对本任务开始48点增加35个明确的模拟器测试点；每轮保留全部旧行。最终 MOCK_LOCATION=default，测试 GPS provider 已移除，旋转/定位设置恢复。Android 测试 APK 留在模拟器；未操作任何手机。
+- Android 独立测试记录 verification/v05-delivery/database-tests.txt（V05_ISOLATED_DATABASE_PASS）：v1迁移、原测试行/ID、重复道路包、无效许可整包不改动、备份恢复相等、重复文件及重复 trip 不产生重复 points、integrity_check=ok。测试使用 UUID-named cache，不清理用户数据。收尾发现 finish() 会先终止进程，使 finally 清理来不及执行；已将关闭测试库、刷盘及删除测试 prefs/cache 前移到 finish() 之前。最后只重建测试 APK（产品 APK 指纹不变），重跑独立数据库测试并核对无遗留测试 cache / MOCK_LOCATION=default，证据 verification/v05-delivery/database-tests-cleanup.txt 和 cleanup-check.log。早期4个本轮测试 UUID 目录先检查仅含 migration/restore 测试库，再按确切路径清理；原83点及所有旧行保持不变。
+
+## 已修复的验收错误
+
+1. 早期脚本安装完就读 schema，应用还没启动执行 SQLiteOpenHelper 迁移；改为先真实启动再检查，原48点一直保留。
+2. 差精度25米、移动14米的测试点先被录制器防漂移阈值过滤；增加模拟位移和等待，使其进入真实 points，再验证道路层拒绝。没有放宽产品过滤规则。
+3. MuMu instrumentation / task 重建重置竖屏，曾得到黑截图但 DOM 有内容；不能将其视作 UI 验收。改为启动后重新锁定竖屏、明确“查看地图”聚焦公开道路，并在实际地图区域检查道路像素；最终两张有效截图均已人工查看。
+4. Android instrumentation finish() 先结束进程，留下测试专用 cache；修正清理顺序并复验，只清理已经核对的本轮测试路径，产品 APK 不变。
+5. OSM 接口初始环境代理连接被拒绝，改用无代理请求固定公开测试区，未读取凭据或发送私人区域；早期测试 way 查询不是道路，未进入道路包。
+
+## 限制与回退
+
+真实手机户外、vivo 后台/耗电、长期 Doze/重启、多年数据量、高密度复杂道路/驾车、Android14/16 运行及有 Key 的高德尚未验收。只提供小区域合法道路包，不提供自动城市下载，不保证路口全量匹配。用户手机未更新，不能称该版本已在其手机生效。
+
+仅覆盖升级得到验证。旧 schema1 App 不能直接打开 schema2，**不要用卸载、清空或直接降级 APK 来回退**。保留旧源码、旧 APK、原始 trips/points；需要回退时另行设计并验证 schema2 兼容版本。没有推送、合并或对外发布。下一阶段若用户要求真机验证，应先获得相应授权并保留本机数据，不能沿用模拟器结论冒充真机通过。
+
+---
+
 # HANDOFF — v0.4 本地质量收尾（2026-10-09，Asia/Shanghai）
 
 > 用户已明确恢复开发并要求本地收尾；本节取代下方旧“暂停/只讨论”指令。唯一写手、工作目录 `D:\Projects\WalkPaint`、分支 `feat/v04-reliable-roadpaint`，基线 `d5b63c65fb0e82c6393cf3df9f94ddb9afcb6213`。本轮不 push、不 merge、不发 Release、不共享 APK、不增加服务或依赖。最终提交 SHA 以该分支 `git log -1` 为准。
