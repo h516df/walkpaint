@@ -45,6 +45,7 @@ internal enum class ProblemCode(val label:String, val hint:String, val critical:
 internal data class ProblemEntry(val code:ProblemCode,val first:Long,val last:Long,val count:Long)
 internal class ProblemHistory(encoded:String="", var enabled:Boolean=true, now:Long=System.currentTimeMillis()) {
     private val entries=mutableListOf<ProblemEntry>()
+    private var observedNow=now
     var dirty=false; private set
     init {
         // Bound input before parsing; an unknown or corrupted row cannot become report text.
@@ -55,15 +56,15 @@ internal class ProblemHistory(encoded:String="", var enabled:Boolean=true, now:L
                 if(first>0 && last>=first && last<=now && count in 1..MAX_COUNT) entries+=ProblemEntry(code,first,last,count)
             }
         }
-        trim(now)
+        entries.sortBy { it.last };trim(now)
     }
-    fun record(code:ProblemCode,at:Long) {
-        trim(at)
-        if(!enabled || at<=0) return
+    fun record(code:ProblemCode,at:Long,now:Long=at) {
+        trim(now)
+        if(!enabled || at !in (observedNow-KEEP_MS).coerceAtLeast(1)..observedNow) return
         val index=entries.indexOfLast { it.code==code && at-it.last in 0L..AGGREGATE_MS && at-it.first in 0L..AGGREGATE_MS }
         if(index>=0) { val old=entries.removeAt(index);entries+=old.copy(last=at,count=(old.count+1).coerceAtMost(MAX_COUNT)) }
         else entries+=ProblemEntry(code,at,at,1)
-        dirty=true; trim(at)
+        dirty=true;entries.sortBy { it.last };trim(now)
     }
     fun snapshot(now:Long):List<ProblemEntry> { trim(now); return entries.toList().asReversed() }
     fun encode():String = entries.joinToString("\n") { "${it.code.name}|${it.first}|${it.last}|${it.count}" }
@@ -71,7 +72,10 @@ internal class ProblemHistory(encoded:String="", var enabled:Boolean=true, now:L
     fun clear() { entries.clear();dirty=true }
     fun persisted() { dirty=false }
     private fun trim(now:Long) {
-        if(entries.removeAll { it.first<now-KEEP_MS || it.last>now }) dirty=true
+        // System exit information may arrive later with an older event timestamp.
+        // Retention follows observation time; late events cannot rewind this clock.
+        observedNow=maxOf(observedNow,now)
+        if(entries.removeAll { it.first<observedNow-KEEP_MS || it.last>observedNow }) dirty=true
         while(entries.size>MAX_EVENTS || encode().toByteArray(Charsets.UTF_8).size>MAX_BYTES) { entries.removeAt(0);dirty=true }
     }
     companion object {

@@ -63,7 +63,7 @@ internal object RecordingDiagnostics {
         writer.execute {
             synchronized(lock) {
                 val immediate = state(application).record(kind, reason, at, gap)
-                ProblemCode.fromRecording(kind,reason,gap)?.let { historyState(application).record(it,at) }
+                ProblemCode.fromRecording(kind,reason,gap)?.let { historyState(application).record(it,at,System.currentTimeMillis()) }
                 if (immediate) {
                     scheduledFlush?.cancel(false)
                     scheduledFlush = null
