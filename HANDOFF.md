@@ -2,6 +2,8 @@
 
 本节优先于下方v0.8历史记录。唯一主写手，从核对一致的f987dc7/v0.8建独立分支 `issue-6-gps-road-diagnostics`，工作区 `D:\Worktrees\walkpaint-issue6-p0`。原 `D:\Projects\WalkPaint` / PR #1/#3/#5/main 未修改或合并。对应任务 https://github.com/h516df/walkpaint/issues/6。
 
+草稿 PR：https://github.com/h516df/walkpaint/pull/9，base `feat/v08-map-first`，不合并。**v0.9 APK 尚未上传、Release 未创建**（2026-10-09远端实读为空）；自动审批审核拒绝创建私有草稿Release及上传APK，理由是需要本次具体分发的明确确认。用户确认前不要换渠道/工具上传；现有v0.8下载保留。本地APK、完整验收、发布说明与指纹均已准备，确认后可上传草稿→核对服务器digest/大小→开放私有测试→实际下载验SHA。未上传不能给有效v0.9手机链接。
+
 **状态：软件修复 + MuMu实际APK全链 PASS；vivo原无GPS回调/历史道路0米根因仍未知，真机 BLOCKED；#6开放，#7/#8暂缓。** 修复健康检查异常后停止续排；新增本会话四阶段计数、GNSS无坐标状态、道路拒绝细分。没有换GPS来源、放宽精度/歧义/断档门槛、改SQLite/schema2、自动下载或上传定位。
 
 业务 `ba4802a` / 验收源码 `ba4802ade8c9c1251da4e41b40bc268f4b48b2ba`；code10/name0.9/原签名/arm64，APK 70366783 字节，SHA256 `580e5eefb37f6eff81a9a9a127c95fb9bb1cf12054724e007abcb453d5a9823c`，实际安装相同。94 JVM零失败；Android真实主Handler异常恢复与隔离库、MuMu从未走灰段→连续约30米着色→反向去重→手动重开保持、后台与短时锁屏、权限/暂停/撤回/诊断/小屏通过；原198点全行保留到217点，道路/历史匹配与旧覆盖区间保留。截图/失败/清理/官方依据及边界见 docs/evidence/V09.md 和 verification/issue6-delivery-final/acceptance.json。

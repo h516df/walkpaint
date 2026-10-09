@@ -4,7 +4,7 @@ Android 道路探索涂色应用：授权一次，日常自动记录；走过的
 
 ## v0.9 私有测试候选（GPS 核心修复与诊断）
 
-[手机 APK](https://github.com/h516df/walkpaint/releases/download/v0.9/WalkPaint-v0.9-arm64-debug.apk) · [私有预览](https://github.com/h516df/walkpaint/releases/tag/v0.9)。同签名覆盖安装、保留旧足迹，勿卸载/清数据。修复GPS健康检查异常中断，新增本次回调→有效GPS→入库计数、无坐标卫星状态及道路拒绝细分。
+[草稿 PR #9](https://github.com/h516df/walkpaint/pull/9)。本地 `WalkPaint-v0.9-arm64-debug.apk` 已完成同签名覆盖升级及真实模拟器验收，**v0.9 APK 未上传、Release 未创建，私有下载待本次上传确认**。修复GPS健康检查异常中断，新增本次回调→有效GPS→入库计数、无坐标卫星状态及道路拒绝细分。安装时应覆盖升级，勿卸载/清数据。
 
 94项JVM、Android隔离库与MuMu实际安装包全链通过；[完整前后截图与验收边界](docs/evidence/V09.md)。**用户vivo原无GPS回调与真实道路连续涂色尚未验收，#6保持开放**。不修改道路匹配门槛，不用network蓝点冒充已走道路。
 
