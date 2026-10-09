@@ -82,6 +82,32 @@ class RecordingService : Service(), LocationListener {
     private var lastNotificationAt = 0L
     private var rawFixBeforeLast: Location? = null
     private var lastRawFix: Location? = null
+    private var powerReceiverRegistered = false
+    private val powerReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) { recordPowerState() }
+    }
+    private fun recordPowerState() {
+        val power = getSystemService(PowerManager::class.java)
+        RecordingDiagnostics.event(this, "power",
+            "SCREEN_${if(power.isInteractive) "ON" else "OFF"}_IDLE_${power.isDeviceIdleMode}_SAVER_${power.isPowerSaveMode}")
+    }
+    private fun recordRecoveryEvidence() {
+        val prior = RecordingDiagnostics.snapshot(this)
+        fun priorTime(key: String) = (prior[key] as? Number)?.toLong() ?: 0L
+        if (priorTime("service_start_at") > priorTime("service_stop_at"))
+            RecordingDiagnostics.event(this, "recovery", "PREVIOUS_SESSION_WITHOUT_STOP_REASON")
+        if (Build.VERSION.SDK_INT >= 30) {
+            try {
+                val exit = getSystemService(ActivityManager::class.java)
+                    .getHistoricalProcessExitReasons(packageName, 0, 1).firstOrNull()
+                if (exit != null && exit.timestamp > priorTime("process_exit_at"))
+                    RecordingDiagnostics.event(this, "exit", "ANDROID_REASON_${exit.reason}", occurredAt=exit.timestamp)
+            } catch (_: Exception) { RecordingDiagnostics.event(this, "recovery", "SYSTEM_EXIT_INFO_UNAVAILABLE") }
+        }
+    }
+    private fun unregisterPowerReceiver() {
+        if (powerReceiverRegistered) { runCatching { unregisterReceiver(powerReceiver) }; powerReceiverRegistered=false }
+    }
 
     override fun onBind(intent: Intent?) = null
 
@@ -121,7 +147,16 @@ class RecordingService : Service(), LocationListener {
             val priorGps = getSharedPreferences("recording_diagnostics", MODE_PRIVATE).getLong("gps_callback_at", 0)
             val age = System.currentTimeMillis() - priorGps
             health = RecordingHealth(if (priorGps > 0 && age in 0..elapsed) elapsed - age else null)
+            recordRecoveryEvidence()
             RecordingDiagnostics.event(this, "start", if (intent == null) "STICKY_RESTART" else "USER_OR_BOOT_START")
+            val filter = android.content.IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_ON); addAction(Intent.ACTION_SCREEN_OFF)
+                addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED); addAction(PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED)
+            }
+            if (Build.VERSION.SDK_INT >= 33) registerReceiver(powerReceiver,filter,Context.RECEIVER_NOT_EXPORTED)
+            else registerReceiver(powerReceiver,filter)
+            powerReceiverRegistered=true
+            recordPowerState()
             ensureGps()
             // Continuous GPS needs no passive subscription: passive also forwards GPS
             // and would double-count callbacks / disturb the movement evidence window.
@@ -152,6 +187,8 @@ class RecordingService : Service(), LocationListener {
             if (!provider) AmbientTracking.status = "GPS 已关闭 · 等待开启"
             else if (elapsed - lastCallbackElapsed > 45_000L)
                 AmbientTracking.status = "GPS 回调已中断 · 正在监听/限频重试，尚未恢复记录"
+            val status=RecordingStatus.assess(RecordingDiagnostics.signals(this@RecordingService,app.repository.lastError))
+            updateNotification(status.title + " · " + status.hint)
             mainHandler.postDelayed(this, 30_000)
         }
     }
@@ -229,6 +266,7 @@ class RecordingService : Service(), LocationListener {
             lastRawFix = null
             filtered("UNRELIABLE_ACCURACY"); return
         }
+        RecordingDiagnostics.event(this, "valid_gps", "VALID_GPS_RECEIVED")
         val inferredMovement = isConfidentMovement(reliableFix)
         if (reliableFix.accuracy <= 20f) {
             rawFixBeforeLast = lastRawFix
@@ -275,7 +313,7 @@ class RecordingService : Service(), LocationListener {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         return Notification.Builder(this, "ambient-footprints")
             .setSmallIcon(R.drawable.ic_footprint)
-            .setContentTitle("足迹涂色 · 自动记录已开启")
+            .setContentTitle("足迹涂色 · 记录状态")
             .setContentText(text)
             .setContentIntent(open)
             .setOngoing(true)
@@ -303,6 +341,7 @@ class RecordingService : Service(), LocationListener {
         AmbientTracking.status = status
         RecordingDiagnostics.event(this, "stop", status)
         mainHandler.removeCallbacksAndMessages(null)
+        unregisterPowerReceiver()
         runCatching { locations.removeUpdates(gpsListener) }
         runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
         stopSelf()
@@ -312,6 +351,7 @@ class RecordingService : Service(), LocationListener {
         val wasClosing = isClosing.getAndSet(true)
         AmbientTracking.running = false
         mainHandler.removeCallbacksAndMessages(null)
+        unregisterPowerReceiver()
         runCatching { locations.removeUpdates(gpsListener) }
         if (!wasClosing) RecordingDiagnostics.event(this, "stop",
             if (AmbientTracking.enabled(this)) "SERVICE_DESTROYED_ENABLED" else "USER_PAUSED")

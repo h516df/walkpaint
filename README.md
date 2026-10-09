@@ -1,10 +1,17 @@
 # 足迹涂色 · WalkPaint
 
-Android 私人足迹 App，**v0.6 本地测试版**：在应用内单次同意后下载附近 OSM 道路，也可导入本地文件；GPS 匹配真实道路几何，持久累计走过的道路区间，重复/反向重走不重复计数。青绿为已确认道路，灰色为未涂道路和细 GPS 参考；包外、路口歧义、断档和差精度保持未确认。**尚未完成用户手机户外及长期后台验收。**
+Android 私人足迹 App，**已发布 v0.7 私有测试版；P0 真机与整链稳定性待验收**：在应用内单次同意后下载附近 OSM 道路，也可导入本地文件；GPS 匹配真实道路几何，持久累计走过的道路区间，重复/反向重走不重复计数。青绿为已确认道路，灰色为未涂道路和细 GPS 参考；包外、路口歧义、断档和差精度保持未确认。**尚未完成用户手机户外及长期后台验收。**
+
+## Issue #2 当前开发
+
+v0.7（code8，同包名同签名/schema2）已实现真实记录状态、无坐标后台诊断、按天查看足迹与确认道路、可靠GPS显示优先级及目录外提示。76项单测及隔离库回归通过；MuMu权限、后台/关屏保存、上色/去重、按天历史分项通过。整链强停重开时一次失败并观测系统进程重启，原因未确定；同APK独立恢复/暂停/再入库专项通过。vivo户外/长期后台仍BLOCKED。没有自动道路下载或新的位置上传。源码位于 issue-2-recording-health，依赖尚未合并的 PR #1；现沿用用户既有私有下载授权提供[v0.7测试下载](https://github.com/h516df/walkpaint/releases/tag/v0.7)，不合并代码或宣称P0已经完成。
+
+手机下载：[v0.7 APK（约70MB）](https://github.com/h516df/walkpaint/releases/download/v0.7/WalkPaint-v0.7-arm64-debug.apk)，先在手机浏览器登录有仓库权限的GitHub账号。覆盖安装后打开一次；不需要连接本机USB来日常使用。本机同指纹包 [WalkPaint-v0.7-arm64-debug.apk](WalkPaint-v0.7-arm64-debug.apk)。具体指纹、模拟器证据、真机边界和回退见 [HANDOFF.md](HANDOFF.md)。复验入口：`python scripts/android_p0_acceptance.py --apk WalkPaint-v0.7-arm64-debug.apk --version-code 8 --output verification/issue-2-p0-complete`。只允许显式模拟器，保留全部旧行并恢复测试状态。
 
 ## 下载与运行
 
-- 手机下载：[v0.6 APK（约70MB）](https://github.com/h516df/walkpaint/releases/download/v0.6/WalkPaint-v0.6-arm64-debug.apk)；[私有发布页](https://github.com/h516df/walkpaint/releases/tag/v0.6)。在手机浏览器登录有权限的GitHub账号后下载。
+- 当前手机测试版：[v0.7 APK](https://github.com/h516df/walkpaint/releases/download/v0.7/WalkPaint-v0.7-arm64-debug.apk)；[私有发布页](https://github.com/h516df/walkpaint/releases/tag/v0.7)。真实后台仍待验收，旧足迹通过覆盖安装保留，勿先卸载。
+- 历史v0.6存档：[v0.6 APK（约70MB）](https://github.com/h516df/walkpaint/releases/download/v0.6/WalkPaint-v0.6-arm64-debug.apk)；[私有发布页](https://github.com/h516df/walkpaint/releases/tag/v0.6)。在手机浏览器登录有权限的GitHub账号后下载。
 - 本机安装包：[WalkPaint-v0.6-arm64-debug.apk](WalkPaint-v0.6-arm64-debug.apk)，通用包：[WalkPaint-v0.6-universal-debug.apk](WalkPaint-v0.6-universal-debug.apk)。包名 cn.walkpaint，versionCode7，versionName0.6，沿用原签名。最终手机包已在MuMu覆盖安装与真实下载入口验收通过；真机后台尚未验收，见 HANDOFF。
 - 已有旧版请**覆盖安装**，不要卸载或清除数据。SQLite schema1→2 只增加道路、覆盖和匹配表，保留全部旧 trips/points。旧 schema1 APK 不支持直接降级打开新库。
 - 首次主动同意自动记录并授权精确位置后，前台定位服务尝试连续记录，保留常驻通知；“我的”可暂停、查看无坐标诊断。系统省电/强停可能中断，强停后需手动打开。

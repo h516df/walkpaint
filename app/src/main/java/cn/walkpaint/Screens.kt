@@ -70,6 +70,12 @@ internal fun AppShell(
     automatic: Boolean,
     running: Boolean,
     trackingStatus: String,
+    recordingTitle: String,
+    recordingHealthy: Boolean,
+    selectedDay: String?,
+    mapRoadState: RoadState,
+    roadAreaHint: String,
+    onShowAll: () -> Unit,
     needsBackground: Boolean,
     onLocate: () -> Unit,
     onToggleTracking: (Boolean) -> Unit,
@@ -108,12 +114,12 @@ internal fun AppShell(
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (selectedTab) {
                 0 -> MapPage(
-                    state, fix, automatic, running, trackingStatus,
-                    onLocate, onToggleTracking, onDemo, mapProviderLabel, roadState, onRoadPack, mapContent
+                    state, fix, automatic, running, trackingStatus, recordingTitle, recordingHealthy,
+                    onLocate, onToggleTracking, onDemo, mapProviderLabel, mapRoadState, onRoadPack, selectedDay, roadAreaHint, onShowAll, mapContent
                 )
                 1 -> TripsPage(state, onTrip)
                 else -> ProfilePage(
-                    state, automatic, running, trackingStatus, needsBackground,
+                    state, automatic, running, trackingStatus, recordingTitle, needsBackground,
                     internalBackupCount, onToggleTracking, onExport, onImport, onBackgroundSettings,
                     onCopyDiagnostics, mapProviderLabel, onChooseAmap, roadState, onRoadPack, onOnlineMap
                 )
@@ -129,12 +135,17 @@ private fun MapPage(
     automatic: Boolean,
     running: Boolean,
     status: String,
+    recordingTitle: String,
+    recordingHealthy: Boolean,
     onLocate: () -> Unit,
     onToggle: (Boolean) -> Unit,
     onDemo: () -> Unit,
     mapProviderLabel: String,
     roadState: RoadState,
     onRoadPack: () -> Unit,
+    selectedDay: String?,
+    roadAreaHint: String,
+    onShowAll: () -> Unit,
     mapContent: @Composable () -> Unit
 ) {
     var detailsExpanded by remember { mutableStateOf(false) }
@@ -159,9 +170,9 @@ private fun MapPage(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("足迹涂色", color = Ink, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+                        Text(selectedDay?.let { "$it 足迹" } ?: "足迹涂色", color = Ink, fontSize = 19.sp, fontWeight = FontWeight.Bold)
                         Spacer(Modifier.height(3.dp))
-                        Text("真实道路累计 · 本机匹配", color = Muted, fontSize = 12.sp)
+                        Text(if(selectedDay==null) "真实道路累计 · 本机匹配" else "当天已确认道路 · 原断点保留", color = Muted, fontSize = 12.sp)
                     }
                     Column(horizontalAlignment = Alignment.End) {
                         val distanceLabel = "%.0f 米已涂色".format(Locale.CHINA, roadState.meters)
@@ -178,9 +189,13 @@ private fun MapPage(
                 Column(Modifier.fillMaxWidth().padding(12.dp)) {
                     Text(if(roadState.roads.isEmpty()) "下载附近道路 ›" else "青绿：已涂道路 · 灰：未涂 / GPS参考 ›",
                         color=Accent,fontWeight=FontWeight.SemiBold,fontSize=13.sp)
-                    Text(roadState.summary,color=Ink,fontSize=12.sp)
+                    Text(if(selectedDay==null) roadState.summary else roadState.summary.replaceFirst("累计涂色","当天涂色"),color=Ink,fontSize=12.sp)
                     Text("道路 © OpenStreetMap contributors · ODbL-1.0",color=Muted,fontSize=11.sp)
                 }
+            }
+            if(selectedDay!=null) TextButton(onClick=onShowAll) { Text("返回累计地图",color=Accent) }
+            if(roadAreaHint.isNotBlank()) Surface(color=Color.White.copy(alpha=0.96f),shape=RoundedCornerShape(13.dp)) {
+                Text(roadAreaHint,color=Ink,fontSize=12.sp,modifier=Modifier.fillMaxWidth().padding(10.dp))
             }
             if (fix == null) {
                 Surface(
@@ -221,13 +236,10 @@ private fun MapPage(
                 Column(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(8.dp).background(
-                            if (running) Accent else Color(0xFFD7A663), CircleShape))
+                            if (recordingHealthy) Accent else Color(0xFFD7A663), CircleShape))
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            if (running && statusHint.startsWith("刚刚保存")) "新足迹已保存"
-                            else if (running) "自动监测已开启"
-                            else if (automatic) "等待系统允许恢复"
-                            else "自动足迹已暂停",
+                            recordingTitle,
                             color = Ink, fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.weight(1f)
@@ -311,7 +323,7 @@ private fun WhiteCard(modifier: Modifier = Modifier, content: @Composable Column
 
 @Composable
 private fun TripsPage(state: TrackState, onTrip: (Track) -> Unit) {
-    val recent = FootprintInsights.lastVisited(state, 250)
+    val recent = DailyFootprints.days(state)
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
@@ -321,9 +333,10 @@ private fun TripsPage(state: TrackState, onTrip: (Track) -> Unit) {
             PageHeading("EXPLORE", "我的足迹", "走过的时间与路线，都在这里慢慢积累。")
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 WhiteCard(Modifier.weight(1f)) {
-                    Text("已走距离", color = Muted, fontSize = 12.sp)
+                    Text("记录轨迹距离", color = Muted, fontSize = 12.sp)
                     Spacer(Modifier.height(7.dp))
-                    Text("%.2f km".format(Locale.CHINA, state.totalMeters / 1000),
+                    Text(if(state.totalMeters<1000) "%.0f 米".format(Locale.CHINA,state.totalMeters)
+                        else "%.2f km".format(Locale.CHINA, state.totalMeters / 1000),
                         color = Accent, fontWeight = FontWeight.Bold, fontSize = 23.sp)
                 }
                 WhiteCard(Modifier.weight(1f)) {
@@ -334,9 +347,9 @@ private fun TripsPage(state: TrackState, onTrip: (Track) -> Unit) {
                 }
             }
             Spacer(Modifier.height(15.dp))
-            Text("最近去过的路线", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Ink)
+            Text("按天查看足迹", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Ink)
             Spacer(Modifier.height(2.dp))
-            Text("按日期整理，点击任意路线回地图查看", color = Muted, fontSize = 12.sp)
+            Text("每天汇总一次，点击查看当天足迹和已确认道路", color = Muted, fontSize = 12.sp)
         }
         if (recent.isEmpty()) {
             item {
@@ -347,7 +360,8 @@ private fun TripsPage(state: TrackState, onTrip: (Track) -> Unit) {
                 }
             }
         } else {
-            items(recent, key = { it.id }) { trip ->
+            items(recent, key = { it.key }) { day ->
+                val trip=day.focusTrack()
                 Surface(onClick = { onTrip(trip) }, color = Color.White,
                     shape = RoundedCornerShape(20.dp), shadowElevation = 1.dp) {
                     Row(Modifier.fillMaxWidth().padding(16.dp),
@@ -363,7 +377,9 @@ private fun TripsPage(state: TrackState, onTrip: (Track) -> Unit) {
                             Text(SimpleDateFormat("MM月dd日  EEEE", Locale.CHINA).format(Date(trip.started)),
                                 color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
                             Spacer(Modifier.height(5.dp))
-                            Text("${trip.points.size} 个定位点 · %.2f km".format(Locale.CHINA, Geo.distance(trip.points) / 1000),
+                            val distance=if(day.meters<1000) "%.0f 米".format(Locale.CHINA,day.meters)
+                                else "%.2f km".format(Locale.CHINA,day.meters/1000)
+                            Text("${day.points} 个定位点 · $distance · ${day.segments} 段记录",
                                 color = Muted, fontSize = 12.sp)
                         }
                         Text("›", color = Accent, fontSize = 26.sp)
@@ -381,6 +397,7 @@ private fun ProfilePage(
     automatic: Boolean,
     running: Boolean,
     status: String,
+    recordingTitle: String,
     needsBackground: Boolean,
     internalBackupCount: Int,
     onToggle: (Boolean) -> Unit,
@@ -434,7 +451,7 @@ private fun ProfilePage(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("自动足迹", color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                        Text(if (running) "运行中 · 外出自动尝试记录" else if (automatic) "系统已暂停，打开 App 可尝试恢复" else "启用一次，平时不用手动开始",
+                        Text(recordingTitle,
                             color = Muted, fontSize = 12.sp)
                     }
                     Switch(checked = automatic, onCheckedChange = onToggle)
@@ -503,7 +520,7 @@ private fun ProfilePage(
             }
         }
         item {
-            Text("V0.5 本地测试版 · 定位和匹配只存本机；联网底图需单独同意。",
+            Text("V${BuildConfig.VERSION_NAME} 本地测试版 · 定位和匹配只存本机；联网底图需单独同意。",
                 color = Muted, fontSize = 11.sp, modifier = Modifier.padding(6.dp))
         }
     }

@@ -12,8 +12,28 @@ import java.util.UUID
 /** Isolated databases only. Never clears or replaces the installed footprint database. */
 class RoadAcceptanceInstrumentation : Instrumentation() {
     private var networkProbe=false
+    private var catalogProbe=false
     override fun onStart() {
         val result = Bundle()
+        if(catalogProbe) {
+            try {
+                val repo=FootprintDatabase(targetContext)
+                val roads=repo.roadSnapshot().roads
+                val catalog=RoadCatalog(roads)
+                val fixture=context.assets.open("oxford-roads.geojson").bufferedReader().use { RoadPackCodec.decode(it.readText()) }
+                val road=fixture.roads.first { it.stableId.startsWith("osm:way:1675518:") }
+                val points=listOf(18.0,32.0,46.0,60.0,94.0).mapIndexed { i,d ->
+                    RoadCoverage(listOf(PaintedInterval(road.stableId,0.0,d))).highlighted(road).single().last().copy(time=1000L+i*10000,accuracy=5f)
+                }
+                val near=points.map { catalog.near(it).size }
+                val match=points.map { RoadMatcher.match(it,catalog.near(it))!=null }
+                val pairs=points.zipWithNext().map { (a,b) -> catalog.traversed(a,b)!=null }
+                repo.close()
+                result.putString("stream","CATALOG_READ_ONLY: roads=${roads.size}; near=$near; match=$match; pairs=$pairs")
+                finish(Activity.RESULT_OK,result)
+            } catch(e:Exception) { result.putString("stream","CATALOG_READ_ONLY_FAILURE_${e.javaClass.simpleName}");finish(Activity.RESULT_CANCELED,result) }
+            return
+        }
         if(networkProbe) {
             val lines=mutableListOf<String>()
             try {
@@ -75,6 +95,13 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
             try { repo.importRoadPack(fixture.replace("ODbL-1.0","invalid")); error("accepted bad pack") }
             catch(_:IllegalArgumentException) { }
             check(repo.snapshot().realPointCount==2 && repo.roadSnapshot().meters==before.meters)
+            val rawBefore=repo.snapshot()
+            val day=DailyFootprints.key(1000)
+            val dayRoad=repo.roadSnapshotForDay(day)
+            check(kotlin.math.abs(dayRoad.meters-before.meters)<0.01)
+            check(repo.snapshot()==rawBefore && repo.roadSnapshot().meters==before.meters)
+            val emptyDay=repo.roadSnapshotForDay(DailyFootprints.key(System.currentTimeMillis()))
+            check(emptyDay.meters==0.0)
             val backup=repo.exportBackup()
             val restored=FootprintDatabase(testContext("restore")).also { databases+=it }
             check(restored.importBackup(backup)==1)
@@ -160,5 +187,5 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
         // finish() can terminate the instrumented process immediately; cleanup must precede it.
         finish(resultCode,result)
     }
-    override fun onCreate(arguments:Bundle?) { networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments); start() }
+    override fun onCreate(arguments:Bundle?) { catalogProbe=arguments?.getString("catalogProbe")=="true"; networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments); start() }
 }
