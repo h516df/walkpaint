@@ -13,7 +13,12 @@ def launch():
     shell('am','start','--display','0','--activity-reorder-to-front','-n','cn.walkpaint/.MainActivity')
     time.sleep(2)
 initial=rows();before=count();before_coverage=coverage()
+with database() as db:
+    initial_roads=set(db.execute('SELECT * FROM roads').fetchall())
+    initial_matches=set(db.execute('SELECT * FROM road_matches').fetchall())
+    initial_intervals=list(db.execute('SELECT road_id,start,end FROM coverage').fetchall())
 checks['initial_points']=before
+checks['tested_source_sha']=subprocess.check_output(['git','rev-parse','HEAD']).decode().strip()
 checks['source_diff_sha256']=hashlib.sha256(subprocess.check_output(['git','diff','HEAD'])).hexdigest()
 permissions=['ACCESS_FINE_LOCATION','ACCESS_COARSE_LOCATION','ACCESS_BACKGROUND_LOCATION']
 permission_state=shell('dumpsys','package','cn.walkpaint')
@@ -71,6 +76,11 @@ try:
     (out/'isolated-database-tests.txt').write_text(result,encoding='utf-8')
     assert 'V05_ISOLATED_DATABASE_PASS' in result
     checks['isolated_database_migration_failure_backup_daily']=True
+    probe=shell('am','instrument','-w','-e','fixtureProbe','true','cn.walkpaint.test/cn.walkpaint.RoadAcceptanceInstrumentation')
+    (out/'public-fixture-probe.txt').write_text(probe,encoding='utf-8')
+    selected=re.search(r'PUBLIC_UNPAINTED_FIXTURE_PASS fixture=(\d+) start=(\d+)',probe)
+    assert selected, 'No untouched conservative public section; do not clear coverage to fake novelty'
+    selected_index=int(selected.group(1));selected_start=float(selected.group(2))
     shell('wm','size','810x1440');launch()
     if '是否使用高德地图' in texts():tap('同意使用高德',exact=True)
     shell('appops','set','2000','android:mock_location','allow');mock=True
@@ -83,10 +93,16 @@ try:
     assert matched_after>=matched_before+3
     checks['fresh_confirmed_pairs']=matched_after-matched_before
     # Exercise an unpainted public section, no database reset or invented road.
+    original_geometry=geometry
+    fixture=json.loads(Path('app/src/androidTest/assets/oxford-roads.geojson').read_text(encoding='utf-8'))['features'][selected_index]
+    geometry=fixture['geometry']['coordinates']
+    # Match RoadPackCodec canonical orientation, so public along-distances agree.
+    if [(xy[1],xy[0]) for xy in geometry]>[(xy[1],xy[0]) for xy in reversed(geometry)]:geometry=list(reversed(geometry))
     with database() as db:
-        public_id=db.execute("SELECT id FROM roads WHERE osm_id=1675518").fetchone()[0]
+        public_id=db.execute("SELECT id FROM roads WHERE osm_id=?",(fixture['properties']['osm_way_id'],)).fetchone()[0]
         existing=db.execute("SELECT start,end FROM coverage WHERE road_id=?",(public_id,)).fetchall()
-    new_start=68.0
+    new_start=selected_start
+    time.sleep(10)
     assert not any(end>new_start and start<new_start+30 for start,end in existing), 'Public new section already painted; choose another untouched fixture'
     check_saved('new_section_anchor',*at(new_start))
     tap('定位我');time.sleep(3);shot('new-section-before')
@@ -112,6 +128,8 @@ try:
     assert int(values.get('gnss_at','0'))==0 or int(values['gnss_at'])>=int(values['service_start_at'])
     checks['session_restart_no_historic_callback_or_satellite_claim']=True
     # Restore the original public test position; do not bridge the discontinuity.
+    geometry=original_geometry
+    time.sleep(10)
     check_saved('return_public_anchor',*at(18))
     forward=coverage();tap('定位我');time.sleep(7);home_clean();shot('map');pixels('map')
     checks['normal_home_clean_and_amap_rendered']=True
@@ -187,6 +205,12 @@ try:
     checks['small_320dp_navigation_no_overlap']=True
     checks['all_original_rows_retained']=all(initial[t]<=rows()[t] for t in initial)
     assert checks['all_original_rows_retained'] and coverage()>=before_coverage-.3
+    with database() as db:
+        assert initial_roads<=set(db.execute('SELECT * FROM roads').fetchall())
+        assert initial_matches<=set(db.execute('SELECT * FROM road_matches').fetchall())
+        final_intervals=list(db.execute('SELECT road_id,start,end FROM coverage').fetchall())
+        assert all(any(r==old_r and start<=old_start+.01 and end>=old_end-.01 for r,start,end in final_intervals) for old_r,old_start,old_end in initial_intervals)
+    checks['all_existing_roads_matches_and_coverage_retained']=True
     checks['final_points']=count();checks['painted_meters']=coverage()
     checks['apk_sha256']=hashlib.sha256(Path(args.apk).read_bytes()).hexdigest()
     installed=run('exec-out','cat',shell('pm','path','cn.walkpaint').strip().split(':',1)[1],binary=True)

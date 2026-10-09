@@ -81,4 +81,14 @@ class DiagnosticBufferTest {
         assertEquals(0L,b.long("gnss_at"));assertEquals(0L,b.long("gnss_first_fix_at"))
         assertFalse(b.snapshot().keys.any { it.contains("lat") || it.contains("lon") || it.contains("route") })
     }
+    @Test fun restartedGnssSnapshotOverwritesOldPreferenceValues() {
+        val disk=mutableMapOf<String,Any?>("gnss_at" to 2000L,"gnss_visible" to 12L,"gnss_used" to 5L)
+        val b=DiagnosticBuffer(disk)
+        b.record("start","NEW_SESSION",4000)
+        // SharedPreferences flush writes snapshot keys; absence does not remove disk keys.
+        disk.putAll(b.snapshot())
+        val reopened=DiagnosticBuffer(disk)
+        assertEquals(0L,reopened.long("gnss_at"))
+        assertEquals(0L,reopened.long("gnss_used"))
+    }
 }

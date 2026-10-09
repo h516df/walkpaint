@@ -13,8 +13,34 @@ import java.util.UUID
 class RoadAcceptanceInstrumentation : Instrumentation() {
     private var networkProbe=false
     private var catalogProbe=false
+    private var fixtureProbe=false
     override fun onStart() {
         val result = Bundle()
+        if(fixtureProbe) {
+            // Only fixed public fixture sections; no real-GPS-derived lookup or database writes.
+            try {
+                FootprintDatabase(targetContext).use { repo ->
+                    val state=repo.roadSnapshot()
+                    val catalog=RoadCatalog(state.roads)
+                    val fixture=context.assets.open("oxford-roads.geojson").bufferedReader().use { RoadPackCodec.decode(it.readText()) }
+                    for ((index,road) in fixture.roads.withIndex()) {
+                        for (start in 10..(road.length.toInt()-40) step 5) {
+                            if(state.intervals.any { it.roadId==road.stableId && it.to>start && it.from<start+30 }) continue
+                            val points=listOf(0.0,10.0,20.0,30.0).mapIndexed { i,d ->
+                                RoadCoverage(listOf(PaintedInterval(road.stableId,0.0,start+d))).highlighted(road).single().last().copy(time=1000L+i*10000,accuracy=5f)
+                            }
+                            if(points.zipWithNext().all { (a,b) -> catalog.traversed(a,b)?.roadId==road.stableId }) {
+                                result.putString("stream","PUBLIC_UNPAINTED_FIXTURE_PASS fixture=$index start=$start")
+                                finish(Activity.RESULT_OK,result)
+                                return
+                            }
+                        }
+                    }
+                    error("No unpainted unambiguous public fixture remains")
+                }
+            } catch(e:Exception) { result.putString("stream","PUBLIC_FIXTURE_PROBE_FAIL_${e.javaClass.simpleName}");finish(Activity.RESULT_CANCELED,result) }
+            return
+        }
         if(catalogProbe) {
             try {
                 val repo=FootprintDatabase(targetContext)
@@ -211,5 +237,5 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
         // finish() can terminate the instrumented process immediately; cleanup must precede it.
         finish(resultCode,result)
     }
-    override fun onCreate(arguments:Bundle?) { catalogProbe=arguments?.getString("catalogProbe")=="true"; networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments); start() }
+    override fun onCreate(arguments:Bundle?) { fixtureProbe=arguments?.getString("fixtureProbe")=="true"; catalogProbe=arguments?.getString("catalogProbe")=="true"; networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments); start() }
 }

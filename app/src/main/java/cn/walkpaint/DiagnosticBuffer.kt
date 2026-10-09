@@ -18,7 +18,7 @@ internal class DiagnosticBuffer(initial: Map<String, Any?> = emptyMap()) {
                     values["session_${it}_count"] = 0L
                 }
                 // A previous session's satellite visibility is not current evidence.
-                listOf("gnss_state_at", "gnss_at", "gnss_visible", "gnss_used", "gnss_first_fix_at", "gnss_ttff_ms").forEach { values.remove(it) }
+                listOf("gnss_state_at", "gnss_at", "gnss_visible", "gnss_used", "gnss_first_fix_at", "gnss_ttff_ms").forEach { values[it] = 0L }
                 values["gnss_state"] = "尚无本次卫星状态"
             }
             "heartbeat" -> values["heartbeat_at"] = at
