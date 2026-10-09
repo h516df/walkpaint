@@ -1,6 +1,12 @@
 # 足迹涂色 · WalkPaint
 
-Android 私人足迹 App，**v0.6 本地测试版**：在应用内单次同意后下载附近 OSM 道路，也可导入本地文件；GPS 匹配真实道路几何，持久累计走过的道路区间，重复/反向重走不重复计数。青绿为已确认道路，灰色为未涂道路和细 GPS 参考；包外、路口歧义、断档和差精度保持未确认。**尚未完成用户手机户外及长期后台验收。**
+Android 私人足迹 App，**已发布 v0.6；Issue #2 的 v0.7 本地候选未发布**：在应用内单次同意后下载附近 OSM 道路，也可导入本地文件；GPS 匹配真实道路几何，持久累计走过的道路区间，重复/反向重走不重复计数。青绿为已确认道路，灰色为未涂道路和细 GPS 参考；包外、路口歧义、断档和差精度保持未确认。**尚未完成用户手机户外及长期后台验收。**
+
+## Issue #2 当前开发
+
+v0.7（code8，同包名同签名/schema2）已实现真实记录状态、无坐标后台诊断、按天查看足迹与确认道路、可靠GPS显示优先级及目录外提示。76项单测及隔离库回归通过；MuMu权限、后台/关屏保存、上色/去重、按天历史分项通过。整链强停重开时一次失败并观测系统进程重启，原因未确定；同APK独立恢复/暂停/再入库专项通过。vivo户外/长期后台仍BLOCKED。没有自动道路下载或新的位置上传。源码位于 issue-2-recording-health，依赖尚未合并的 PR #1；按 Issue 要求未发版。
+
+本机候选 [WalkPaint-v0.7-arm64-debug.apk](WalkPaint-v0.7-arm64-debug.apk)。具体指纹、模拟器证据、真机边界和回退见 [HANDOFF.md](HANDOFF.md)。复验入口：`python scripts/android_p0_acceptance.py --apk WalkPaint-v0.7-arm64-debug.apk --version-code 8 --output verification/issue-2-p0-complete`。只允许显式模拟器，保留全部旧行并恢复测试状态。
 
 ## 下载与运行
 

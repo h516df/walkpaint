@@ -1,3 +1,41 @@
+# HANDOFF — Issue #2 P0 / v0.7 本地候选（2026-10-09）
+
+本节优先于下方历史暂停与 v0.3–v0.6 文档。用户明确要求读取 Issue #2 并继续 P0，开发已恢复。唯一写手，D:\Projects\WalkPaint，分支 issue-2-recording-health，基线 8bcddeff963529ff7cf9b41242d01df4fd492007（PR #1 的 v0.6 分支）。没有修改/合并 PR #1 或 main。最终运行验收对应代码提交 `ed5f86ecb211f198ede8bb434e3f26b547370c23`，构建之后未修改业务源码。
+
+**状态：软件改进可运行；模拟器后台/关屏/道路/历史分项 PASS，完整整链强停重开处一次 FAIL（调查中观测到 Android 系统进程重启，原因未确定），同 APK 恢复专项随后 PASS；真实 vivo 户外/长时间后台验收 BLOCKED（没有真实设备接入）。用户手机原断录根因仍未确定。Issue #2 保持开放，不能宣称真机可用或完整整链稳定。按本 Issue 的明确限制，本轮不合并、不发布 Release、不上传 APK 或私人足迹。**
+
+## 改动与证据边界
+
+- 先在原 v0.6 复现：模拟 GPS 切后台/关屏仍入库；停发回调65秒，服务仍存活而地图仅提示到室外等待，没有明确中断。verification/issue-2-before/no-callback.png 与 acceptance.json 的 ui_reports_callback_interruption=false、service_alive=true 为失败依据。基线脚本最初误执行了 v0.5 完整验收，仍保留了全部旧行、完成测试清理；其后的专项实验独立记录前台/后台/关屏点。这不是 vivo 杀后台证据。
+- 统一地图、个人页与通知的状态：服务、GPS 原始回调、通过时间/坐标/精度的有效 GPS、实际 SQLite 提交分开；暂停/缺权限/系统 GPS 关闭/注册失败/回调中断/差精度/保存失败有区别。最后入库时间不再用历史定位时间冒充。新会话不能沿用上次有效 GPS 宣称恢复。
+- 增加本机无坐标证据：有效 GPS 时间/计数、屏幕/省电/Doze 状态、上次无停止理由的会话恢复、Android 自己进程的退出原因码。只读官方 ApplicationExitInfo，不读描述或 trace，不推断 vivo 根因；API<30 无该退出接口。诊断常规30秒合并持久化，SQLite 足迹即时提交；未加 CPU 常驻唤醒锁/新服务/后台上传。
+- 地图显示端采用单调时间年龄并优先新鲜可靠 GPS，网络定位不会替换它；回退网络定位不代表保存 GPS。记录与匹配阈值、坐标系均未变。旧界面渲染失败时还有道路歧义因素，因此不把该改动说成已经证明解决用户手机的偏移。
+- 足迹按本机日期汇总点数、记录段与轨迹距离，短途显示米数；保持原 trip ID/SQLite 行、各断点，不桥接零散路线。点一天可看当天 GPS 参考和仅该天已确认道路区间；只读重建来自 road_matches=1，返回累计地图恢复全局覆盖。当天累计去重与跨天总覆盖不能相加冒充总里程。
+- 当前附近无目录道路时提示边界，已存数据保留，不自动下载。没有增加整城下载、自动上传、移动模式分类或未授权高德 Key。
+
+## 最终候选与测试
+
+- cn.walkpaint / versionCode8 / versionName0.7 / schema2。手机 APK WalkPaint-v0.7-arm64-debug.apk，70348196 字节，SHA256 `8c9f47d6f9a08d4a9f1e3b5b74b8b9f89be595eb8baa7c63f4bafc9002d5b9dc`。apksigner 验证通过，证书 SHA256 21b74e3e2a10e12da8284d4e6bd7d99e55b00a385215902e94d7896f7a46c967，与 v0.6 相同；安装包仅 arm64-v8a。
+- 76 项 JVM 测试零失败，包含服务活性不能掩盖回调断档、有效回调不等于提交、新会话/差精度/保存失败、GPS 与网络优先级、日期/午夜/原断点和目录外不乱涂。
+- Android 隔离库回归 PASS：schema1→2 原行/ID、备份去重、道路坏包与部分覆盖写入失败不丢 GPS、原 GPS 写入失败仍明确报错；新增当天覆盖读取不改变原表及累计覆盖。无故障注入到实际足迹库。
+- 最终实际 APK MuMu/API35 真实 UI：同签名覆盖升级时验证 121 原点与全部 trips/points 行保留；恢复专项另以 132 原点和全行作基线，最后 133 点、原行全部保留。系统权限弹窗授权后服务恢复；后台与关屏 70 秒中持续注入公开测试定位并保存；新增 4 个确认匹配，反向重走不重复累计；地图青绿线真实渲染。
+- 差精度拒绝、停发回调65秒而服务存活时显示“GPS回调已中断”、恢复不跨45秒断档涂色、目录外异常跳点拒绝并提示边界、每日列表→当天地图→累计地图、强停后手动打开恢复、暂停不写与再次明确启用均通过。测试是模拟器公开位置，不能当真实走路。
+- 最终已安装 base.apk 指纹与上述候选完全相同；测试 provider、Mock Location、原权限、旋转、位置开关和临时文件恢复，cleanup_errors=[]。verification/issue-2-p0-complete/ 保存整链失败与此前分项证据；verification/issue-2-p0-recovery/ 保存独立恢复/暂停/再入库 PASS、diagnostic-fields.json 和真实截图，不能把两者混成一次全通过。禁止把私人轨迹随证据上传。
+- 首轮 v0.7 界面验收在返回地图时失败（没有可见青绿道路），verification/issue-2-p0/ 保留失败与清理结果。只读 catalogProbe 证明新增周边目录使原测试4米偏移点出现歧义；道路中心点可无歧义匹配。最终测试据此采用道路中心，且强制检查新增匹配行，防止只凭旧42米覆盖假通过。没有放宽 matcher。catalogProbe 仅固定公开 fixture、读取目录、输出候选数量与布尔值，无坐标/路线输出、无写库。
+- 第二次在诊断弹窗检查因全部内容已显示、没有可滚动节点而使脚本StopIteration（verification/issue-2-p0-final/）；这是脚本判断错误，保留已通过项与清理结果。修正为内容完整则无需滚动。
+- 随后的整链验证在强停重开时没有前台服务（verification/issue-2-p0-complete/）。调查观测 Android system_server 从 PID841 变为17136；无已确认的 Java 崩溃证据，重启根因未确定。再次打开后服务恢复；同一 APK 独立恢复专项再次强停/可见重开，在 system_server PID 不变时 PASS，暂停0新增、明确启用后真实入库1点到133。这是分项与恢复复验，**不能说完整整链已经稳定通过**。scripts/android_p0_recovery.py 保存原失败来源及专项边界。
+
+## 未完成与下一步
+
+- 真机 = BLOCKED-no-real-device-connected。MuMu 型号虽回报 V2284A，127.0.0.1:16384 仍是模拟器，不能写成 vivo 真机。实际卫星环境、长期锁屏、Doze、厂商自启动/省电、重启自动恢复、耗电及用户截图偏移尚未验收；不能保证永不断录。整链重开期间的系统重启原因也尚未定位，需要继续保留为本 Issue 未完成项。
+- 在获得真实设备的最小连接/调试授权后，继续读取无坐标诊断、覆盖安装同签名包、实际户外后台/锁屏时段验证持续入库、青绿道路和历史保持。必须人操作的物理连接/授权再请求，不把用户当命令执行器。
+- 高德合法 Key 仍缺失；保留现有合法离线/联网底图与单次道路下载同意。手机 v0.6 下载链接继续可用，本轮新包仅本机。
+- 回退：不卸载/清数据，不直接装 schema1 或降 versionCode。由 v0.6 源码构建同签名、schema2、versionCode>=8 的修复包覆盖安装；已有 v0.6 资产与历史提交均保留。
+
+官方行为依据：[前台定位权限](https://developer.android.com/develop/sensors-and-location/location/permissions)、[后台启动前台服务限制](https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start)、[ApplicationExitInfo](https://developer.android.com/reference/android/app/ApplicationExitInfo)。这些是系统边界，不能替代真机证据。
+
+---
+
 # HANDOFF — v0.6 最终本地包验收通过（2026-10-09）
 
 > 本节为当前状态，覆盖下方历史未复验/窗口授权/网络恢复阻塞。唯一写手，D:\Projects\WalkPaint，feat/v06-nearby-roads；基线6b9f8d3，下载功能提交1096926，地图修复/收尾提交见git log。**最终手机APK在MuMu真实入口验收通过，现已推送代码并发布到私有GitHub；未安装到用户真机，不能说用户手机已生效或后台已保证。**

@@ -65,7 +65,7 @@ try:
     checks['all_recovery_baseline_rows_retained']=True
     checks['recovery_baseline_points']=initial_count
     checks['final_points']=count()
-    checks['original_upgrade_preservation']='primary attempt verified all 121 pre-upgrade rows; this retry verified all 132 baseline rows'
+    checks['original_upgrade_preservation']=f"primary attempt verified all {checks['initial_points']} pre-upgrade rows; this retry verified all {initial_count} baseline rows"
     checks['painted_meters']=coverage()
     sha=hashlib.sha256(Path(args.apk).read_bytes()).hexdigest()
     installed=run('exec-out','cat',shell('pm','path','cn.walkpaint').strip().split(':',1)[1],binary=True)
