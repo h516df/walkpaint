@@ -29,6 +29,7 @@ internal class AmapMapController(private val context: Context) {
     private var map: AMap? = null
     private var currentMarker: Marker? = null
     private var latestPosition: Location? = null
+    private var initialFocusPending = true
     private val density = context.resources.displayMetrics.density
     private val blueDot by lazy {
         val bitmap = Bitmap.createBitmap((32*density).toInt(),(32*density).toInt(),Bitmap.Config.ARGB_8888)
@@ -55,10 +56,8 @@ internal class AmapMapController(private val context: Context) {
         map?.uiSettings?.isRotateGesturesEnabled = false
         map?.uiSettings?.isTiltGesturesEnabled = false
         latestPosition = location
+        initialFocusPending = true
         render(state,roads)
-        val p = location?.let { toAmap(it.latitude, it.longitude) }
-            ?: state.realTracks.lastOrNull()?.points?.lastOrNull()?.let { toAmap(it.lat, it.lon) }
-        if (p != null) map?.moveCamera(CameraUpdateFactory.newLatLngZoom(p, 16f))
         return view
     }
 
@@ -74,6 +73,13 @@ internal class AmapMapController(private val context: Context) {
             }
         }
         updateUser(latestPosition)
+        if(initialFocusPending) {
+            val current=latestPosition?.let { TrackPoint(it.latitude,it.longitude,it.time,it.accuracy) }
+            RoadMapFocus.choose(state,current,roads)?.let { point ->
+                a.moveCamera(CameraUpdateFactory.newLatLngZoom(toAmap(point.lat,point.lon),17f))
+                initialFocusPending=false
+            }
+        }
     }
 
     fun updateUser(location: Location?) {
@@ -94,6 +100,7 @@ internal class AmapMapController(private val context: Context) {
     }
 
     fun focus(lat: Double, lon: Double, zoom: Double) {
+        initialFocusPending=false
         map?.animateCamera(CameraUpdateFactory.newLatLngZoom(toAmap(lat, lon), zoom.toFloat()))
     }
 

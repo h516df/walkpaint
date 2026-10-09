@@ -124,7 +124,8 @@ try:
     # Real system permission withdrawal; no app preferences/databases are cleared.
     permissions_changed=True
     for key in ['ACCESS_FINE_LOCATION','ACCESS_COARSE_LOCATION']:shell('pm','revoke','cn.walkpaint','android.permission.'+key)
-    launch();assert '定位权限已失效' in texts();shot('permission-expired')
+    launch();assert '定位权限已失效' in texts();shot('permission-expired');pixels('permission-expired')
+    checks['no_permission_focuses_existing_painted_roads']=True
     tap('定位权限已失效');assert '定位权限' in texts();tap('地图',exact=True);tap('定位我')
     n=next(n for n in ui().iter('node') if n.attrib.get('resource-id','').endswith('permission_allow_foreground_only_button'))
     x1,y1,x2,y2=map(int,re.findall(r'\d+',n.attrib['bounds']))
