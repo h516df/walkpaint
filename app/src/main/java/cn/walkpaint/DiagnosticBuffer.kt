@@ -11,7 +11,16 @@ internal class DiagnosticBuffer(initial: Map<String, Any?> = emptyMap()) {
         values["last_event_at"] = at
         values["last_event"] = reason
         when (kind) {
-            "start" -> { values["service_start_at"] = at; count("start_count") }
+            "start" -> {
+                values["service_start_at"] = at; count("start_count")
+                values.putIfAbsent("staged_counts_since", at)
+                listOf("gps", "valid_gps", "saved", "filtered").forEach {
+                    values["session_${it}_count"] = 0L
+                }
+                // A previous session's satellite visibility is not current evidence.
+                listOf("gnss_state_at", "gnss_at", "gnss_visible", "gnss_used", "gnss_first_fix_at", "gnss_ttff_ms").forEach { values.remove(it) }
+                values["gnss_state"] = "尚无本次卫星状态"
+            }
             "heartbeat" -> values["heartbeat_at"] = at
             "gps" -> { values["gps_callback_at"] = at; count("gps_count") }
             "valid_gps" -> { values["valid_gps_at"] = at; count("valid_gps_count") }
@@ -26,13 +35,25 @@ internal class DiagnosticBuffer(initial: Map<String, Any?> = emptyMap()) {
             "register" -> { values["registration_at"] = at; values["registration"] = reason }
             "stop" -> { values["service_stop_at"] = at; values["stop_reason"] = reason }
         }
-        if (gap != null) {
+        if (kind in setOf("gps", "valid_gps", "saved", "filtered")) count("session_${kind}_count")
+        if (kind == "gnss") { values["gnss_state_at"] = at; values["gnss_state"] = reason }
+        if (kind == "gnss_first") { values["gnss_first_fix_at"] = at; values["gnss_ttff_ms"] = gap ?: 0L }
+        if (kind == "provider") { values["provider_at"] = at; values["provider_state"] = reason }
+        if (gap != null && kind == "gps") {
             values["last_gap_ms"] = gap
             count("gap_count")
             values["max_gap_ms"] = maxOf(gap, long("max_gap_ms"))
         }
         dirty = true
         return gap != null || kind in setOf("start", "stop", "failure", "register", "exit", "recovery", "power")
+    }
+
+    fun satellites(visible: Int, used: Int, at: Long) {
+        require(visible >= 0 && used in 0..visible)
+        values["gnss_at"] = at
+        values["gnss_visible"] = visible.toLong()
+        values["gnss_used"] = used.toLong()
+        dirty = true
     }
 
     fun long(key: String): Long = (values[key] as? Number)?.toLong() ?: 0L

@@ -58,6 +58,17 @@ internal object RecordingDiagnostics {
         }
     }
 
+    fun satellites(context: Context, visible: Int, used: Int) {
+        val application = context.applicationContext
+        val at = System.currentTimeMillis()
+        writer.execute {
+            synchronized(lock) {
+                state(application).satellites(visible, used, at)
+                schedule(application)
+            }
+        }
+    }
+
     fun snapshot(context: Context): Map<String, Any?> = synchronized(lock) { state(context).snapshot() }
 
     fun signals(context: Context, databaseError: String? = null): RecordingSignals {
@@ -87,6 +98,11 @@ internal object RecordingDiagnostics {
             "服务启动：${age("service_start_at")} · 累计 ${long("start_count")} 次",
             "服务心跳：${age("heartbeat_at")}（仅进程活性）",
             "GPS 注册：${age("registration_at")} · ${string("registration")}",
+            "本次服务：GPS回调 ${long("session_gps_count")} / 有效GPS ${long("session_valid_gps_count")} / 已入库 ${long("session_saved_count")} / 过滤 ${long("session_filtered_count")}",
+            "系统GPS/订阅：${string("provider_state")} · ${age("provider_at")}（订阅成功不代表已定位）",
+            "卫星状态：${string("gnss_state")} · ${age("gnss_state_at")}",
+            "最近卫星观测：${if (long("gnss_at") == 0L) "无" else "可见 ${long("gnss_visible")} / 参与定位 ${long("gnss_used")} · ${age("gnss_at")}"}",
+            "本次GNSS首次定位：${age("gnss_first_fix_at")} · ${if (long("gnss_first_fix_at") == 0L) "耗时未知" else "耗时 ${long("gnss_ttff_ms")} 毫秒"}（不等于GPS回调或入库）",
             "GPS 最近回调：${age("gps_callback_at")} · 累计 ${long("gps_count")} 次",
             "最近有效 GPS：${age("valid_gps_at")} · 累计 ${long("valid_gps_count")} 次（通过时间、坐标、精度检查）",
             "最近入库：${age("saved_at")} · 累计 ${long("saved_count")} 点（实际 SQLite 提交）",
@@ -99,7 +115,8 @@ internal object RecordingDiagnostics {
             "屏幕/省电/待机：${string("power_state")} · ${age("power_at")}",
             "最近事件：${string("last_event")}",
             "诊断保存：${if (failed) "写入失败，等待重试" else "正常"}",
-            "普通GPS计数约每30秒持久化，重大异常即时保存；断档不等于厂商杀后台。"
+            "历史累计跨服务/升级保留；有效GPS计数自支持该字段的版本起，不可与更早回调/入库总数直接相减。请用本次服务四阶段计数比较。",
+            "普通GPS计数约每30秒持久化，重大异常即时保存；卫星回调受系统/设备支持及前台限制，未收到不等于无卫星。断档不等于厂商杀后台。"
         ).joinToString("\n")
     }
 }

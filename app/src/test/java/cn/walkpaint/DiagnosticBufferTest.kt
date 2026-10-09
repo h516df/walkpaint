@@ -53,4 +53,32 @@ class DiagnosticBufferTest {
         assertEquals(7L, reloaded.long("saved_count"))
         assertEquals(6L, disk["saved_count"])
     }
+    @Test fun sessionStagesNeverReuseHistoricGpsOrSavedCounters() {
+        val b=DiagnosticBuffer(mapOf("gps_count" to 136L,"saved_count" to 43L))
+        b.record("start","USER_OR_BOOT_START",1000)
+        b.record("gps","GPS_CALLBACK",2000)
+        b.record("valid_gps","VALID_GPS_RECEIVED",2001)
+        b.record("saved","SQLITE_SAVED",2002)
+        b.record("filtered","STATIONARY_OR_SMALL_MOVE",3000)
+        assertEquals(1L,b.long("session_gps_count"))
+        assertEquals(1L,b.long("session_valid_gps_count"))
+        assertEquals(1L,b.long("session_saved_count"))
+        assertEquals(1L,b.long("session_filtered_count"))
+        b.record("start","STICKY_RESTART",4000)
+        assertEquals(0L,b.long("session_gps_count"))
+        assertEquals(0L,b.long("session_saved_count"))
+        assertEquals(137L,b.long("gps_count"));assertEquals(44L,b.long("saved_count"))
+    }
+    @Test fun gnssEvidenceDoesNotPretendGpsWasReceivedOrSavedAndResetsOnRestart() {
+        val b=DiagnosticBuffer()
+        b.record("start","USER_OR_BOOT_START",1000)
+        b.satellites(12,0,2000)
+        b.record("gnss_first","GNSS_FIRST_FIX",3000,1800)
+        assertEquals(12L,b.long("gnss_visible"));assertEquals(0L,b.long("gnss_used"))
+        assertEquals(1800L,b.long("gnss_ttff_ms"));assertEquals(0L,b.long("gap_count"))
+        assertEquals(0L,b.long("gps_count"));assertEquals(0L,b.long("saved_count"))
+        b.record("start","STICKY_RESTART",4000)
+        assertEquals(0L,b.long("gnss_at"));assertEquals(0L,b.long("gnss_first_fix_at"))
+        assertFalse(b.snapshot().keys.any { it.contains("lat") || it.contains("lon") || it.contains("route") })
+    }
 }

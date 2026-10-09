@@ -57,6 +57,30 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
         val prefs=mutableSetOf<String>()
         var resultCode=Activity.RESULT_CANCELED
         try {
+            // Real Android main Handler: a transient provider exception must leave a next tick.
+            val latch=java.util.concurrent.CountDownLatch(1)
+            val attempts=java.util.concurrent.atomic.AtomicInteger()
+            val failures=java.util.concurrent.atomic.AtomicInteger()
+            val handler=android.os.Handler(android.os.Looper.getMainLooper())
+            val loop=HealthCheckLoop({attempts.get()<2}, {
+                if(attempts.incrementAndGet()==1) throw SecurityException("isolated provider probe")
+                latch.countDown()
+            }, {failures.incrementAndGet()}, {handler.postDelayed(it,20)})
+            handler.post(loop)
+            check(latch.await(5,java.util.concurrent.TimeUnit.SECONDS))
+            check(attempts.get()==2 && failures.get()==1)
+            handler.removeCallbacks(loop)
+            // No preferences or live service fault injection; isolated stage evidence.
+            val stages=DiagnosticBuffer(mapOf("gps_count" to 136L,"saved_count" to 43L))
+            stages.record("start","ISOLATED_SESSION",1000)
+            stages.satellites(10,0,2000)
+            check(stages.long("session_gps_count")==0L && stages.long("session_saved_count")==0L)
+            stages.record("gps","GPS_CALLBACK",3000)
+            stages.record("valid_gps","VALID_GPS_RECEIVED",3001)
+            stages.record("saved","SQLITE_SAVED",3002)
+            check(stages.long("session_gps_count")==1L && stages.long("session_valid_gps_count")==1L && stages.long("session_saved_count")==1L)
+            stages.record("start","ISOLATED_RESTART",4000)
+            check(stages.long("session_gps_count")==0L && stages.long("gnss_at")==0L)
             fun testContext(name:String): Context = object: ContextWrapper(targetContext) {
                 override fun getDatabasePath(n:String)=File(root,"$name-$n")
                 override fun getFilesDir()=File(root,"$name-files").apply { mkdirs() }

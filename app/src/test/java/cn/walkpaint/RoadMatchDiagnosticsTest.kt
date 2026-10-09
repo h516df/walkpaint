@@ -22,7 +22,7 @@ class RoadMatchDiagnosticsTest {
         val parallel=RoadSegment("parallel",road.points.map { it.copy(lat=it.lat+0.00001) })
         val catalog=RoadCatalog(listOf(road,parallel))
         assertNull(catalog.traversed(a,b))
-        assertTrue(RoadMatchDiagnostics.reason(a,b,catalog).contains("无法唯一匹配"))
+        assertTrue(RoadMatchDiagnostics.reason(a,b,catalog).contains("多条道路歧义"))
     }
     @Test fun reportIsCoordinateFreeAndDoesNotMutateHistory() {
         val state=TrackState(listOf(Track("private-id",1000,false,listOf(a,b))))
@@ -31,5 +31,20 @@ class RoadMatchDiagnosticsTest {
         assertFalse(report.contains("private-id"));assertFalse(report.contains("51.75"))
         assertTrue(report.contains("当前道路包可确认"));assertEquals(0.0,roads.meters,0.0)
         assertEquals(listOf(a,b),state.realTracks.single().points)
+    }
+    @Test fun gridCandidateOutsidePhysicalRadiusIsDifferentFromEmptyCatalog() {
+        val far=road.copy(geometry=road.points.map { it.copy(lat=it.lat+0.0005) })
+        val catalog=RoadCatalog(listOf(far))
+        assertTrue(catalog.near(a).isNotEmpty())
+        assertNull(catalog.traversed(a,b))
+        assertTrue(RoadMatchDiagnostics.reason(a,b,catalog).contains("超出匹配半径"))
+    }
+    @Test fun selfCrossingIsNotMisreportedAsParallelRoad() {
+        val x=RoadSegment("loop",listOf(a.copy(lon=a.lon-0.0003,lat=a.lat-0.0003),
+            a.copy(lon=a.lon+0.0003,lat=a.lat+0.0003),
+            a.copy(lon=a.lon-0.0003,lat=a.lat+0.0003),
+            a.copy(lon=a.lon+0.0003,lat=a.lat-0.0003)))
+        val inspect=RoadMatcher.inspect(a,listOf(x))
+        assertNull(inspect.match);assertTrue(inspect.reason.contains("同一道路几何歧义"))
     }
 }
