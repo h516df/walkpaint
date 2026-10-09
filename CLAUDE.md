@@ -20,7 +20,7 @@
 - 道路matcher与SAVEPOINT事务沿用v0.6；重复去重、歧义/差精度/断档/包外拒绝保持。当天显示只读已确认匹配，不能修改原行或跨trip/segment画连接线。
 - 下载仅本次明确同意区域/IP后请求overpass-api.de；不自动上传位置、整城更新、重试换服务。联网底图同意独立，默认离线。
 - Issue #4 已记载本机合法 Android Key 配置在 Git 忽略 local.properties；不得读取、打印或提交值。v0.8 高德实际模拟器渲染通过，vivo/中国道路对齐未测；SDK 初始化须独立同意，撤回可回退合法离线。GPS/OSM 为 WGS84，高德仅显示边界转换一次。
-- Android自动验收只允许127.0.0.1:16384 MuMu或emulator-*。MuMu回报V2284A也不是实际vivo；无真机时标BLOCKED，不能以模拟器/单测代替真机户外/长期后台。
+- Android 自动验收只允许 Google 官方 AVD：设备必须为 emulator-5556，且 AVD 名称必须是 WalkPaint_Google_API36、系统已启动。用户个人 MuMu (127.0.0.1:16384)、其他模拟器和真机严禁用于任何自动化测试、模拟位置、APK 安装。脚本先调用 scripts/google_avd_guard.py 检查真实设备身份；Google AVD 不可用时标记 BLOCKED，绝不降级到 MuMu。Google AVD 通过不代表用户 vivo 户外或长期后台已验收。 Google AVD 采用 x86_64，必须构建无 walkpaintArm64Only=true 的 universal debug APK；手机 arm64-only 预览包不能冒充 x86_64 模拟器验收。
 - 禁止svc wifi/data disable、卸载、清库、重启共享ADB。只做已有恢复通道的模拟器测试，finally恢复provider/Mock Location/原权限/位置开关/旋转/临时文件并实读。
 - 保存对应Git SHA/最终APK与已安装指纹、原行包含比较、截图与清理结果；verification/APK/凭据/私人GPS不提交或自动上传。catalogProbe只读目录与固定公开fixture，networkProbe默认关闭，禁止用真实GPS选网络测试区域。
 - 历史v0.7的76项JVM、隔离库与P0 MuMu分项通过；整链重开曾FAIL并观测系统进程重启，原因未确定；同APK独立恢复专项PASS。不能称整链稳定通过。长时间Doze/厂商策略/重启/耗电/真实用户偏移仍未测；精确状态见HANDOFF，不能声称永不停止。
