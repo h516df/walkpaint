@@ -24,7 +24,8 @@ import com.amap.api.maps.model.PolylineOptions
  * Conversion is performed exactly once at the display boundary.
  * Do not call create() until the user has explicitly accepted the AMap SDK privacy notice.
  */
-internal class AmapMapController(private val context: Context) {
+internal class AmapMapController(private val context: Context, private val onGesture:()->Unit,
+                                 private val onReady:()->Unit) {
     private var currentView: MapView? = null
     private var map: AMap? = null
     private var currentMarker: Marker? = null
@@ -53,7 +54,22 @@ internal class AmapMapController(private val context: Context) {
         map = view.map
         map?.uiSettings?.isZoomControlsEnabled = false
         map?.uiSettings?.isCompassEnabled = false
-        map?.uiSettings?.isRotateGesturesEnabled = false
+        map?.uiSettings?.isRotateGesturesEnabled = true
+        var downX=0f;var downY=0f
+        val slop=android.view.ViewConfiguration.get(context).scaledTouchSlop
+        val taps=android.view.GestureDetector(context,object:android.view.GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(e:android.view.MotionEvent)=true
+            override fun onDoubleTap(e:android.view.MotionEvent):Boolean { onGesture();return false }
+        })
+        map?.setOnMapTouchListener { event ->
+            taps.onTouchEvent(event)
+            when(event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> { downX=event.x;downY=event.y }
+                android.view.MotionEvent.ACTION_POINTER_DOWN -> onGesture()
+                android.view.MotionEvent.ACTION_MOVE -> if(kotlin.math.hypot(event.x-downX,event.y-downY)>slop) onGesture()
+            }
+        }
+        map?.setOnMapLoadedListener { onReady() }
         map?.uiSettings?.isTiltGesturesEnabled = false
         latestPosition = location
         initialFocusPending = true
@@ -103,6 +119,17 @@ internal class AmapMapController(private val context: Context) {
         initialFocusPending=false
         map?.animateCamera(CameraUpdateFactory.newLatLngZoom(toAmap(lat, lon), zoom.toFloat()))
     }
+
+    fun followCamera(fix: Location, bearing: Float, animate: Boolean) {
+        val a=map ?: return
+        val current=a.cameraPosition
+        val target=com.amap.api.maps.model.CameraPosition.builder(current)
+            .target(toAmap(fix.latitude,fix.longitude)).bearing(bearing)
+            .zoom(if(current.zoom<5f) 18f else current.zoom).build()
+        val update=CameraUpdateFactory.newCameraPosition(target)
+        if(animate) a.animateCamera(update,200,null) else a.moveCamera(update)
+    }
+    fun cancelFollowingAnimation() { map?.stopAnimation() }
 
     fun view(): MapView? = currentView
 

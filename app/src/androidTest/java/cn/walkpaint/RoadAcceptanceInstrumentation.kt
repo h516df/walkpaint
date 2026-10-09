@@ -14,8 +14,14 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
     private var networkProbe=false
     private var catalogProbe=false
     private var fixtureProbe=false
+    private var cameraProbe=false
     override fun onStart() {
         val result = Bundle()
+        if(cameraProbe) {
+            try { CameraFollowProbe(this).run();result.putString("stream","PUBLIC_CAMERA_BEARING_ZOOM_SENSOR_LIFETIME_PASS");finish(Activity.RESULT_OK,result) }
+            catch(e:Throwable) { result.putString("stream","PUBLIC_CAMERA_PROBE_FAIL: ${e.javaClass.simpleName}: ${e.message}");finish(Activity.RESULT_CANCELED,result) }
+            return
+        }
         if(fixtureProbe) {
             // Only fixed public fixture sections; no real-GPS-derived lookup or database writes.
             try {
@@ -83,6 +89,15 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
         val prefs=mutableSetOf<String>()
         var resultCode=Activity.RESULT_CANCELED
         try {
+            for (turn in listOf(0f,90f,180f,359f)) {
+                val radians=Math.toRadians(turn.toDouble())/2
+                val vector=floatArrayOf(0f,0f,-kotlin.math.sin(radians).toFloat(),kotlin.math.cos(radians).toFloat())
+                for(rotation in 0..3) {
+                    val actual=ScreenHeading.angle(vector,rotation)!!
+                    val expected=HeadingFilter.normalize(turn+rotation*90f)
+                    check(kotlin.math.abs(HeadingFilter.delta(expected,actual))<.02f) { "SCREEN_HEADING: public=$turn rotation=$rotation expected=$expected actual=$actual" }
+                }
+            }
             // Real Android main Handler: a transient provider exception must leave a next tick.
             val latch=java.util.concurrent.CountDownLatch(1)
             val attempts=java.util.concurrent.atomic.AtomicInteger()
@@ -237,5 +252,5 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
         // finish() can terminate the instrumented process immediately; cleanup must precede it.
         finish(resultCode,result)
     }
-    override fun onCreate(arguments:Bundle?) { fixtureProbe=arguments?.getString("fixtureProbe")=="true"; catalogProbe=arguments?.getString("catalogProbe")=="true"; networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments); start() }
+    override fun onCreate(arguments:Bundle?) { cameraProbe=arguments?.getString("cameraProbe")=="true"; fixtureProbe=arguments?.getString("fixtureProbe")=="true"; catalogProbe=arguments?.getString("catalogProbe")=="true"; networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments); start() }
 }

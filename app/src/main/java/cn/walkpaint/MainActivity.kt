@@ -73,7 +73,16 @@ class MainActivity : ComponentActivity() {
     private var backgroundGranted by mutableStateOf(false)
     private var amapConsent by mutableStateOf(false)
     private var showAmapConsent by mutableStateOf(false)
-    private val amapController by lazy { AmapMapController(this) }
+    private val follow=MapFollowState()
+    private var activityResumed=false
+    private var mapHeading=0f
+    private var lastCameraPoint:TrackPoint?=null
+    private var lastCameraBearing=0f
+    private val headingSensor by lazy { HeadingSensor(this,
+        { @Suppress("DEPRECATION") windowManager.defaultDisplay.rotation },
+        { bearing -> mapHeading=bearing ?: 0f;syncFollowCamera() }) }
+    private val amapController by lazy { AmapMapController(this,::pauseMapFollowing,
+        { syncFollowCamera(force=true) }) }
     private val amapActive get() = BuildConfig.AMAP_KEY.isNotBlank() && amapConsent
     private var showDiagnostics by mutableStateOf(false)
     private var diagnosticText by mutableStateOf("")
@@ -89,7 +98,10 @@ class MainActivity : ComponentActivity() {
     private var roadAreaHint by mutableStateOf("")
     private var boundaryCatalog: RoadCatalog?=null
     private var boundaryRoads: List<RoadSegment>?=null
-    private fun clearDaySelection() { selectedDay=null;lastRevision=-1;updateUi() }
+    private fun clearDaySelection() {
+        selectedDay=null;pendingTripFocus=null;follow.locate();lastCameraPoint=null
+        lastRevision=-1;updateUi();syncFollowCamera(force=true)
+    }
     private var roadBusy by mutableStateOf(false)
     private var roadMessage by mutableStateOf("")
     private var showRoadPack by mutableStateOf(false)
@@ -231,7 +243,10 @@ class MainActivity : ComponentActivity() {
             ) {
                 AppShell(
                     selectedTab = currentTab,
-                    onTab = { currentTab = it },
+                    onTab = {
+                        if(it==0 && currentTab!=0 && selectedDay==null) { follow.locate();lastCameraPoint=null }
+                        currentTab=it;syncHeadingLifecycle()
+                    },
                     state = snapshot,
                     fix = userFix,
                     automatic = trackingEnabled,
@@ -262,6 +277,7 @@ class MainActivity : ComponentActivity() {
                         }.onFailure { toast("演示数据不可写入，请检查存储") }
                     },
                     onTrip = { trip ->
+                        follow.history();syncHeadingLifecycle()
                         selectedDay=DailyFootprints.key(trip.started)
                         lastRevision=-1
                         val p = trip.points.lastOrNull()
@@ -568,7 +584,8 @@ class MainActivity : ComponentActivity() {
             askLocation()
             return
         }
-        val fix = userFix ?: latestSystemLocation()
+        val fix = chooseMapFix(listOfNotNull(userFix,latestSystemLocation(),AmbientTracking.lastGps))
+            ?.takeIf { follow.accepts(fixQuality(it)) }
         if (fix != null) {
             updatePosition(fix, true)
             pendingCenter = false
@@ -655,10 +672,7 @@ class MainActivity : ComponentActivity() {
         userFix = chosen
         AmbientTracking.lastFix = chosen
         updateLocationLayer()
-        if (center || firstMapCenter) {
-            focusCoordinate(chosen.latitude, chosen.longitude, 18.0)
-            firstMapCenter = false
-        }
+        syncFollowCamera(force=center || firstMapCenter)
     }
 
     private fun trackingDiagnostics(): String {
@@ -735,6 +749,9 @@ class MainActivity : ComponentActivity() {
         view.getMapAsync { loaded ->
             if (mapWidget !== view) return@getMapAsync
             mapInstance = loaded
+            loaded.addOnCameraMoveStartedListener { reason ->
+                if(reason==MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) pauseMapFollowing()
+            }
             val builder = if(onlineMap) Style.Builder().fromUri("https://tiles.openfreemap.org/styles/liberty")
                 else Style.Builder().fromJson("""{"version":8,"sources":{},"layers":[{"id":"local-background","type":"background","paint":{"background-color":"#F4F7F5"}}]}""")
             loaded.setStyle(builder) { style ->
@@ -769,7 +786,7 @@ class MainActivity : ComponentActivity() {
                         LatLng(selected.first, selected.second), selected.third))
                     pendingTripFocus = null
                     firstMapCenter = false
-                } else if (fix != null) {
+                } else if (fix != null && follow.mode==MapFollowState.Mode.FOLLOWING) {
                     updatePosition(fix, true)
                 } else {
                     val recent = snapshot.realTracks.flatMap { it.points }.lastOrNull()
@@ -794,6 +811,44 @@ class MainActivity : ComponentActivity() {
     private fun updateLocationLayer() {
         if (amapActive) amapController.updateUser(userFix)
         else mapInstance?.style?.getSourceAs<GeoJsonSource>("wp-user")?.setGeoJson(userJson(userFix))
+        syncHeadingLifecycle()
+        syncFollowCamera()
+    }
+
+    private fun fixQuality(fix:Location)=MapFixQuality(fix.provider,
+        (android.os.SystemClock.elapsedRealtimeNanos()-fix.elapsedRealtimeNanos)/1_000_000L,fix.accuracy)
+
+    private fun syncHeadingLifecycle() {
+        follow.visible=activityResumed && currentTab==0
+        headingSensor.setActive(follow.following && userFix?.let { follow.accepts(fixQuality(it)) }==true)
+    }
+
+    private fun pauseMapFollowing() {
+        follow.gesture();amapController.cancelFollowingAnimation();mapInstance?.cancelTransitions()
+        syncHeadingLifecycle()
+    }
+
+    private fun syncFollowCamera(force:Boolean=false) {
+        if(!follow.following) return
+        val fix=userFix?.takeIf { follow.accepts(fixQuality(it)) } ?: return
+        val point=TrackPoint(fix.latitude,fix.longitude,fix.elapsedRealtimeNanos/1_000_000L,fix.accuracy)
+        if(!force && !CameraFixPolicy.plausible(lastCameraPoint,point)) return
+        if(!force && lastCameraPoint?.let { Geo.meters(it,point)<1.0 }==true &&
+            kotlin.math.abs(HeadingFilter.delta(lastCameraBearing,mapHeading))<1f) return
+        val animate=Settings.Global.getFloat(contentResolver,Settings.Global.ANIMATOR_DURATION_SCALE,1f)>0f
+        if(amapActive) {
+            if(amapController.view()==null) return
+            amapController.followCamera(fix,mapHeading,animate)
+        } else {
+            val map=mapInstance ?: return
+            val camera=map.cameraPosition
+            val target=org.maplibre.android.camera.CameraPosition.Builder(camera)
+                .target(LatLng(fix.latitude,fix.longitude)).bearing(mapHeading.toDouble())
+                .zoom(if(camera.zoom<5.0)18.0 else camera.zoom).build()
+            val update=CameraUpdateFactory.newCameraPosition(target)
+            if(animate) map.easeCamera(update,200) else map.moveCamera(update)
+        }
+        lastCameraPoint=point;lastCameraBearing=mapHeading;firstMapCenter=false
     }
 
     private fun geoJson(tracks: List<Track>): String = TrackMapJson.encode(tracks)
@@ -830,6 +885,7 @@ class MainActivity : ComponentActivity() {
             if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) view.onResume()
             onDispose {
                 lifecycle.removeObserver(observer)
+                headingSensor.stop()
                 runCatching { controller.release(view) }
             }
         }
@@ -856,6 +912,7 @@ class MainActivity : ComponentActivity() {
             if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) view.onResume()
             onDispose {
                 lifecycle.removeObserver(observer)
+                headingSensor.stop()
                 runCatching { view.onPause(); view.onStop(); view.onDestroy() }
                 if (mapWidget === view) { mapWidget = null; mapInstance = null }
             }
@@ -871,6 +928,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        activityResumed=true;syncHeadingLifecycle()
         if (pendingSettingsEnable && AmbientTracking.hasFineLocation(this)) {
             pendingSettingsEnable = false
             AmbientTracking.setEnabled(this, true)
@@ -883,10 +941,12 @@ class MainActivity : ComponentActivity() {
         }
     }
     override fun onPause() {
+        activityResumed=false;syncHeadingLifecycle()
         locationManager?.let { runCatching { it.removeUpdates(visibleLocationListener) } }
         super.onPause()
     }
     override fun onDestroy() {
+        headingSensor.stop()
         roadDownload?.cancel()
         mainHandler.removeCallbacksAndMessages(null)
         refreshExecutor.shutdown()
