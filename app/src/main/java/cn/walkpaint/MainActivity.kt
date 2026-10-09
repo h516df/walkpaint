@@ -747,7 +747,7 @@ class MainActivity : ComponentActivity() {
                     updateUi()
                 }
             } }.onFailure { e -> runOnUiThread {
-                RecordingDiagnostics.problem(this,ProblemCode.ROAD_DOWNLOAD_FAILED)
+                if(!job.isCancelled) RecordingDiagnostics.problem(this,ProblemCode.ROAD_DOWNLOAD_FAILED)
                 if(!isDestroyed) {
                     roadBusy=false; roadDownload=null
                     android.util.Log.w("WalkPaintRoads", "failure="+e.javaClass.simpleName+";cause="+(e.cause?.javaClass?.simpleName ?: "none"))
