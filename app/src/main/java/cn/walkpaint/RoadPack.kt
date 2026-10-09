@@ -129,11 +129,12 @@ internal class RoadCatalog(val roads: List<RoadSegment>) {
 
 internal data class RoadState(val roads: List<RoadSegment> = emptyList(),
     val intervals: List<PaintedInterval> = emptyList(), val pairs: Int = 0, val unmapped: Int = 0,
-    val matched: Int = 0) {
+    val matched: Int = 0, val error: String? = null) {
     val coverage = RoadCoverage(intervals)
     val meters get() = coverage.meters
     val totalMeters get() = roads.sumOf { it.length }
-    val summary get() = if (roads.isEmpty()) "未导入道路包 · 不会把 GPS 折线当道路"
+    val summary get() = if(error != null) error
+        else if (roads.isEmpty()) "未导入道路包 · 不会把 GPS 折线当道路"
         else "累计涂色 %.0f 米 / 已导入 %.0f 米 · %d 条道路\n%d 段未确认（断档、路口、精度或包外），%d 段已确认".format(
             meters,totalMeters,roads.size,unmapped,matched)
     fun geoJson(painted: Boolean): String {

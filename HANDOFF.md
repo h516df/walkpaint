@@ -1,4 +1,32 @@
-# HANDOFF — v0.5 真实道路涂色本地交付（2026-10-09）
+# HANDOFF — v0.5 道路故障隔离修复（2026-10-09）
+
+> 本节为当前交付，优先于下方旧 APK 和历史暂停记录。同一会话、唯一写手、D:\Projects\WalkPaint、feat/v05-real-road-coverage；修复基线 1c46f5ae3d274577e46f1321c922f458dff96a71。仅本地提交，不 push、不发布。最终提交见 git log -1。
+
+## 最小修复
+
+- 已接受 GPS 先在原事务写入，paintPair 单独使用 SAVEPOINT。道路 catalog / matcher / 匹配行 / 覆盖区间失败时，ROLLBACK TO 完整撤销道路写入，再释放 savepoint 并提交 GPS；不会留下半个匹配记录或半个累计区间，也不会设置永久 GPS lastError。失败的匹配保留未确认，重新导入合法道路包回算全部原始 GPS。
+- SAVEPOINT 创建、回滚、释放失败不吞掉，仍进入原始 GPS 写入失败路径；原 points insertOrThrow 及 lastError 行为保留。检查 Android insertWithOnConflict 的 -1 返回，避免道路写入错误被静默当成功。schema2、versionCode6、GPS 阈值及原签名不变。
+- 道路读取失败返回明确的道路错误状态，让界面仍能刷新原始 GPS。有效道路重导入可替换同 ID 的损坏几何，并在整个导入事务成功后清除道路错误。没有迁移、清库或更改原 trips/points。
+- 可选底图同意持久保存在本机：默认 false，只有明确选择“同意联网并记住”才会加载 OpenFreeMap，文案说明今后打开会联网以及视口/IP 风险；“使用离线道路”持久撤回。没有自动许可、足迹上传或公共瓦片道路采集。
+
+## 当前产物和验证
+
+- 当前 [APK](app/build/outputs/apk/debug/app-debug.apk) SHA256：ada9714cfbeedceb754aac4d6cff6ce089d4cae46443d4d242c709dde3e07744。apksigner 验证通过，证书 SHA256 21b74e3e2a10e12da8284d4e6bd7d99e55b00a385215902e94d7896f7a46c967，与 v0.4/v0.5 原签名一致。
+- JVM 41 tests / 0 failures / 0 errors；testDebugUnitTest、assembleDebug、assembleDebugAndroidTest 离线构建成功。日志 verification/v05-reliability/gradle.log；原有单测不变。
+- **先复现再修复**：新隔离 instrumentation 在旧 APK 8c75e085... 上失败，明确报 road catalog failure discarded accepted GPS，记录 verification/v05-reliability/regression-before.txt。未修改实际足迹库。
+- **最终 APK Android 隔离回归通过**：使用 UUID cache 数据库和有源许可的真实 Oxford 道路。损坏 geometry JSON 后两次 GPS 均保留，lastError 为空，道路错误可读，原 coverage/matches 不变；有效重导入恢复已遗漏覆盖和清除道路错误。coverage INSERT trigger 在 road_matches INSERT 与旧区间 DELETE 之后报错，验证两次后续 GPS 均保存，整个道路状态保持原样；撤掉故障后有效重导入恢复。points INSERT trigger 则明确返回 false、lastError 非空、没有新增 raw 行或覆盖。证据 verification/v05-reliability/database-tests-final.txt，包含 accepted GPS survives catalog and partial coverage failures / valid reimport recovers / raw GPS write failure remains fatal。
+- 原 v1 行/ID 升级、备份往返、重复导入、integrity_check 和测试 cache/prefs 清理继续验证；故障注入仅针对隔离测试库。原实际库没有故障 trigger、坏道路或测试数据库替换。
+- **最终 APK MuMu 真入口 smoke 通过**：仅 127.0.0.1:16384，Android15/API35，覆盖安装 -r，实际系统文件选择器重导入道路。83 个原点及所有 trips/points 全行保留，新增1个明确模拟 GPS 到84；实际地图道路覆盖42.643米，3442个青绿道路像素，人工查看 [最终地图](verification/v05-reliability/final-apk-map.png)。记录 verification/v05-reliability/acceptance.json，V05_FINAL_APK_SMOKE_PASS，cleanup_errors=[]。此次没有重复完整45秒长断档链路，沿用下方原 v0.5 完整链路证据及未改的 JVM 边界测试。
+- 收尾实读已安装 base.apk 的 SHA256，与当前构建 ada9714c... 完全一致；再次核对84点和全行保留。实际点击“使用离线道路”，强停后重开，确认本机同意标志为 false 且页面显示“本地离线道路”；人工检查 [同意说明](verification/v05-reliability/basemap-consent-dialog.png) 和 [重开后的地图](verification/v05-reliability/final-after-regression-map.png)。final-checks.json 记录通过、测试库/prefs 无遗留及 MOCK_LOCATION=No operations / Default mode: deny；没有保留模拟定位授权。测试 provider 和旋转设置已恢复。
+- 收尾脚本两处检查问题已纠正：返回 App 仍在“我的”页时不能直接点地图道路图例，改为真实强停重开并选择地图；MuMu 未授权 mock 的返回是“No operations / Default mode: deny”，不能要求输出小写 default。故障回归和首轮最终 APK smoke 已成功，两处均未改变产品代码、旧数据或覆盖；改完后只补核对失败的收尾项。
+
+## 限制与回退
+
+仅 Android15/API35 模拟器运行验收。兼容旧 Android SQL classifier 的前导空语句 ROLLBACK TO 已在当前模拟器验证；Android8/API26 等旧系统未运行验收。真实用户手机未操作、未升级，户外定位与 vivo 长期后台未验收。联网同意的正向加载未点击验收，整个测试仍为离线，未发送私人浏览区域。回退可从修复前提交构建 schema2 兼容 APK；不要卸载、清数据或降为 schema1 APK。
+
+---
+
+# HANDOFF — v0.5 真实道路涂色首次交付历史（2026-10-09）
 
 > 当前授权是继续开发并本地交付；本节优先于下方历史暂停及 v0.4 记录。唯一写手，工作目录 D:\Projects\WalkPaint，分支 feat/v05-real-road-coverage，起点 5446e20c2efbde480498159e7f21cb739879b874（v0.4）。本地可运行道路切片已验证；没有 push、release、付费服务、第三方足迹上传或用户手机操作。最终本地提交 SHA 请以该分支 git log -1 为准。
 

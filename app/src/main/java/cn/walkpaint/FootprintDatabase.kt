@@ -21,6 +21,8 @@ class FootprintDatabase(private val context: Context) :
 
     @Volatile var lastError: String? = null
         private set
+    @Volatile internal var lastRoadError: String? = null
+        private set
     @Volatile var lastFilterReason: String = "NONE"
         private set
     @Volatile var revision: Long = 0
@@ -77,10 +79,25 @@ class FootprintDatabase(private val context: Context) :
     }
     private fun paintPair(db: SQLiteDatabase, pointId: Long, a: TrackPoint, b: TrackPoint) {
         val interval = catalog().traversed(a,b)
-        db.insertWithOnConflict("road_matches",null,ContentValues().apply {
+        check(db.insertWithOnConflict("road_matches",null,ContentValues().apply {
             put("point_id",pointId); put("matched",if(interval == null) 0 else 1)
-        },SQLiteDatabase.CONFLICT_REPLACE)
+        },SQLiteDatabase.CONFLICT_REPLACE) != -1L) { "道路匹配写入失败" }
         if(interval != null) saveInterval(db,interval)
+    }
+    /** Raw point is already inserted in the outer transaction. Road work alone may be undone. */
+    private fun paintPairIsolated(db: SQLiteDatabase, pointId: Long, a: TrackPoint, b: TrackPoint) {
+        db.execSQL("SAVEPOINT wp_road") // Failure to create/restore a savepoint is a real DB failure.
+        try {
+            paintPair(db,pointId,a,b)
+        } catch (_: Exception) {
+            // The leading empty statement prevents old Android SQL classifiers from treating
+            // ROLLBACK TO as a full transaction abort (minSdk26). SQLite still executes it normally.
+            db.execSQL(";ROLLBACK TO SAVEPOINT wp_road")
+            roadCatalog = null
+            lastRoadError = "道路涂色暂不可用，请重新导入有效道路包；GPS 记录独立保存"
+        }
+        // Do not swallow rollback/release failures: the outer GPS transaction must fail honestly.
+        db.execSQL("RELEASE SAVEPOINT wp_road")
     }
     private fun rebuildCoverage(db: SQLiteDatabase) {
         db.delete("road_matches",null,null)
@@ -97,10 +114,16 @@ class FootprintDatabase(private val context: Context) :
         }
     }
     @Synchronized internal fun roadSnapshot(): RoadState {
-        val counts = readableDatabase.rawQuery("SELECT COUNT(*),COALESCE(SUM(matched),0) FROM road_matches",null).use {
-            it.moveToFirst(); it.getInt(0) to it.getInt(1)
+        try {
+            val counts = readableDatabase.rawQuery("SELECT COUNT(*),COALESCE(SUM(matched),0) FROM road_matches",null).use {
+                it.moveToFirst(); it.getInt(0) to it.getInt(1)
+            }
+            return RoadState(catalog().roads,intervals(readableDatabase),counts.first,counts.first-counts.second,counts.second,lastRoadError)
+        } catch (_: Exception) {
+            roadCatalog = null
+            lastRoadError = "道路涂色暂不可用，请重新导入有效道路包；GPS 记录独立保存"
+            return RoadState(error=lastRoadError)
         }
-        return RoadState(catalog().roads,intervals(readableDatabase),counts.first,counts.first-counts.second,counts.second)
     }
     private fun putPack(db: SQLiteDatabase, pack: RoadPack) {
         pack.roads.forEach { r ->
@@ -109,11 +132,11 @@ class FootprintDatabase(private val context: Context) :
                 if(it.moveToFirst()) it.getString(0) else null
             }
             if(old != null && old != r.stableId) db.delete("roads","id=?",arrayOf(old))
-            db.insertWithOnConflict("roads",null,ContentValues().apply {
+            check(db.insertWithOnConflict("roads",null,ContentValues().apply {
                 put("id",r.stableId); put("osm_id",osmId); put("geometry",RoadPackCodec.coordinates(r.points).toString())
                 put("source",pack.source); put("name",pack.name)
                 put("osm_version",r.osmVersion); put("highway",r.highway)
-            },SQLiteDatabase.CONFLICT_IGNORE)
+            },SQLiteDatabase.CONFLICT_REPLACE) != -1L) { "道路目录写入失败" }
         }
     }
     @Synchronized internal fun importRoadPack(text: String): Int {
@@ -128,6 +151,7 @@ class FootprintDatabase(private val context: Context) :
             rebuildCoverage(db)
             db.setTransactionSuccessful()
         } finally { db.endTransaction(); roadCatalog = null }
+        lastRoadError = null
         revision++
         return pack.roads.size
     }
@@ -247,7 +271,7 @@ class FootprintDatabase(private val context: Context) :
                 put("time", now.time); put("accuracy", now.accuracy)
                 put("segment", stored.segment)
             })
-            if (!newTrip && previous != null) paintPair(db,pointId,previous,stored)
+            if (!newTrip && previous != null) paintPairIsolated(db,pointId,previous,stored)
             db.setTransactionSuccessful()
         } catch (e: Exception) {
             lastError = "足迹写入失败。请检查存储空间并尽快备份"

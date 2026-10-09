@@ -70,8 +70,58 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
             val duplicateRestore=FootprintDatabase(testContext("duplicate-restore")).also { databases+=it }
             check(duplicateRestore.importBackup(duplicated.toString())==1)
             check(duplicateRestore.snapshot().realPointCount==2)
+            // Regression: corrupt ONLY a dedicated test road database, never installed history.
+            val roadContext=testContext("road-reliability")
+            var logging=FootprintDatabase(roadContext).also { databases+=it }
+            logging.importRoadPack(fixture)
+            val road=RoadPackCodec.decode(fixture).roads.first { it.stableId.startsWith("osm:way:1675518:") }
+            val fixBase=System.currentTimeMillis()-90_000L
+            fun fix(offset:Double,step:Int): android.location.Location {
+                val p=RoadCoverage(listOf(PaintedInterval(road.stableId,0.0,offset))).highlighted(road).single().last()
+                return android.location.Location("gps").apply {
+                    latitude=p.lat; longitude=p.lon; accuracy=5f; time=fixBase+step*10_000L
+                }
+            }
+            check(logging.addPosition(fix(18.0,0)))
+            check(logging.addPosition(fix(32.0,1)))
+            val goodIntervals=logging.roadSnapshot().intervals
+            val goodMatches=logging.roadSnapshot().matched
+            check(goodIntervals.isNotEmpty())
+            logging.writableDatabase.execSQL("UPDATE roads SET geometry='malformed-json' WHERE id=?",arrayOf(road.stableId))
+            logging.close()
+            logging=FootprintDatabase(roadContext).also { databases+=it } // Evict the cached catalog.
+            check(logging.addPosition(fix(46.0,2))) { "road catalog failure discarded accepted GPS" }
+            check(logging.lastError==null && logging.snapshot().realPointCount==3)
+            check(logging.addPosition(fix(60.0,3))) { "road failure permanently stopped GPS logging" }
+            check(logging.lastError==null && logging.snapshot().realPointCount==4)
+            check(logging.roadSnapshot().error!=null) { "road error was hidden from UI or snapshot failed" }
+            check(logging.readableDatabase.rawQuery("SELECT COUNT(*) FROM road_matches",null).use { it.moveToFirst() && it.getInt(0)==goodMatches })
+            check(logging.readableDatabase.rawQuery("SELECT start,end FROM coverage",null).use { c ->
+                c.moveToFirst() && c.getDouble(0)==goodIntervals.single().from && c.getDouble(1)==goodIntervals.single().to && !c.moveToNext()
+            })
+            logging.importRoadPack(fixture)
+            val recovered=logging.roadSnapshot()
+            check(recovered.error==null && logging.lastRoadError==null)
+            check(recovered.meters>40 && recovered.matched==3) { "valid reimport did not recover missed coverage" }
+            // Fail AFTER the match row is inserted and old coverage has been deleted.
+            logging.writableDatabase.execSQL("CREATE TRIGGER road_failure BEFORE INSERT ON coverage BEGIN SELECT RAISE(ABORT,'road-only-test'); END")
+            check(logging.addPosition(fix(74.0,4))) { "road coverage write failure discarded GPS" }
+            check(logging.lastError==null && logging.snapshot().realPointCount==5)
+            check(logging.roadSnapshot().intervals==recovered.intervals && logging.roadSnapshot().matched==recovered.matched) { "partial road writes escaped rollback" }
+            check(logging.addPosition(fix(60.0,5))) { "further GPS fix did not persist after road write failure" }
+            check(logging.snapshot().realPointCount==6 && logging.roadSnapshot().intervals==recovered.intervals)
+            logging.writableDatabase.execSQL("DROP TRIGGER road_failure")
+            logging.importRoadPack(fixture)
+            check(logging.roadSnapshot().meters>55 && logging.roadSnapshot().matched==5)
+            check(logging.lastRoadError==null)
+            // Real raw-point failure MUST remain fatal and must not pretend to record.
+            logging.writableDatabase.execSQL("CREATE TRIGGER gps_failure BEFORE INSERT ON points BEGIN SELECT RAISE(ABORT,'gps-write-test'); END")
+            val finalCoverage=logging.roadSnapshot().intervals
+            check(!logging.addPosition(fix(46.0,6)) && logging.lastError!=null)
+            check(logging.snapshot().realPointCount==6 && logging.roadSnapshot().intervals==finalCoverage)
+            result.putString("road_regression","accepted GPS survives catalog and partial coverage failures; valid reimport recovers; raw GPS write failure remains fatal")
             databases.forEach { db -> check(db.readableDatabase.rawQuery("PRAGMA integrity_check",null).use { it.moveToFirst() && it.getString(0)=="ok" }) }
-            result.putString("stream","V05_ISOLATED_DATABASE_PASS: v1 rows and IDs preserved; road reimport atomic; backup roundtrip deduplicated\n")
+            result.putString("stream","V05_ISOLATED_DATABASE_PASS: v1 rows and IDs preserved; road reimport atomic; backup roundtrip deduplicated; ${result.getString("road_regression")}\n")
             resultCode=Activity.RESULT_OK
         } catch(e:Throwable) {
             result.putString("stream","V05_ISOLATED_DATABASE_FAIL: ${e.stackTraceToString()}\n")

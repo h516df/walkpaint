@@ -204,6 +204,7 @@ class MainActivity : ComponentActivity() {
         pendingSettingsEnable = savedInstanceState?.getBoolean("pendingSettingsEnable") ?: false
         MapLibre.getInstance(applicationContext)
         val mapPref = getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE)
+        onlineMap = mapPref.getBoolean("openfreemap_basemap_consent", false)
         amapConsent = mapPref.getBoolean("amap_sdk_consent", false)
         showAmapConsent = BuildConfig.AMAP_KEY.isNotBlank() &&
             !amapConsent && !mapPref.getBoolean("amap_sdk_decision_seen", false)
@@ -276,14 +277,18 @@ class MainActivity : ComponentActivity() {
                 if(showOnlineConsent) AlertDialog(
                     onDismissRequest={ showOnlineConsent=false },
                     title={ Text("联网显示底图？") },
-                    text={ Text("OpenFreeMap 将收到当前及浏览地图区域、IP 和地图请求；区域可能反映私人位置。不会上传足迹文件，也不从瓦片采集道路。默认本地离线显示，拒绝仍可记录、匹配和涂色。") },
+                    text={ Text("OpenFreeMap 将收到当前及浏览地图区域、IP 和地图请求；区域可能反映私人位置。同意后会记住选择，今后打开地图也会联网；可随时在此选择离线。不上传足迹文件，也不从瓦片采集道路。默认离线，拒绝仍可记录、匹配和涂色。") },
                     confirmButton={ Button(onClick={
                         onlineMap=true; showOnlineConsent=false
+                        getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE).edit()
+                            .putBoolean("openfreemap_basemap_consent",true).apply()
                         // Recreate only the map view after explicit consent.
                         currentTab=2
-                    }) { Text("本次同意联网") } },
+                    }) { Text("同意联网并记住") } },
                     dismissButton={ TextButton(onClick={
                         onlineMap=false; showOnlineConsent=false; currentTab=2
+                        getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE).edit()
+                            .putBoolean("openfreemap_basemap_consent",false).apply()
                     }) { Text("使用离线道路") } }
                 )
 
