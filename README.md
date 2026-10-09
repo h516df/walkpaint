@@ -1,21 +1,21 @@
 # 足迹涂色 · WalkPaint
 
-Android 私人足迹 App，**已发布 v0.7 私有测试版；P0 真机与整链稳定性待验收**：在应用内单次同意后下载附近 OSM 道路，也可导入本地文件；GPS 匹配真实道路几何，持久累计走过的道路区间，重复/反向重走不重复计数。青绿为已确认道路，灰色为未涂道路和细 GPS 参考；包外、路口歧义、断档和差精度保持未确认。**尚未完成用户手机户外及长期后台验收。**
+Android 道路探索涂色应用：授权一次，日常自动记录；走过的真实道路逐渐上色。v0.8 首页近全屏高德地图，柔和青绿道路、小蓝点、定位按钮和轻薄导航；成果在足迹，记录管理和诊断在我的。重复经过去重，歧义/漂移/断档保守拒绝；不显示 GPS 折线或用演示轨迹冒充涂色。
 
-## Issue #2 当前开发
+## v0.8 私有测试下载
 
-v0.7（code8，同包名同签名/schema2）已实现真实记录状态、无坐标后台诊断、按天查看足迹与确认道路、可靠GPS显示优先级及目录外提示。76项单测及隔离库回归通过；MuMu权限、后台/关屏保存、上色/去重、按天历史分项通过。整链强停重开时一次失败并观测系统进程重启，原因未确定；同APK独立恢复/暂停/再入库专项通过。vivo户外/长期后台仍BLOCKED。没有自动道路下载或新的位置上传。源码位于 issue-2-recording-health，依赖尚未合并的 PR #1；现沿用用户既有私有下载授权提供[v0.7测试下载](https://github.com/h516df/walkpaint/releases/tag/v0.7)，不合并代码或宣称P0已经完成。
+[手机 APK（约70MB）](https://github.com/h516df/walkpaint/releases/download/v0.8/WalkPaint-v0.8-arm64-debug.apk) · [私有预览发布](https://github.com/h516df/walkpaint/releases/tag/v0.8)。手机浏览器登录有权限 GitHub 账号后下载，直接同签名覆盖升级，勿卸载/清数据。安装后打开一次完成系统或独立地图 SDK 授权。只需手机操作，不需要到电脑旁或接 USB。
 
-手机下载：[v0.7 APK（约70MB）](https://github.com/h516df/walkpaint/releases/download/v0.7/WalkPaint-v0.7-arm64-debug.apk)，先在手机浏览器登录有仓库权限的GitHub账号。覆盖安装后打开一次；不需要连接本机USB来日常使用。本机同指纹包 [WalkPaint-v0.7-arm64-debug.apk](WalkPaint-v0.7-arm64-debug.apk)。具体指纹、模拟器证据、真机边界和回退见 [HANDOFF.md](HANDOFF.md)。复验入口：`python scripts/android_p0_acceptance.py --apk WalkPaint-v0.7-arm64-debug.apk --version-code 8 --output verification/issue-2-p0-complete`。只允许显式模拟器，保留全部旧行并恢复测试状态。
+code9 / version0.8 / schema2 / 原签名 / arm64。87项JVM、Android隔离库和MuMu实际UI/短时后台/小屏验收通过；[真实截图与测试边界](docs/evidence/V08.md)、[交接](HANDOFF.md)。**vivo 户外/长期后台以及真机79点、76未确认、0米的原因仍未验收，Issue #2 保持开放。** 源码 feat/v08-map-first，依赖尚未合并的PR #3/#1，未从旧main重做。
 
 ## 下载与运行
 
-- 当前手机测试版：[v0.7 APK](https://github.com/h516df/walkpaint/releases/download/v0.7/WalkPaint-v0.7-arm64-debug.apk)；[私有发布页](https://github.com/h516df/walkpaint/releases/tag/v0.7)。真实后台仍待验收，旧足迹通过覆盖安装保留，勿先卸载。
+- 历史v0.7：[v0.7 APK](https://github.com/h516df/walkpaint/releases/download/v0.7/WalkPaint-v0.7-arm64-debug.apk)；[私有发布页](https://github.com/h516df/walkpaint/releases/tag/v0.7)。真实后台仍待验收，旧足迹通过覆盖安装保留，勿先卸载。
 - 历史v0.6存档：[v0.6 APK（约70MB）](https://github.com/h516df/walkpaint/releases/download/v0.6/WalkPaint-v0.6-arm64-debug.apk)；[私有发布页](https://github.com/h516df/walkpaint/releases/tag/v0.6)。在手机浏览器登录有权限的GitHub账号后下载。
 - 本机安装包：[WalkPaint-v0.6-arm64-debug.apk](WalkPaint-v0.6-arm64-debug.apk)，通用包：[WalkPaint-v0.6-universal-debug.apk](WalkPaint-v0.6-universal-debug.apk)。包名 cn.walkpaint，versionCode7，versionName0.6，沿用原签名。最终手机包已在MuMu覆盖安装与真实下载入口验收通过；真机后台尚未验收，见 HANDOFF。
 - 已有旧版请**覆盖安装**，不要卸载或清除数据。SQLite schema1→2 只增加道路、覆盖和匹配表，保留全部旧 trips/points。旧 schema1 APK 不支持直接降级打开新库。
 - 首次主动同意自动记录并授权精确位置后，前台定位服务尝试连续记录，保留常驻通知；“我的”可暂停、查看无坐标诊断。系统省电/强停可能中断，强停后需手动打开。
-- 地图顶部或“我的 → 下载 / 查看附近道路”：取得当前位置后，点“下载附近道路”，阅读区域/IP说明并选择“同意并下载本次”；约1.2公里范围的道路保存到本机。之后离线走路、看确认匹配的道路变青绿；新区域需再次下载。没有自动联网刷新、自动重试或足迹上传。也可点“选择道路包文件”打开系统文件选择器。文件必须含合法来源声明、完整 WGS84 LineString、真实 OSM way ID 与版本。详见 [道路包说明](docs/ROAD_PACK.md)。仓库提供 [牛津真实道路测试包](app/src/test/resources/oxford-roads.geojson)，仅覆盖固定公开测试区域，不能给其他地区涂色。
+- “我的 → 附近道路”：取得当前位置后，点“下载附近道路”，阅读区域/IP说明并选择“同意并下载本次”；约1.2公里范围的道路保存到本机。之后离线走路、看确认匹配的道路变青绿；新区域需再次下载。没有自动联网刷新、自动重试或足迹上传。也可点“选择道路包文件”打开系统文件选择器。文件必须含合法来源声明、完整 WGS84 LineString、真实 OSM way ID 与版本。详见 [道路包说明](docs/ROAD_PACK.md)。仓库提供 [牛津真实道路测试包](app/src/test/resources/oxford-roads.geojson)，仅覆盖固定公开测试区域，不能给其他地区涂色。
 - 导入会重新匹配已有非演示足迹。每包最多8MB / 2000 way；无需服务、账号、Key 或第三方地图匹配上传。支持小区域道路包，不是全球道路库或自动城市下载器。
 - 道路损坏或匹配/覆盖写入失败时，仅原子回滚该次道路操作，已接受 GPS 仍保存、后续定位继续；界面显示道路错误，重新导入有效包可修复并回算覆盖。真实 GPS 数据库写入失败仍明确报错，不假称保存。
 - 手动 JSON 备份及本机每日快照包含轨迹和道路包；恢复合并并重新计算覆盖，兼容旧版轨迹 JSON。应用不自动导出到设备外；本地快照不能防卸载或丢手机。
@@ -26,7 +26,7 @@ v0.7（code8，同包名同签名/schema2）已实现真实记录状态、无坐
 
 OSM 道路数据：© OpenStreetMap contributors，按 [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/) 使用；来源、限制和真实性边界见 [ROAD_PACK.md](docs/ROAD_PACK.md) 及 [OSM 许可](https://www.openstreetmap.org/copyright)。道路文件提供者须保证来源合法且完整，离线字段校验不能证明声明真实。
 
-可选高德官方 SDK 仍保留；需专属合法 Android Key 和独立 SDK 隐私同意，显示端将 WGS84 转 GCJ-02。**本轮没有高德 Key，没有验收高德底图。** 配置说明：[AMap_SETUP.md](docs/AMap_SETUP.md)。
+可选高德官方 SDK 仍保留；需专属合法 Android Key 和独立 SDK 隐私同意，显示端将 WGS84 转 GCJ-02。**本机 Key 已配置且 v0.8 SDK 模拟器真实渲染通过，vivo 与中国道路实际偏移仍未测。** 配置说明：[AMap_SETUP.md](docs/AMap_SETUP.md)。
 
 ## 验证与限制
 
@@ -38,4 +38,4 @@ v0.5 可靠性修复已在原 APK 复现故障，并在最终 APK 的独立 Andr
 
 匹配采用保守投影，不猜跨路口路由；1–20米精度、≤45秒点间隔、每对3–120米、≤8米/秒。路口/平行路/自交处可能少涂。高密度城市、长期数据规模、驾车速度、真实手机定位漂移和 vivo 长期锁屏/耗电尚未验收。不宣称解决系统杀后台，也不宣称用户手机已更新。代码分支及手机安装包已按用户授权上传私有GitHub；草稿PR未合并，v0.6为预览发布，用户真机验收尚未完成。
 
-当前 v0.6 最终手机包已在模拟器真实入口通过下载、重复去重、重开保留、GPS保存和覆盖升级；清理与安装指纹实读通过。59项测试，真机长期后台/国内网络可达性尚未验收；不能称用户手机已更新。证据及准确APK对应关系见 [HANDOFF.md](HANDOFF.md)。
+历史 v0.6 最终手机包已在模拟器真实入口通过下载、重复去重、重开保留、GPS保存和覆盖升级；清理与安装指纹实读通过。59项测试，真机长期后台/国内网络可达性尚未验收；不能称用户手机已更新。证据及准确APK对应关系见 [HANDOFF.md](HANDOFF.md)。
