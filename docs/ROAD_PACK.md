@@ -6,7 +6,7 @@
 
 ## 格式和合法来源
 
-道路只能来自有权使用的 **完整 OSM way**，经纬度为 WGS84 `[longitude, latitude]`。不能导入公共托管瓦片的裁剪几何、瓦片 ID、GCJ-02、匿名直线或第三方未授权道路。应用不抓取道路，不发送 GPS/区域来下载数据；由用户选择已有合法本地文件。
+道路只能来自有权使用的 **完整 OSM way**，经纬度为 WGS84 `[longitude, latitude]`。不能导入公共托管瓦片的裁剪几何、瓦片 ID、GCJ-02、匿名直线或第三方未授权道路。v0.6 提供可选的附近下载：单次明确同意后向 https://overpass-api.de/api/interpreter POST 一个中心约100米取整、约1.2公里边长的区域，返回完整 way 的版本和几何。采用 `out meta geom;`，不加几何输出裁剪范围；不保存编辑者信息，不发送完整轨迹或历史路线。不自动更新、重试或改用其他主机。服务不可用、区域太密或 OSM 缺路时失败提示并保留原数据；仍支持已有合法文件。
 
 本仓库公开地点测试包：[oxford-roads.geojson](../app/src/test/resources/oxford-roads.geojson)。它是 **真实牛津道路几何**，不是手绘模拟路。2026-10-09 从 OSM 官方小范围 map 数据接口读取完整 way 与 nodes，确认全部节点齐全，再转为 GeoJSON；道路 ID 为 1675518、1675892、1675893、1675894、4884545、895264517。原始接口：<https://api.openstreetmap.org/api/0.6/map.json?bbox=-1.256,51.753,-1.254,51.755>。这是固定公共测试区域，与用户位置无关；**不应在 OSM 编辑 API 批量下载城市**。较大区域应使用已经合法取得的 Geofabrik/OSM extracts，本 App 不提供在线下载器。
 
@@ -46,3 +46,5 @@
 - APK 回退应使用保留的源代码/旧 APK 作为参考。**旧 schema1 App 无法直接打开 schema2，不应降级、卸载或清空数据回退**；若需回退，先另行设计并验收安全兼容方案。保留所有旧 trips/points 不等于旧 APK 支持新 schema。
 
 模拟器 GPS 使用公开道路上的模拟位置，仅验证运行链路，不是用户实走。验收脚本只能操作显式允许的模拟器；不卸载、不清数据、不操作用户手机，不对外导出私人轨迹。
+
+下载格式依据 [Overpass完整几何说明](https://dev.overpass-api.de/overpass-doc/en/full_data/bbox.html)、[数据格式/版本信息](https://dev.overpass-api.de/overpass-doc/en/targets/formats.html) 和 [公共服务使用边界](https://dev.overpass-api.de/overpass-doc/en/preface/commons.html)，用于小区域个人手动请求，不用于批量城市抓取。当前默认来源只有上述主机。

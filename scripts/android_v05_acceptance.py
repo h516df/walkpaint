@@ -22,6 +22,7 @@ p.add_argument('--serial', default='127.0.0.1:16384')
 p.add_argument('--adb', default=None)
 p.add_argument('--apk', default='app/build/outputs/apk/debug/app-debug.apk')
 p.add_argument('--output', default='verification/v05')
+p.add_argument('--version-code', type=int, default=7)
 p.add_argument('--quick', action='store_true', help='Final text/render check on existing painted emulator data; preserves all rows')
 args = p.parse_args()
 if args.serial != '127.0.0.1:16384' and not re.fullmatch(r'emulator-\d+', args.serial):
@@ -232,7 +233,7 @@ cleanup_errors=[]
 fixture=Path('app/src/test/resources/oxford-roads.geojson')
 try:
     assert 'Success' in run('install','-r',str(Path(args.apk).resolve()),timeout=120)
-    assert 'versionCode=6' in shell('dumpsys','package','cn.walkpaint')
+    assert f'versionCode={args.version_code}' in shell('dumpsys','package','cn.walkpaint')
     launch() # SQLiteOpenHelper migration occurs on first Application start.
     with database() as db: assert db.execute('PRAGMA user_version').fetchone()[0]==2
     assert all(initial[t] <= rows()[t] for t in initial)
@@ -250,7 +251,10 @@ try:
     shot('imported-road-pack')
     tap('查看地图',exact=True)
     time.sleep(3)
-    with database() as db: assert db.execute('SELECT COUNT(*) FROM roads').fetchone()[0]==6
+    with database() as db:
+        imported_ids={f['properties']['osm_way_id'] for f in json.loads(fixture.read_text(encoding='utf-8'))['features']}
+        stored_ids={r[0] for r in db.execute('SELECT osm_id FROM roads')}
+        assert imported_ids <= stored_ids # Nearby downloads legitimately retain other roads.
     checks['real_document_picker_import']=True
     print('PICKER_IMPORT_PASS',flush=True)
     assert 'Success' in run('install','-r','app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk',timeout=120)

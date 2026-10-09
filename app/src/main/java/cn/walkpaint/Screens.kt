@@ -176,7 +176,7 @@ private fun MapPage(
             }
             Surface(onClick=onRoadPack, color=Color.White.copy(alpha=0.96f),shape=RoundedCornerShape(13.dp)) {
                 Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                    Text(if(roadState.roads.isEmpty()) "导入真实道路包 ›" else "青绿：已涂道路 · 灰：未涂 / GPS参考 ›",
+                    Text(if(roadState.roads.isEmpty()) "下载附近道路 ›" else "青绿：已涂道路 · 灰：未涂 / GPS参考 ›",
                         color=Accent,fontWeight=FontWeight.SemiBold,fontSize=13.sp)
                     Text(roadState.summary,color=Ink,fontSize=12.sp)
                     Text("道路 © OpenStreetMap contributors · ODbL-1.0",color=Muted,fontSize=11.sp)
@@ -343,7 +343,7 @@ private fun TripsPage(state: TrackState, onTrip: (Track) -> Unit) {
                 WhiteCard {
                     Text("还没有真实足迹", fontSize = 17.sp, color = Ink, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(8.dp))
-                    Text("首次授权后自动记录足迹；道路上色需导入本地道路包并确认匹配。", color = Muted, fontSize = 13.sp)
+                    Text("首次授权后自动记录足迹；下载附近道路后，确认匹配的走过路段会自动上色。", color = Muted, fontSize = 13.sp)
                 }
             }
         } else {
@@ -462,8 +462,8 @@ private fun ProfilePage(
                 Text("真实道路涂色",color=Ink,fontWeight=FontWeight.Bold,fontSize=17.sp)
                 Text(roadState.summary,color=Ink,fontSize=13.sp)
                 Spacer(Modifier.height(8.dp))
-                Text("本地导入合法 OSM 道路包；累计去重，不上传 GPS。路口、断档、包外保留未确认。",color=Muted,fontSize=12.sp)
-                OutlinedButton(onClick=onRoadPack) { Text("导入 / 查看道路包") }
+                Text("下载附近道路，离线走路上色；重复走不重复累计。路口、断档或道路缺失可能少涂。",color=Muted,fontSize=12.sp)
+                OutlinedButton(onClick=onRoadPack) { Text("下载 / 查看附近道路") }
             }
         }
         item {

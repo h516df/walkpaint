@@ -87,6 +87,8 @@ class MainActivity : ComponentActivity() {
     private var roadBusy by mutableStateOf(false)
     private var roadMessage by mutableStateOf("")
     private var showRoadPack by mutableStateOf(false)
+    private var downloadArea by mutableStateOf<NearbyRoads.Area?>(null)
+    private var roadDownload: RoadDownload? = null
     private var onlineMap by mutableStateOf(false)
     private var showOnlineConsent by mutableStateOf(false)
     private var paintedJson = RoadState().geoJson(true)
@@ -294,17 +296,26 @@ class MainActivity : ComponentActivity() {
 
                 if(showRoadPack) AlertDialog(
                     onDismissRequest = { if(!roadBusy) showRoadPack = false },
-                    title = { Text("本地真实道路包") },
+                    title = { Text("附近道路") },
                     text = { Column(Modifier.verticalScroll(rememberScrollState())) {
                         Text(roadState.summary)
                         Spacer(Modifier.height(12.dp))
-                        Text("选择合法来源的 OSM ODbL GeoJSON 道路包。必须含完整 WGS84 LineString、OSM way ID、版本与来源声明，最多8MB / 2000条。\n本机匹配，不上传 GPS；不会从公共地图瓦片采集道路。包外、路口歧义、差精度和断档保留为未确认。")
+                        Text("先下载附近约1.2公里范围的道路，之后离线记录和上色；走到新区域时再下载。路口、精度差或道路缺失时可能少涂。也可以导入已有道路文件。")
+                        Spacer(Modifier.height(12.dp))
+                        Button(enabled=!roadBusy, onClick={ prepareNearbyRoads() }, modifier=Modifier.fillMaxWidth()) {
+                            Text("下载附近道路")
+                        }
+                        if(roadBusy) {
+                            Spacer(Modifier.height(8.dp))
+                            LinearProgressIndicator(modifier=Modifier.fillMaxWidth())
+                            if(roadDownload != null) TextButton(onClick={ roadDownload?.cancel() }) { Text("取消下载") }
+                        }
                         Text("© OpenStreetMap contributors · ODbL-1.0", fontSize=12.sp)
                         if(roadMessage.isNotBlank()) Text(roadMessage,color=Ink)
                     } },
                     confirmButton = { Button(enabled=!roadBusy,onClick={
                         roadPackLauncher.launch(arrayOf("application/geo+json","application/json","text/plain","*/*"))
-                    }) { Text(if(roadBusy) "正在导入…" else "选择道路包文件") } },
+                    }) { Text("选择道路包文件") } },
                     dismissButton = { TextButton(enabled=!roadBusy,onClick={
                         showRoadPack=false
                         roadState.roads.firstOrNull()?.points?.let { p ->
@@ -314,6 +325,14 @@ class MainActivity : ComponentActivity() {
                         }
                     }) { Text("查看地图") } }
                 )
+
+                downloadArea?.let { area -> AlertDialog(
+                    onDismissRequest={ downloadArea=null },
+                    title={ Text("下载附近道路") },
+                    text={ Text("本次向 Overpass 道路服务（overpass-api.de）发送附近约1.2公里范围和 IP。区域中心约按100米取整，不发送完整足迹或历史路线。仅本次下载，不会自动联网更新；完成后道路保存在本机并匹配已有足迹。网络失败可重试，原足迹和道路保留。\n\n© OpenStreetMap contributors · ODbL-1.0") },
+                    confirmButton={ Button(onClick={ downloadArea=null; downloadNearbyRoads(area) }) { Text("同意并下载本次") } },
+                    dismissButton={ TextButton(onClick={ downloadArea=null }) { Text("暂不下载") } }
+                ) }
 
                 if (showDiagnostics) AlertDialog(
                     onDismissRequest = { showDiagnostics = false },
@@ -550,6 +569,46 @@ class MainActivity : ComponentActivity() {
                 lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 20_000, 8f, visibleLocationListener, Looper.getMainLooper())
             }
         }
+    }
+
+    private fun prepareNearbyRoads() {
+        val fix = userFix ?: latestSystemLocation()
+        val age = fix?.let { android.os.SystemClock.elapsedRealtimeNanos() - it.elapsedRealtimeNanos }
+        if(fix == null || age == null || !fix.hasAccuracy() || !NearbyRoads.usableFix(age, fix.accuracy)) {
+            roadMessage = "请先点地图定位按钮，取得当前位置后再下载附近道路"
+            return
+        }
+        runCatching { NearbyRoads.area(fix.latitude,fix.longitude) }
+            .onSuccess { downloadArea=it }
+            .onFailure { roadMessage="当前位置不支持附近下载，请导入道路文件" }
+    }
+
+    private fun downloadNearbyRoads(area: NearbyRoads.Area) {
+        if(roadBusy) return
+        val job=RoadDownload()
+        roadDownload=job; roadBusy=true; roadMessage="正在下载附近道路，足迹记录继续…"
+        Thread {
+            runCatching {
+                val pack=job.fetch(area)
+                repository.importRoadPack(pack)
+            }.onSuccess { n -> runOnUiThread {
+                if(!isDestroyed) {
+                    roadBusy=false; roadDownload=null
+                    roadMessage="已保存 $n 条附近道路，历史足迹已匹配。现在可以离线走路上色"
+                    updateUi()
+                }
+            } }.onFailure { e -> runOnUiThread {
+                if(!isDestroyed) {
+                    roadBusy=false; roadDownload=null
+                    roadMessage=when(e) {
+                        is java.net.SocketTimeoutException -> "下载超时，请稍后重试；原足迹和道路保留"
+                        is java.io.IOException -> "下载未完成，请检查网络后重试；原足迹和道路保留"
+                        is IllegalArgumentException, is IllegalStateException -> (e.message?.take(100) ?: "道路下载失败") + "；原足迹和道路保留"
+                        else -> "道路数据暂不可用，请稍后重试；原足迹和道路保留"
+                    }
+                }
+            } }
+        }.start()
     }
 
     private fun updatePosition(fix: Location, center: Boolean) {
@@ -806,6 +865,7 @@ class MainActivity : ComponentActivity() {
         super.onPause()
     }
     override fun onDestroy() {
+        roadDownload?.cancel()
         mainHandler.removeCallbacksAndMessages(null)
         refreshExecutor.shutdown()
         super.onDestroy()

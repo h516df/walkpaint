@@ -1,3 +1,35 @@
+# HANDOFF — v0.6 附近道路下载（2026-10-09，当前任务）
+
+> 用户通过截图明确要求接手并继续做到正常使用。本节覆盖旧“已暂停”等状态。唯一写手；D:\Projects\WalkPaint；任务分支 feat/v06-nearby-roads，从已核对的干净提交 6b9f8d3 继续。本地提交，不 push、不发布、不操作用户手机。**状态：本地安装包已生成，真实下载初版通过；最终安装复验和测试状态清理待模拟器网络/窗口授权恢复。不能称最终交付或用户手机已经可用。**
+
+## 改动
+
+- 应用内「下载 / 查看附近道路」：取得5分钟以内、精度1–200米的当前位置，中心约100米取整，说明向 overpass-api.de 发送区域/IP 后，用户选择「同意并下载本次」才 POST 一个约1.2公里边长的小区域查询。无完整足迹上传、自动联网、重试循环、第三方备用主机或新增服务。仍可导入本地文件；底图联网另行同意。
+- 读取完整 OSM way/version/geometry，不裁剪输出，不保存服务返回的用户名等编辑者元数据。8MB/2000 way、25秒服务查询限制、HTTP/读取超时、取消/关闭页面断开、禁止自动重定向。复用原道路文件校验和原子导入，重新匹配历史轨迹，不改 GPS/数据库结构或过滤规则。
+- v0.6 code7、schema2、旧签名；来源与许可 OSM ODbL。每包/累计上限沿用原实现；区域太密、OSM缺路或服务不可访问仍可能无法下载/少涂，不是完整城市下载器或全球道路覆盖。
+
+## 产物和证据边界
+
+- 手机 arm64 包：[WalkPaint-v0.6-arm64-debug.apk](WalkPaint-v0.6-arm64-debug.apk)，70106515字节，SHA256 `e786348459b0bd7c5d9335a7107c2df652abe56761106de39a4116cb2b096643`。通用包：[WalkPaint-v0.6-universal-debug.apk](WalkPaint-v0.6-universal-debug.apk)，SHA256 `a105913126f32d9ee0ae83226452e3a95f9ac32d5d2055ecaca8515c30343e12`。手机包 ZIP 只含 arm64-v8a；apksigner验证成功，证书与原版一致。**两个最终文件尚未覆盖安装复验**。
+- 当前源码55项JVM测试通过，0失败；包括完整way/缺几何/超时部分响应/无路/无版本、区域/定位新鲜度、HTTP429/重定向拒绝、断网IOException、8MB限制、预取消零请求和连接关闭。均为逻辑/传输边界测试，不能冒充真实断网UI结果。离线 testDebugUnitTest/assembleDebug/assembleDebugAndroidTest 成功；之后生成手机包。
+- 初版 v0.6 APK `ac4e99c71b4dd7dbe906fd20bce1c8f7500e77075d171f71bbc31318121126a6` 在原MuMu Android15/API35覆盖安装：84旧点及全 trips/points 行保留，新增1点到85；原系统文件选择器、Android隔离升级/道路故障隔离/备份回归通过，地图青绿3442像素。verification/v06-upgrade/acceptance.json。**沿用此前数据库可靠性修复，本任务未重写。**
+- 同一初版真实App下载公开Oxford测试区域成功：6→1980条道路，85旧点保留、新增一个明确模拟器定位点到86；再次下载相同道路不重复，强停后重开道路/足迹保留。真实UI同意/取消/加载/结果/地图截图见 verification/v06-nearby。人工查看下载结果及加载截图。道路更新后回算约42米，与旧42.643米略不同，是最新几何/邻路候选重新匹配结果，原GPS保留。测试不发送用户私有位置。
+- 本轮最后改动只增加可注入HTTP传输的测试边界、复用等价定位新鲜度函数及取消前检查；源码和最终APK新指纹如上，**没有假称其重新通过真实UI验收**。
+
+## 真实阻塞和待恢复状态
+
+- 真实断网测试调用 `svc wifi disable` 后，MuMu自身ADB也断开，随后 `svc data disable` 超时。finally中的网络/测试provider/Mock Location/旋转/临时XML恢复均无法经ADB完成。verification/v06-nearby/acceptance.json保留已通过项和5个cleanup_errors；**整份测试不是通过状态**。后续脚本已移除切断模拟器ADB的网络开关，断网/HTTP失败走确定性传输回归。
+- 已用官方MuMuManager确认唯一索引0对应127.0.0.1:16384，并只重启这个设备；没有重置、删除或卸载。官方管理器显示Android启动完成，但ADB仍offline，不能据此宣布恢复。恢复前后点数尚未复读。
+- Windows computer-use工具准确选中唯一「MuMu安卓设备」窗口，但在首次get_window_state等待本机应用控制授权超时，未取得窗口截图、未点击设置。已向用户提出最小授权请求，仍待回应；不绕过授权或盲点坐标。启动的MuMuManager重连循环PID22820已按实际进程/开始时间核对并停止，不停止共享ADB服务。
+- 恢复步骤由Agent完成：获得该窗口授权→查看实际安卓网络设置，恢复测试前开启的Wi-Fi→ADB重连→核对并恢复shell Mock Location至此前默认，检查测试provider/定位/旋转和临时XML，记录实读结果→按 `-r` 安装最终包、核对原行和地图/GPS→运行无断网开关的scripts/android_v06_acceptance.py。不要让用户执行命令或搬日志。
+- 真机未连接、未安装。实际户外、vivo后台/Doze/重启/耗电、国内网络可达性/OSM道路完整性仍未验收。用户手机版本不能据模拟器结论宣称生效。
+
+## 保护和回退
+
+只覆盖升级，不卸载、不清数据、不降到schema1。初版和最终通用APK均保留；父提交6b9f8d3支持schema2，必要时从它构建code>=7的兼容修复包回退，先验证签名/数据。APK/日志/坐标/测试数据库不进Git。私有GitHub发布下载链接须获得用户明确发布许可；当前没有上传或发布。
+
+---
+
 # HANDOFF — v0.5 道路故障隔离修复（2026-10-09）
 
 > 本节为当前交付，优先于下方旧 APK 和历史暂停记录。同一会话、唯一写手、D:\Projects\WalkPaint、feat/v05-real-road-coverage；修复基线 1c46f5ae3d274577e46f1321c922f458dff96a71。仅本地提交，不 push、不发布。最终提交见 git log -1。
