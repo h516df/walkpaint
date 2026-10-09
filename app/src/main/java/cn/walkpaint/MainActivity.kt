@@ -87,7 +87,8 @@ class MainActivity : ComponentActivity() {
         { bearing -> mapHeading=bearing ?: 0f;syncFollowCamera() }) }
     private val amapController by lazy { AmapMapController(this,::pauseMapFollowing,
         { syncFollowCamera(force=true) }) }
-    private val amapActive get() = BuildConfig.AMAP_KEY.isNotBlank() && amapConsent
+    private val amapSupported get() = AmapPlatform.supported(Build.SUPPORTED_ABIS.toList())
+    private val amapActive get() = amapSupported && BuildConfig.AMAP_KEY.isNotBlank() && amapConsent
     private var showDiagnostics by mutableStateOf(false)
     private var diagnosticText by mutableStateOf("")
     private var confirmEnable by mutableStateOf(false)
@@ -266,7 +267,7 @@ class MainActivity : ComponentActivity() {
         val mapPref = getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE)
         onlineMap = mapPref.getBoolean("openfreemap_basemap_consent", false)
         amapConsent = mapPref.getBoolean("amap_sdk_consent", false)
-        showAmapConsent = BuildConfig.AMAP_KEY.isNotBlank() &&
+        showAmapConsent = amapSupported && BuildConfig.AMAP_KEY.isNotBlank() &&
             !amapConsent && !mapPref.getBoolean("amap_sdk_decision_seen", false)
         updateUi()
         setContent {
@@ -342,7 +343,10 @@ class MainActivity : ComponentActivity() {
                     mapProviderLabel = if (amapActive) "高德地图" else if(onlineMap) "OpenFreeMap" else "本地离线道路",
                     roadColor = roadColor,
                     onRoadAppearance = { showRoadAppearance=true },
-                    onChooseAmap = { showAmapConsent = true },
+                    onChooseAmap = {
+                        if(amapSupported) showAmapConsent = true
+                        else toast("此设备暂不支持高德地图，请使用离线地图")
+                    },
                     onOnlineMap = { showOnlineConsent = true },
                     roadState = roadState,
                     onRoadPack = { showRoadPack = true },
