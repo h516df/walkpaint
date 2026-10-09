@@ -18,16 +18,16 @@ import time
 import xml.etree.ElementTree as ET
 
 p = argparse.ArgumentParser()
-p.add_argument('--serial', default='127.0.0.1:16384')
+p.add_argument('--serial', default='emulator-5556')
 p.add_argument('--adb', default=None)
 p.add_argument('--apk', default='app/build/outputs/apk/debug/app-debug.apk')
 p.add_argument('--output', default='verification/v05')
 p.add_argument('--version-code', type=int, default=7)
 p.add_argument('--quick', action='store_true', help='Final text/render check on existing painted emulator data; preserves all rows')
 args = p.parse_args()
-if args.serial != '127.0.0.1:16384' and not re.fullmatch(r'emulator-\d+', args.serial):
-    p.error('Refusing non-emulator serial')
 adb = args.adb or shutil.which('adb') or r'D:\Apps\Android\sdk\platform-tools\adb.exe'
+from google_avd_guard import require_walkpaint_google_avd
+require_walkpaint_google_avd(adb, args.serial)
 base = [adb, '-s', args.serial]
 out = Path(args.output)
 out.mkdir(parents=True, exist_ok=True)
