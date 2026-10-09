@@ -1,6 +1,8 @@
 package cn.walkpaint
 
 import android.location.Location
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,6 +14,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -25,7 +29,7 @@ internal fun exploredDistance(meters: Double): String = if(meters < 1000)
 internal fun AppShell(
     selectedTab: Int, onTab: (Int) -> Unit, state: TrackState, fix: Location?,
     automatic: Boolean, running: Boolean, trackingStatus: String, recordingTitle: String,
-    recordingHealthy: Boolean, mapNotice: String?, selectedDay: String?, mapRoadState: RoadState,
+    recordingHealthy: Boolean, profileNotice: String?, onResolveTracking: () -> Unit, mapNotice: String?, selectedDay: String?, mapRoadState: RoadState,
     dailyRoads: Map<String,RoadState>, roadAreaHint: String, onShowAll: () -> Unit,
     needsBackground: Boolean, onLocate: () -> Unit, onToggleTracking: (Boolean) -> Unit,
     onDemo: () -> Unit, onTrip: (Track) -> Unit, onExport: () -> Unit, onImport: () -> Unit,
@@ -34,6 +38,7 @@ internal fun AppShell(
     onChooseAmap: () -> Unit, onOnlineMap: () -> Unit, roadState: RoadState,
     onRoadPack: () -> Unit, roadColor:Int, onRoadAppearance:()->Unit, mapContent: @Composable () -> Unit
 ) {
+    var preparationDismissed by rememberSaveable { mutableStateOf(false) }
     Scaffold(containerColor=PageBackground, bottomBar={
         Surface(color=PageBackground.copy(alpha=0.98f)) {
             Row(Modifier.fillMaxWidth().navigationBarsPadding().height(58.dp)) {
@@ -54,9 +59,11 @@ internal fun AppShell(
     }) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when(selectedTab) {
-                0 -> MapPage(mapNotice,selectedDay,onShowAll,onLocate,{onTab(2)},mapContent)
+                0 -> MapPage(mapNotice,selectedDay,onShowAll,onLocate,{onTab(2)},
+                    automatic && fix!=null && roadAreaHint.isNotBlank() && roadState.error==null && !preparationDismissed,
+                    {preparationDismissed=true;onRoadPack()},{preparationDismissed=true},mapContent)
                 1 -> TripsPage(state,roadState,dailyRoads,onTrip)
-                else -> ProfilePage(automatic,trackingStatus,recordingTitle,needsBackground,
+                else -> ProfilePage(automatic,profileNotice,onResolveTracking,
                     onToggleTracking,onRevoke,onBackgroundSettings,onPowerSettings,onCopyDiagnostics,
                     roadState,roadAreaHint,onRoadPack,onExport,onImport,internalBackupCount,
                     mapProviderLabel,onChooseAmap,onOnlineMap,roadColor,onRoadAppearance)
@@ -67,7 +74,7 @@ internal fun AppShell(
 
 @Composable
 private fun MapPage(notice: String?,day: String?,onShowAll: ()->Unit,onLocate: ()->Unit,
-    onSettings: ()->Unit,mapContent: @Composable ()->Unit) {
+    onSettings: ()->Unit,needsMapData:Boolean,onMapData:()->Unit,onDismissPreparation:()->Unit,mapContent: @Composable ()->Unit) {
     val uriHandler=LocalUriHandler.current
     Box(Modifier.fillMaxSize()) {
         mapContent()
@@ -78,6 +85,15 @@ private fun MapPage(notice: String?,day: String?,onShowAll: ()->Unit,onLocate: (
             if(day!=null) Surface(onClick=onShowAll,color=PageBackground.copy(alpha=0.96f),shape=RoundedCornerShape(8.dp)) {
                 Text("$day · 返回全部探索  ›",color=Accent,fontSize=12.sp,
                     modifier=Modifier.padding(horizontal=12.dp,vertical=10.dp))
+            }
+            if(day==null && needsMapData) Surface(color=Panel.copy(alpha=0.96f),shape=RoundedCornerShape(8.dp)) {
+                Column(Modifier.padding(horizontal=12.dp,vertical=6.dp)) {
+                    Text("还没准备好这里的地图",color=Ink,fontSize=13.sp)
+                    Row {
+                        TextButton(onClick=onMapData) { Text("准备地图") }
+                        TextButton(onClick=onDismissPreparation) { Text("暂不") }
+                    }
+                }
             }
         }
         Surface(onClick=onLocate,shape=CircleShape,color=PageBackground.copy(alpha=0.96f),
@@ -194,53 +210,72 @@ private fun TripsPage(state:TrackState,roads:RoadState,daily:Map<String,RoadStat
 private val ExploredRoadColor=androidx.compose.ui.graphics.Color(ExploredRoadArgb)
 
 @Composable
-private fun ProfilePage(automatic:Boolean,status:String,title:String,needsBackground:Boolean,
+private fun ProfilePage(automatic:Boolean,notice:String?,onResolve:()->Unit,
     onToggle:(Boolean)->Unit,onRevoke:()->Unit,onPermissions:()->Unit,onPower:()->Unit,onDiagnostics:()->Unit,
     roads:RoadState,areaHint:String,onRoadPack:()->Unit,onExport:()->Unit,onImport:()->Unit,backupCount:Int,
     provider:String,onAmap:()->Unit,onOnline:()->Unit,roadColor:Int,onAppearance:()->Unit) {
-    var revokeConfirm by remember { mutableStateOf(false) }
+    var page by rememberSaveable { mutableStateOf("我的") }
+    var revokeConfirm by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled=page!="我的") { page=if(page=="更多设置") "我的" else "更多设置" }
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
-        item { Heading("我的","放心探索，足迹由自己保管。") }
-        item { Section("地图外观") {
-            SettingRow("涂色外观",RoadPaintColor.name(roadColor)+" · "+RoadPaintColor.hex(roadColor),onAppearance)
-        } }
-        item {
-            Section("自动足迹") {
-                Row(verticalAlignment=Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(title,color=Ink,fontSize=14.sp)
-                        Spacer(Modifier.height(6.dp))
-                        Text("授权一次，日常自动记录",color=Muted,fontSize=12.sp)
+        if(page!="我的") item {
+            TextButton(onClick={ page=if(page=="更多设置") "我的" else "更多设置" }) { Text("返回") }
+        }
+        item { Heading(page,if(page=="我的") "放心探索，足迹由自己保管。" else "按需设置，历史足迹始终保留。") }
+        when(page) {
+            "我的" -> {
+                item { Section("自动记录") {
+                    Row(Modifier.fillMaxWidth().heightIn(min=56.dp),verticalAlignment=Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(if(automatic) "已开启" else "未开启",color=Ink,fontSize=16.sp,fontWeight=FontWeight.Medium)
+                            Spacer(Modifier.height(6.dp))
+                            Text("开启后，出门会自动记录走过的道路",color=Muted,fontSize=13.sp,lineHeight=20.sp)
+                        }
+                        Switch(checked=automatic,onCheckedChange=onToggle,
+                            modifier=Modifier.semantics { contentDescription="自动记录" })
                     }
-                    Switch(checked=automatic,onCheckedChange=onToggle)
-                }
-                Text(status.lines().firstOrNull().orEmpty().substringAfter(" · "),color=Muted,fontSize=12.sp,lineHeight=19.sp)
-                SettingRow("定位权限",if(needsBackground) "可设置为始终允许，提高后台恢复机会" else "查看系统授权",onPermissions)
-                SettingRow("省电与后台运行","查看系统省电设置",onPower)
-                SettingRow("撤回自动记录授权","停止记录，保留全部历史足迹") { revokeConfirm=true }
+                    if(automatic && notice!=null) SettingRow(notice,"去解决",onResolve)
+                } }
+                item { Section("偏好") {
+                    SettingRow("涂色颜色",RoadPaintColor.name(roadColor),onAppearance)
+                    SettingRow("更多设置","备份、隐私与地图数据") { page="更多设置" }
+                } }
+                item { Text("足迹涂色  ${BuildConfig.VERSION_NAME}",color=Muted,fontSize=12.sp,modifier=Modifier.padding(vertical=8.dp)) }
             }
-        }
-        item {
-            Section("道路与数据") {
-                SettingRow("附近道路","${roads.roads.size} 条道路已准备 · 下载 / 导入 / 查看",onRoadPack)
-                if(areaHint.isNotBlank()) Text(areaHint,color=Muted,fontSize=12.sp,lineHeight=19.sp)
-                SettingRow("导出备份","足迹与道路一起保存到你选择的位置",onExport)
+            "更多设置" -> item { Section("设置") {
+                SettingRow("备份与恢复","保存或找回你的足迹") { page="备份与恢复" }
+                SettingRow("隐私与权限","管理授权与后台运行") { page="隐私与权限" }
+                SettingRow("地图数据","准备这里的地图",onRoadPack)
+                SettingRow("高级诊断","记录异常时查看原因",onDiagnostics)
+                SettingRow("关于","版本与地图来源") { page="关于" }
+            } }
+            "备份与恢复" -> item { Section("保护足迹") {
+                SettingRow("导出备份","保存到你选择的位置",onExport)
                 SettingRow("恢复备份","合并已有数据，不清空历史足迹",onImport)
-                Text("本机自动快照 $backupCount 份 · 建议定期导出备份",color=Muted,fontSize=11.sp,lineHeight=18.sp)
+                Text("本机自动快照 $backupCount 份，建议定期导出备份。",color=Muted,fontSize=13.sp,lineHeight=20.sp)
+            } }
+            "隐私与权限" -> {
+                item { Section("记录授权") {
+                    Text("关闭自动记录只会停止后续记录，不删除历史，也不会撤销系统权限。",color=Muted,fontSize=13.sp,lineHeight=20.sp)
+                    SettingRow("定位权限","在系统设置中管理位置授权",onPermissions)
+                    SettingRow("提高后台记录稳定性","按需查看系统电池设置",onPower)
+                    SettingRow("撤回自动记录授权","停止记录与自动恢复，保留历史") { revokeConfirm=true }
+                } }
+                item { Section("地图与隐私") {
+                    SettingRow("地图服务与隐私",provider,onAmap)
+                    SettingRow("联网底图 / 离线道路","管理联网地图授权",onOnline)
+                    Text("原始足迹保存在本机。联网地图与地图数据下载需要单独同意；开自动记录不会替你同意联网。",color=Muted,fontSize=13.sp,lineHeight=20.sp)
+                } }
             }
+            "关于" -> item { Section("足迹涂色") {
+                Text("版本 ${BuildConfig.VERSION_NAME}",color=Ink,fontSize=15.sp)
+                Text("当前地图：$provider",color=Muted,fontSize=13.sp)
+                Text("© OpenStreetMap contributors · ODbL 1.0\n高德等联网地图按各自授权和署名使用。",color=Muted,fontSize=13.sp,lineHeight=20.sp)
+            } }
         }
-        item {
-            Section("帮助与隐私") {
-                SettingRow("记录与道路诊断","查看 GPS、匹配失败和记录中断原因",onDiagnostics)
-                SettingRow("地图服务与隐私",provider,onAmap)
-                SettingRow("联网底图 / 离线道路","管理 OpenFreeMap 联网授权",onOnline)
-                Text("原始足迹与道路匹配保存在本机。联网地图及道路下载需要单独同意。",color=Muted,fontSize=12.sp,lineHeight=19.sp)
-            }
-        }
-        item { Text("WalkPaint  ${BuildConfig.VERSION_NAME}",color=Muted,fontSize=12.sp,modifier=Modifier.padding(vertical=8.dp)) }
     }
     if(revokeConfirm) AlertDialog(onDismissRequest={revokeConfirm=false},title={Text("撤回自动记录授权？")},
-        text={Text("将停止记录并关闭自动恢复，历史足迹全部保留。以后可在这里重新授权。系统定位权限可在“定位权限”中管理。")},
+        text={Text("将停止记录并关闭自动恢复，历史足迹全部保留。系统位置权限仍由你在系统设置中管理。")},
         confirmButton={TextButton(onClick={revokeConfirm=false;onRevoke()}) {Text("撤回授权")}},
         dismissButton={TextButton(onClick={revokeConfirm=false}) {Text("取消")}})
 }
