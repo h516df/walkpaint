@@ -1,6 +1,6 @@
 # 当前交付 — v0.11 / Issue #8（2026-10-09）
 
-本节优先于下方历史。唯一主写手串行从 v0.10 / PR #13 `0a5c6ada079b327f9948115146dfc8ad3477871d` 开发；工作区 `D:\Worktrees\WalkPaint\codex-issue8-road-colors`，分支 `agent/codex/issue8-road-colors`。原 canonical/#6/#7 工作区保持干净、未修改；本次 PR base `issue-7-map-follow`，依赖未合并 PR #13，不合并。草稿 PR 待创建。
+本节优先于下方历史。唯一主写手串行从 v0.10 / PR #13 `0a5c6ada079b327f9948115146dfc8ad3477871d` 开发；工作区 `D:\Worktrees\WalkPaint\codex-issue8-road-colors`，分支 `agent/codex/issue8-road-colors`。原 canonical/#6/#7 工作区保持干净、未修改；本次 PR base `issue-7-map-follow`，依赖未合并 PR #13，不合并。[草稿 PR #15](https://github.com/h516df/walkpaint/pull/15)，已推送、未合并。
 
 **状态：v0.11 本地生产 APK、103 项 JVM 与 MuMu 高德/MapLibre 实际入口通过；私有 APK 分发待 v0.11 具体确认。真机视觉/方向/长期后台与 #6 GPS P0 未验收。** 我的→涂色外观，五预设/六位自定义/恢复青绿，保存到本机并即时重绘全部已确认道路；不改未走灰线/蓝点/描边，保持相机与跟随；不改录制、DB/schema2、matcher/GPS门槛和备份格式。偏好不包含在轨迹备份。
 
