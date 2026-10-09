@@ -36,7 +36,8 @@ internal fun AppShell(
     onBackgroundSettings: () -> Unit, onPowerSettings: () -> Unit, onRevoke: () -> Unit,
     onCopyDiagnostics: () -> Unit, internalBackupCount: Int, mapProviderLabel: String,
     onChooseAmap: () -> Unit, onOnlineMap: () -> Unit, roadState: RoadState,
-    onRoadPack: () -> Unit, roadColor:Int, onRoadAppearance:()->Unit, mapContent: @Composable () -> Unit
+    onRoadPack: () -> Unit, roadColor:Int, onRoadAppearance:()->Unit,
+    feedbackContent: @Composable (onBack:()->Unit)->Unit, mapContent: @Composable () -> Unit
 ) {
     var preparationDismissed by rememberSaveable { mutableStateOf(false) }
     Scaffold(containerColor=PageBackground, bottomBar={
@@ -66,7 +67,7 @@ internal fun AppShell(
                 else -> ProfilePage(automatic,profileNotice,onResolveTracking,
                     onToggleTracking,onRevoke,onBackgroundSettings,onPowerSettings,onCopyDiagnostics,
                     roadState,roadAreaHint,onRoadPack,onExport,onImport,internalBackupCount,
-                    mapProviderLabel,onChooseAmap,onOnlineMap,roadColor,onRoadAppearance)
+                    mapProviderLabel,onChooseAmap,onOnlineMap,roadColor,onRoadAppearance,feedbackContent)
             }
         }
     }
@@ -213,9 +214,11 @@ private val ExploredRoadColor=androidx.compose.ui.graphics.Color(ExploredRoadArg
 private fun ProfilePage(automatic:Boolean,notice:String?,onResolve:()->Unit,
     onToggle:(Boolean)->Unit,onRevoke:()->Unit,onPermissions:()->Unit,onPower:()->Unit,onDiagnostics:()->Unit,
     roads:RoadState,areaHint:String,onRoadPack:()->Unit,onExport:()->Unit,onImport:()->Unit,backupCount:Int,
-    provider:String,onAmap:()->Unit,onOnline:()->Unit,roadColor:Int,onAppearance:()->Unit) {
+    provider:String,onAmap:()->Unit,onOnline:()->Unit,roadColor:Int,onAppearance:()->Unit,
+    feedbackContent: @Composable (onBack:()->Unit)->Unit) {
     var page by rememberSaveable { mutableStateOf("我的") }
     var revokeConfirm by rememberSaveable { mutableStateOf(false) }
+    if(page=="问题反馈") { feedbackContent { page="更多设置" };return }
     BackHandler(enabled=page!="我的") { page=if(page=="更多设置") "我的" else "更多设置" }
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
         if(page!="我的") item {
@@ -246,6 +249,7 @@ private fun ProfilePage(automatic:Boolean,notice:String?,onResolve:()->Unit,
                 SettingRow("备份与恢复","保存或找回你的足迹") { page="备份与恢复" }
                 SettingRow("隐私与权限","管理授权与后台运行") { page="隐私与权限" }
                 SettingRow("地图数据","准备这里的地图",onRoadPack)
+                SettingRow("问题反馈","预览并分享本机故障线索") { page="问题反馈" }
                 SettingRow("高级诊断","记录异常时查看原因",onDiagnostics)
                 SettingRow("关于","版本与地图来源") { page="关于" }
             } }

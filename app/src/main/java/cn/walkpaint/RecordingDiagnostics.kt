@@ -13,7 +13,13 @@ internal object RecordingDiagnostics {
     private var buffer: DiagnosticBuffer? = null
     private var scheduledFlush: java.util.concurrent.ScheduledFuture<*>? = null
     private var persistenceFailed = false
+    private var history: ProblemHistory? = null
+    private var historySaveFailed = false
     private fun prefs(c: Context) = c.applicationContext.getSharedPreferences("recording_diagnostics", Context.MODE_PRIVATE)
+    private fun historyPrefs(c:Context)=c.applicationContext.getSharedPreferences("feedback_history",Context.MODE_PRIVATE)
+    private fun historyState(c:Context):ProblemHistory = history ?: historyPrefs(c).let {
+        ProblemHistory(it.getString("events","") ?: "",it.getBoolean("enabled",true)).also { history=it }
+    }
 
     private fun state(context: Context): DiagnosticBuffer =
         buffer ?: DiagnosticBuffer(prefs(context).all).also { buffer = it }
@@ -30,16 +36,25 @@ internal object RecordingDiagnostics {
 
     private fun flush(context: Context) {
         val current = state(context)
-        if (!current.dirty) return
-        val edit = prefs(context).edit()
-        current.snapshot().forEach { (key, value) ->
-            when (value) {
-                is Long -> edit.putLong(key, value)
-                is String -> edit.putString(key, value)
+        if(current.dirty) {
+            val edit = prefs(context).edit()
+            current.snapshot().forEach { (key, value) ->
+                when (value) {
+                    is Long -> edit.putLong(key, value)
+                    is String -> edit.putString(key, value)
+                }
             }
+            persistenceFailed = !edit.commit()
+            if (!persistenceFailed) current.persisted() else schedule(context)
         }
-        persistenceFailed = !edit.commit()
-        if (!persistenceFailed) current.persisted() else schedule(context)
+        val recent=historyState(context)
+        recent.snapshot(System.currentTimeMillis())
+        if(recent.dirty) {
+            historySaveFailed=runCatching {
+                !historyPrefs(context).edit().putString("events",recent.encode()).putBoolean("enabled",recent.enabled).commit()
+            }.getOrDefault(true)
+            if(!historySaveFailed) recent.persisted() else schedule(context)
+        }
     }
 
     fun event(context: Context, kind: String, reason: String, gap: Long? = null, occurredAt: Long = System.currentTimeMillis()) {
@@ -48,6 +63,7 @@ internal object RecordingDiagnostics {
         writer.execute {
             synchronized(lock) {
                 val immediate = state(application).record(kind, reason, at, gap)
+                ProblemCode.fromRecording(kind,reason,gap)?.let { historyState(application).record(it,at) }
                 if (immediate) {
                     scheduledFlush?.cancel(false)
                     scheduledFlush = null
@@ -70,6 +86,29 @@ internal object RecordingDiagnostics {
     }
 
     fun snapshot(context: Context): Map<String, Any?> = synchronized(lock) { state(context).snapshot() }
+
+    data class HistoryView(val entries:List<ProblemEntry>,val enabled:Boolean,val saveFailed:Boolean)
+    fun recent(context:Context):HistoryView=synchronized(lock) {
+        val h=historyState(context)
+        val entries=h.snapshot(System.currentTimeMillis())
+        if(h.dirty) writer.execute { synchronized(lock) { schedule(context.applicationContext) } }
+        HistoryView(entries,h.enabled,historySaveFailed)
+    }
+    fun problem(context:Context,code:ProblemCode) {
+        val application=context.applicationContext
+        writer.execute { synchronized(lock) {
+            historyState(application).record(code,System.currentTimeMillis())
+            if(code.critical) flush(application) else schedule(application)
+        } }
+    }
+    fun collectHistory(context:Context,enabled:Boolean) {
+        val application=context.applicationContext
+        writer.execute { synchronized(lock) { historyState(application).setCollection(enabled);flush(application) } }
+    }
+    fun clearHistory(context:Context) {
+        val application=context.applicationContext
+        writer.execute { synchronized(lock) { historyState(application).clear();flush(application) } }
+    }
 
     fun signals(context: Context, databaseError: String? = null): RecordingSignals {
         val values=snapshot(context)
