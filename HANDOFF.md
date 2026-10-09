@@ -1,12 +1,14 @@
 # 当前交付 — v0.12 / Issue #12（2026-10-10）
 
+[草稿 PR #16](https://github.com/h516df/walkpaint/pull/16)，已推送、未合并。
+
 **状态：候选 UI/授权/实际模拟记录已验收，手机 APK 本地就绪；待具体私有分发确认，未发布/合并，vivo 未验收。** 本节优先于下方历史。唯一主写手：`D:\Workspaces\Codex\2026-10-10\new-chat\work\worktrees\WalkPaint\codex-issue12-simple-profile` / `agent/codex/issue12-simple-profile`，业务源码 `92a22262cd2283b35c5b54330b3e2d8b68d164ff`，基线 PR #15 `3f9604d`；不从过期 main 重做，不修改其他写手目录。
 
 “我的”简化为自动记录/涂色颜色/更多设置；备份、隐私、地图数据和诊断保留在二级。沿用原记录服务和数据/阈值；后台授权独立、通知按序、设置返回继续，已有权限不重复弹。#10/#11 未开发。111 JVM + 7 Google guard + Google API36 实际 UI/隔离 DB/1→4 点前后台及短时关屏/关闭停止/首次取消/320dp/颜色入口/地图下载披露取消通过。测试有分段修正与针对性续验，详情 [V012](docs/evidence/V012.md)；不把历史 MuMu 证据算本轮 Google 通过。
 
 手机 `cn.walkpaint` / code13 / 0.12 / 原签名 / schema2 / arm64；70,188,579字节，SHA256 `de5963bf3dcbdce1af4d051cc116d5aa20b2a0e283f2f865b2351239a7bae3d2`。本会话 outputs `WalkPaint-v0.12-arm64-debug.apk`。通用/Google 已装 `1fb41afc85bc389efc68cfc1188b2f7aff868e0bc01fe4261b463c1bbff310e6`，二包 dex 一致。手机未安装，APK 未上传。原 v0.11 私有下载保留。
 
-Google AVD 高德地图黑屏在旧 v0.11 基线已复现，底图/彩色道路像素回归未通过；单列后续任务。vivo #6 GPS 原故障、#7 朝向、#8 颜色/历史与本次权限交互/长期后台仍待真机；保持各 Issue 开放。#12 本阶段 UI 不等于 P0 修复。CI 未配置。回退只用同签名/schema2/code>=13覆盖包，禁止卸载/清数据。
+Google AVD 高德地图黑屏在旧 v0.11 基线已复现，底图/彩色道路像素回归未通过；单列 [Issue #17](https://github.com/h516df/walkpaint/issues/17)。vivo #6 GPS 原故障、#7 朝向、#8 颜色/历史与本次权限交互/长期后台仍待真机；保持各 Issue 开放。#12 本阶段 UI 不等于 P0 修复。CI 未配置。回退只用同签名/schema2/code>=13覆盖包，禁止卸载/清数据。
 
 ---
 
