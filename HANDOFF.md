@@ -8,7 +8,7 @@
 
 本地 `WalkPaint-v0.10-arm64-debug.apk`：70375792字节，SHA256 `cc510ff035a7b039828764d46b58d45179642715d92b101a2def4315956807d9`，安装指纹相同。原版偏移299px→新版0px；原219点全行保留到224，离线分项227→230；SDK专项所有五张数据库表不变。测试清理无错误。详细截图、失败记录、官方依据与未测项见 [docs/evidence/V010.md](docs/evidence/V010.md)。
 
-**APK未上传/Release未创建，手机未更新**；之前自动审批要求本次具体上传确认，不换渠道绕过。用户确认后可在私有GitHub上传、核对服务器digest/大小、开放私有预览并实际下载验SHA；原v0.8下载保留。手机只需覆盖安装、系统确认和实际使用，不需要USB/命令。回退同签名、schema2、code>=11修复包，不卸载/清库。#7不因模拟器通过关闭；下一代码任务是独立#8颜色自定义，仍单写手串行。
+**v0.10私有预览下载已开放，手机是否安装仍未核实**。用户在本轮明确选择“上传私有预览版”，完成草稿上传→服务器digest/大小核对→私有prerelease→实际下载验SHA；[发布](https://github.com/h516df/walkpaint/releases/tag/v0.10) / [手机APK](https://github.com/h516df/walkpaint/releases/download/v0.10/WalkPaint-v0.10-arm64-debug.apk)。private=true/draft=false/prerelease=true，标签v0.10固定业务3728c18，70375792字节及上述SHA一致。原v0.8下载保留，原v0.9仍未另建Release；不得把预览分发当真机P0/方向验收完成。实读见docs/evidence/v010-publication.json。手机只需覆盖安装、系统确认和实际使用，不需要USB/命令。回退同签名、schema2、code>=11修复包，不卸载/清库。#7不因模拟器通过关闭；下一代码任务是独立#8颜色自定义，仍单写手串行。
 
 ---
 

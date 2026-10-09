@@ -2,13 +2,13 @@
 
 Android 道路探索涂色应用：授权一次，日常自动记录；走过的真实道路逐渐上色。首页近全屏高德地图，柔和青绿道路、小蓝点、定位按钮和轻薄导航；成果在足迹，记录管理和诊断在我的。重复经过去重，歧义/漂移/断档保守拒绝；不显示 GPS 折线或用演示轨迹冒充涂色。
 
-## v0.10 本地测试候选（地图跟随）
+## v0.10 私有测试下载（地图跟随）
 
 [草稿 PR #13](https://github.com/h516df/walkpaint/pull/13)，不合并；本仓库未配置GitHub Actions，当前验证为本机自动测试与真实模拟器入口。
 
 自动跟随可靠位置和手机朝向，保留缩放；拖动浏览暂停，点原“定位我”恢复，历史地图不被实时定位拉走。高德与离线回退实际UI均通过；100项JVM、16组Android屏幕方向计算、实际SDK角度/缩放和前后台监听专项通过。[真实前后截图与验收边界](docs/evidence/V010.md)。
 
-`WalkPaint-v0.10-arm64-debug.apk` 已在MuMu同签名覆盖安装，code11/schema2保留原轨迹。**APK尚未上传，手机旋转与原GPS P0尚未验收，用户手机未更新**；私有上传待本次具体确认。#7源码在独立 `issue-7-map-follow`，依赖#9/v0.9基线，不合并。回退需同签名、schema2、code>=11修复包，勿卸载/清数据。
+[手机 APK（约70MB）](https://github.com/h516df/walkpaint/releases/download/v0.10/WalkPaint-v0.10-arm64-debug.apk) · [私有预览发布](https://github.com/h516df/walkpaint/releases/tag/v0.10)。用户本次明确确认后已上传，服务器digest/大小与本地及实际重新下载文件一致。手机登录有权限GitHub账号后下载、直接覆盖安装、打开一次，勿卸载/清数据。code11/schema2/原签名保留旧足迹。**手机旋转与原GPS P0尚未验收，用户手机是否安装尚未核实**。#7源码在独立 `issue-7-map-follow`，依赖#9/v0.9基线，不合并。回退需同签名、schema2、code>=11修复包，勿卸载/清数据。
 
 ## v0.9 私有测试候选（GPS 核心修复与诊断）
 
