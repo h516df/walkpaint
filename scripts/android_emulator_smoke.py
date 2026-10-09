@@ -14,15 +14,15 @@ import subprocess
 import time
 
 p = argparse.ArgumentParser()
-p.add_argument("--serial", default="127.0.0.1:16384")
+p.add_argument("--serial", default="emulator-5556")
 p.add_argument("--adb", default=None)
 args = p.parse_args()
-if args.serial != "127.0.0.1:16384" and not args.serial.startswith("emulator-"):
-    p.error("Refusing GPS injection on non-emulator ADB serial")
 
 adb = args.adb or shutil.which("adb") or r"D:\Apps\Android\sdk\platform-tools\adb.exe"
 if not Path(adb).is_file() and not shutil.which(adb):
     p.error("ADB executable not found")
+from google_avd_guard import require_walkpaint_google_avd
+require_walkpaint_google_avd(adb, args.serial)
 base = [adb, "-s", args.serial]
 
 def cmd(*parts):
