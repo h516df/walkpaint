@@ -3,7 +3,14 @@ package cn.walkpaint
 /** Shared display geometry for AMap and the fallback. No road catalog or map download. */
 internal object RecordedTrail {
     const val MAX_GAP_MS=45_000L
-    const val MAX_SPEED_MPS=60.0
+    /**
+     * Highest ground speed accepted as real travel: about 144 km/h, which covers walking,
+     * cycling and driving with margin. Storage, distance and drawing all share this one
+     * ceiling, so a GPS jump cannot pass one gate and be drawn by another.
+     */
+    const val MAX_SPEED_MPS=40.0
+    /** Above this a fix counts as fast travel and must be corroborated, not taken on trust. */
+    const val FAST_TRAVEL_MPS=8.0
     fun connected(a:TrackPoint,b:TrackPoint):Boolean {
         val gap=b.time-a.time
         return a.segment==b.segment && gap in 1..MAX_GAP_MS &&

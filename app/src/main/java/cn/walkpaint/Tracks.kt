@@ -65,11 +65,16 @@ object Geo {
         if (distance < minimumMove) return "STATIONARY_OR_SMALL_MOVE"
         val speed=distance/seconds
         if (speed>RecordedTrail.MAX_SPEED_MPS) return "JUMP_OR_TOO_FAST"
-        // Fast travel needs precise fixes; available GNSS speed must agree with the displacement.
-        if(speed>8.0) {
+        // Fast travel needs precise fixes and, when the receiver measures its own speed, a
+        // displacement that agrees with it. A GPS jump shows up as travel far faster than the
+        // speed the chip is actually measuring, so refusing only that direction keeps genuine
+        // cycling and driving while still dropping a jump that no real vehicle could have made.
+        if(speed>RecordedTrail.FAST_TRAVEL_MPS) {
             if(maxAccuracy>20.0) return "UNRELIABLE_ACCURACY"
-            if(reportedSpeed!=null && (!reportedSpeed.isFinite() || reportedSpeed !in 0.0..RecordedTrail.MAX_SPEED_MPS ||
-                kotlin.math.abs(speed-reportedSpeed)>max(8.0,maxAccuracy*2/seconds))) return "JUMP_OR_TOO_FAST"
+            if(reportedSpeed!=null) {
+                if(!reportedSpeed.isFinite() || reportedSpeed !in 0.0..RecordedTrail.MAX_SPEED_MPS) return "JUMP_OR_TOO_FAST"
+                if(speed-reportedSpeed>max(4.0,maxAccuracy*2/seconds)) return "JUMP_OR_TOO_FAST"
+            }
         }
         return null
     }
