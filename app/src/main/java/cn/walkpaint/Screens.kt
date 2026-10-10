@@ -223,14 +223,14 @@ private fun DayRow(day:DailyFootprint,today:String,busiest:Double,onTrip:(Track)
 /** Day, month and year, drilled one into the other. */
 private enum class CalendarMode { DAY, MONTH, YEAR }
 
+// Shade and label come from HeatPalette so HeatPaletteTest can assert the contrast numbers.
 private fun heatFill(level:Int) = when {
     level<0 -> androidx.compose.ui.graphics.Color.Transparent
-    level==0 -> Line
-    else -> Pigment.copy(alpha=0.22f+0.195f*(level-1))
+    level==0 -> HeatPalette.emptyFill
+    else -> HeatPalette.fillOver(level)
 }
 
-/** White text only where the tint is dark enough to need it. */
-private fun heatInk(level:Int) = if(level>=3) androidx.compose.ui.graphics.Color.White else Ink
+private fun heatInk(level:Int) = HeatPalette.textOn(level)
 
 /**
  * The three levels of the same picture.
@@ -338,7 +338,7 @@ private fun MonthPage(monthKey:String,today:java.time.LocalDate,meters:Map<Strin
                                 .then(if(hasData) Modifier.clickable { onPickDay(key) } else Modifier),
                                 contentAlignment=Alignment.Center) {
                                 Text(cell.date.dayOfMonth.toString(),
-                                    color=if(hasData) heatInk(cell.level) else Faint,
+                                    color=if(hasData) heatInk(cell.level) else HeatPalette.emptyText,
                                     fontSize=CaptionSize,
                                     fontWeight=if(key==selectedKey) FontWeight.Bold else FontWeight.Normal)
                             }
