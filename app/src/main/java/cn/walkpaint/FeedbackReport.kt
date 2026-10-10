@@ -37,6 +37,8 @@ internal object FeedbackReport {
             "授权：精确位置 ${flag(f.fine)} / 后台位置 ${flag(f.background)} / 通知 ${flag(f.notifications)}",
             "最近定位回调 ${recent("gps_callback_at")} / 有效定位 ${recent("valid_gps_at")} / 保存 ${recent("saved_at")}",
             "本次服务：回调 ${count("session_gps_count")} / 有效 ${count("session_valid_gps_count")} / 保存 ${count("session_saved_count")} / 过滤 ${count("session_filtered_count")}",
+            GpsFilterDiagnostics.session(f.diagnostics),
+            GpsFilterDiagnostics.recent(f.history, f.collected, f.historySaveFailed, now),
             "系统退出原因码：$exitCode（仅系统线索，不推断厂商限制）",
             "计数：定位点 ${f.points} / 道路 ${f.roads} / 已确认 ${f.matched} / 未确认 ${f.unconfirmed} / 涂色 ${f.paintedMetres} 米",
             "当前目录只读复算（最近最多2000段）：可确认 ${f.currentConfirmable} / 无候选 ${f.noCandidates}；不等于历史确认结果",clue,
