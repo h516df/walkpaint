@@ -17,8 +17,14 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
     private var cameraProbe=false
     private var roadColorProbe=false
     private var privateUpdateProbe=false
+    private var candidateSha:String?=null
     override fun onStart() {
         val result = Bundle()
+        candidateSha?.let { sha ->
+            try { result.putString("stream",PrivateUpdateProbe.candidate(this,sha));finish(Activity.RESULT_OK,result) }
+            catch(e:Throwable) { result.putString("stream","PRIVATE_UPDATE_NEW_APK_FAIL: ${e.javaClass.simpleName}");finish(Activity.RESULT_CANCELED,result) }
+            return
+        }
         if(privateUpdateProbe) {
             try { result.putString("stream",PrivateUpdateProbe.run(this));finish(Activity.RESULT_OK,result) }
             catch(e:Throwable) { result.putString("stream","PRIVATE_UPDATE_ANDROID_BOUNDARIES_FAIL: ${e.javaClass.simpleName}: ${e.message}");finish(Activity.RESULT_CANCELED,result) }
@@ -264,5 +270,5 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
         // finish() can terminate the instrumented process immediately; cleanup must precede it.
         finish(resultCode,result)
     }
-    override fun onCreate(arguments:Bundle?) { privateUpdateProbe=arguments?.getString("privateUpdateProbe")=="true";roadColorProbe=arguments?.getString("roadColorProbe")=="true"; cameraProbe=arguments?.getString("cameraProbe")=="true"; fixtureProbe=arguments?.getString("fixtureProbe")=="true"; catalogProbe=arguments?.getString("catalogProbe")=="true"; networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments); start() }
+    override fun onCreate(arguments:Bundle?) { candidateSha=arguments?.getString("candidateSha");privateUpdateProbe=arguments?.getString("privateUpdateProbe")=="true";roadColorProbe=arguments?.getString("roadColorProbe")=="true"; cameraProbe=arguments?.getString("cameraProbe")=="true"; fixtureProbe=arguments?.getString("fixtureProbe")=="true"; catalogProbe=arguments?.getString("catalogProbe")=="true"; networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments); start() }
 }

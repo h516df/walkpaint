@@ -9,6 +9,17 @@ import java.util.UUID
 
 /** Real Android boundaries, isolated test cache/preferences only. No live authorization or network. */
 internal object PrivateUpdateProbe {
+    fun candidate(i:Instrumentation,sha256:String):String {
+        check(sha256.matches(Regex("[a-f0-9]{64}")))
+        val ctx=i.targetContext
+        val file=File(ctx.cacheDir,"walkpaint-candidate-probe.apk")
+        try {
+            PrivateUpdatePolicy.verifyHash(file,UpdateAsset(1,file.length(),sha256,"candidate.apk"))
+            UpdateApkVerifier.verify(ctx,file,16,"0.14")
+            check(ctx.packageManager.getPackageInfo(ctx.packageName,0).longVersionCode==15L) { "candidate probe must run before updating bootstrap" }
+            return "PRIVATE_UPDATE_NEW_APK_PASS: actual higher-code archive/hash/original signer/ABI/minSdk accepted while bootstrap remains code 15; no install or network claimed."
+        } finally { file.delete() }
+    }
     fun run(i:Instrumentation):String {
         val ctx=i.targetContext
         val namespace="update-probe-"+UUID.randomUUID().toString()
