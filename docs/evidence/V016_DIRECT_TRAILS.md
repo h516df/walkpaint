@@ -32,3 +32,5 @@
 本地候选待本次v0.16私人发布确认；v0.15发布已完成，旧授权不能推定新版本已发布。不合并历史PR。业务基线为f202d8a；验收JSON保存本次生产源码指纹，可对应后续提交复查。仓库没有配置Actions，不称远端CI通过。
 
 官方API核对：[高德折线绘制](https://lbs.amap.com/api/maps-sdk-for-android/guide/draw-on-map/draw-polyline)、[PolylineOptions](https://a.amap.com/lbs/static/unzip/Android_Map_Doc/3D/com/amap/api/maps/model/PolylineOptions.html)、[Android Location速度与精度](https://developer.android.com/reference/android/location/Location)。
+
+生产提交 `7c3ce8a975bb646a01354f8de4b942a6b1367680`，草稿 [PR #23](https://github.com/h516df/walkpaint/pull/23)，未合并。专用AVD经身份守卫关闭，adb实读无设备。后续仅证据/交接文本提交不改变已验收APK的生产源码；生产源指纹已逐文件复查。

@@ -98,5 +98,8 @@
     "app/src/main/res/values/styles.xml": "bbc6f1a5191c1440b6ff2ac106260923f2c5f1106099afe26c37b322b8f3de5b",
     "app/src/main/res/xml/update_paths.xml": "8dbbf94bfdf253c87dbe3ab2be51bf13dc417ef8533e5f505ee241878be7809d",
     "app/src/main/assets/release-notes.json": "dcdaf84a15009fd58a8be860732927191e1e0f61860d8df518f8700061284163"
-  }
+  },
+  "production_source_commit": "7c3ce8a975bb646a01354f8de4b942a6b1367680",
+  "pull_request": "https://github.com/h516df/walkpaint/pull/23",
+  "dedicated_google_avd_stopped": true
 }
