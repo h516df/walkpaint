@@ -1,0 +1,31 @@
+{
+  "private": true,
+  "draft": false,
+  "prerelease": true,
+  "source_sha": "bcec979015593e67f8ae3567bcbce4bfec0f5f9b",
+  "url": "https://github.com/h516df/walkpaint/releases/tag/v0.14",
+  "all_server_assets_match": [
+    {
+      "name": "WalkPaint-v0.14-arm64-debug.apk",
+      "size": 70288352,
+      "sha256": "04985a845d7cd882995097bd106823e6ec052ccde2ee79b4a76ab0d8b0bfddf2"
+    },
+    {
+      "name": "WalkPaint-v0.14-universal-debug.apk",
+      "size": 124880891,
+      "sha256": "f2ba1250fe50690b599f1cb286a62427cf923eb0432399e8b3ee3f5e09e8e0f4"
+    },
+    {
+      "name": "WalkPaint-v0.14-release-notes.json",
+      "size": 993,
+      "sha256": "1f6eac303a27803d94c8b55f35479c7d90bd81b33d5810d238ba75c0a32be50b"
+    },
+    {
+      "name": "WalkPaint-v0.14-SHA256.txt",
+      "size": 202,
+      "sha256": "a733dc2792f281af81fd2840eb70145bdc6be1f260308d6b0345d6b59b6b0702"
+    }
+  ],
+  "actual_published_phone_download_matches": true,
+  "real_android_installation": "Separate E2E acceptance, do not infer from publication"
+}
