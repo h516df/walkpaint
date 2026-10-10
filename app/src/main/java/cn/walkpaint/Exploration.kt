@@ -44,6 +44,29 @@ internal object Explorer {
         return Exploration(visited.size, visited.count { it !in visitedBeforeToday })
     }
 
+    /**
+     * Consecutive days with a record, counting back from today.
+     *
+     * A day that has not finished yet must not break the run, or the number would drop to zero
+     * every midnight and only come back once someone walked. So the run is counted from today when
+     * today has a record, otherwise from yesterday, and a gap older than that means the run is over.
+     * This is the one progress figure that is both honest and motivating: it needs no denominator
+     * at all, and it is the thing that gets someone out of the door.
+     */
+    fun streak(dayKeys: Collection<String>, todayKey: String): Int {
+        val days = dayKeys.mapNotNull { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }.toHashSet()
+        if (days.isEmpty()) return 0
+        val today = runCatching { java.time.LocalDate.parse(todayKey) }.getOrNull() ?: return 0
+        var cursor = if (today in days) today else today.minusDays(1)
+        if (cursor !in days) return 0
+        var run = 0
+        while (cursor in days) {
+            run++
+            cursor = cursor.minusDays(1)
+        }
+        return run
+    }
+
     private fun key(row: Int, col: Int): Long = (row.toLong() shl 32) xor (col.toLong() and 0xFFFFFFFFL)
 
     /** One lit run of cells on a single grid row, stored as raw grid indices. */

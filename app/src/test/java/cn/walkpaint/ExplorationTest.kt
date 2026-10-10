@@ -129,4 +129,40 @@ class ExplorationTest {
     @Test fun anEmptyTrackHasNoStrips() {
         assertEquals(0, Explorer.rectangles(TrackState(emptyList()), limit = 500).size)
     }
+
+    // ---- streak ----
+
+    @Test fun aDayOnItsOwnIsARunOfOne() {
+        assertEquals(1, Explorer.streak(listOf("2026-10-07"), todayKey = "2026-10-07"))
+    }
+
+    @Test fun consecutiveDaysCountUp() {
+        assertEquals(3, Explorer.streak(
+            listOf("2026-10-05", "2026-10-06", "2026-10-07"), todayKey = "2026-10-07"))
+    }
+
+    @Test fun aDayThatHasNotFinishedYetDoesNotBreakTheRun() {
+        // Nothing walked today still leaves yesterday's run alive until the day is over.
+        assertEquals(2, Explorer.streak(
+            listOf("2026-10-05", "2026-10-06"), todayKey = "2026-10-07"))
+    }
+
+    @Test fun aMissedDayEndsTheRun() {
+        // Nothing yesterday and nothing today: whatever happened earlier is history, not a streak.
+        assertEquals(0, Explorer.streak(
+            listOf("2026-10-01", "2026-10-02", "2026-10-03"), todayKey = "2026-10-07"))
+    }
+
+    @Test fun aRunEndingTodayIgnoresOlderIsolatedDays() {
+        assertEquals(2, Explorer.streak(
+            listOf("2026-09-30", "2026-10-06", "2026-10-07"), todayKey = "2026-10-07"))
+    }
+
+    @Test fun nothingRecordedIsAStreakOfZero() {
+        assertEquals(0, Explorer.streak(emptyList(), todayKey = "2026-10-07"))
+    }
+
+    @Test fun anUnparseableDayKeyIsIgnoredRatherThanCrashing() {
+        assertEquals(1, Explorer.streak(listOf("not-a-date", "2026-10-07"), todayKey = "2026-10-07"))
+    }
 }

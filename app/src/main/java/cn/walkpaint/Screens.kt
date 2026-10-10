@@ -178,7 +178,7 @@ private fun TripsPage(state:TrackState,onTrip:(Track)->Unit) {
                 }
             }
         }
-        item { ExplorationCard(exploration) }
+        item { ExplorationCard(exploration,Explorer.streak(days.map { it.key },today)) }
         item { FootprintCalendar(days,today,onTrip) }
         if(days.isEmpty()) {
             item { Text("开启自动记录后，走过的地方会在地图上留下颜色。",color=Muted,fontSize=BodySize) }
@@ -205,7 +205,7 @@ private fun monthLabel(month:String):String = "${month.take(4)} 年 ${month.subs
  * up rather than snapping, which is the whole loop.
  */
 @Composable
-private fun ExplorationCard(exploration:Exploration) {
+private fun ExplorationCard(exploration:Exploration,streak:Int) {
     val lit by animateIntAsState(targetValue=exploration.newToday,label="newCells")
     Section("探索") {
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.Bottom) {
@@ -219,9 +219,19 @@ private fun ExplorationCard(exploration:Exploration) {
                         modifier=Modifier.padding(bottom=4.dp))
                 }
             }
-            if(exploration.newToday>0) Surface(color=PigmentSoft,shape=ChipShape) {
-                Text("今天新点亮 $lit 块",color=Pigment,fontSize=CaptionSize,fontWeight=FontWeight.Medium,
-                    modifier=Modifier.padding(horizontal=12.dp,vertical=8.dp))
+            Column(horizontalAlignment=Alignment.End) {
+                if(exploration.newToday>0) Surface(color=PigmentSoft,shape=ChipShape) {
+                    Text("今天新点亮 $lit 块",color=Pigment,fontSize=CaptionSize,fontWeight=FontWeight.Medium,
+                        modifier=Modifier.padding(horizontal=12.dp,vertical=8.dp))
+                }
+                // A run of one is not a run; today's chip already covers that case.
+                if(streak>=2) {
+                    Spacer(Modifier.height(6.dp))
+                    Surface(color=CanvasSoft,shape=ChipShape) {
+                        Text("连续 $streak 天",color=Ink,fontSize=CaptionSize,fontWeight=FontWeight.Medium,
+                            modifier=Modifier.padding(horizontal=12.dp,vertical=8.dp))
+                    }
+                }
             }
         }
         Spacer(Modifier.height(10.dp))
