@@ -144,7 +144,10 @@ private fun TripsPage(state:TrackState,onTrip:(Track)->Unit) {
                 Spacer(Modifier.height(8.dp))
                 Text(exploredDistance(state.totalMeters),color=Accent,fontSize=38.sp,fontWeight=FontWeight.Medium)
                 Spacer(Modifier.height(14.dp))
-                Text("${days.size} 天有足迹",color=Muted,fontSize=13.sp)
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(24.dp)) {
+                    Text("走过 ${FootprintInsights.exploredCells(state)} 个不同区域",color=Ink,fontSize=13.sp)
+                    Text("${days.size} 天有足迹",color=Muted,fontSize=13.sp)
+                }
             }
         }
         item { Section("今天的足迹") {
@@ -154,7 +157,7 @@ private fun TripsPage(state:TrackState,onTrip:(Track)->Unit) {
                 color=Muted,fontSize=13.sp,lineHeight=20.sp)
             if(todayDay!=null) SettingRow("查看今天的足迹",onClick={onTrip(todayDay.focusTrack())})
         } }
-        item { Text("无需准备地图或下载道路包。里程按已记录的出行累计，重复经过会累计；定位中断期间不补画连线。",
+        item { Text("无需准备地图或下载道路包。里程按已记录的出行累计，重复经过会累计；区域数按去过的地方去重。定位中断期间不补画连线。",
             color=Muted,fontSize=13.sp,lineHeight=20.sp) }
         item { Text("每日足迹",color=Ink,fontSize=17.sp,fontWeight=FontWeight.SemiBold) }
         if(days.isEmpty()) item { Text("开启自动记录后，实际经过的轨迹会逐渐涂色。",color=Muted,fontSize=14.sp) }
