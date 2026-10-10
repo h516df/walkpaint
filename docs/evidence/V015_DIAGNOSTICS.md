@@ -24,3 +24,7 @@
 完整原始证据在忽略提交的verification/diagnostic-google/、各build日志及失败JSON；公开截图仅专用模拟器合成计数。交付清单在本chat outputs/v0.15-验收记录.json。测试启动HEAD可能早于业务提交，但运行源码/安装包后未改变；通过实际APK哈希与业务提交对应记录，脚本/文档收尾不修改运行代码。
 
 回退需同签名/schema2/code>=17兼容包覆盖；不能卸载/清数据或直接降版号。真实vivo行车/长期后台仍待验收；#6/#10保持开放。剩余诊断规格继续在已有#10中，不新建重复Issue。
+
+## 后续已授权私人分发
+
+用户本chat明确确认，私人预览现已开放：[v0.15](https://github.com/h516df/walkpaint/releases/tag/v0.15)。3资产大小/digest与实际重新下载手机包SHA匹配，标签固定d5f33de，详情见[v015/publication.json](v015/publication.json)。上文“尚未发布”为候选时点。生产源码未改，不重复运行未变的UI；手机真实安装/行车未验收，PR不合并。

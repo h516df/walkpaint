@@ -1,3 +1,13 @@
+# 当前分发 — v0.15 私有预览已开放（2026-10-10）
+
+用户在本chat明确选择“确认发布 v0.15 私有预览”。在现有私人仓库先创建草稿并上传3资产，逐个服务器大小/digest核对通过后开放prerelease，实际重新下载手机APK验SHA通过；private=true/draft=false/prerelease=true。标签v0.15固定业务及完整交接提交d5f33de2cb109ee697f443d010cd7936e5f78c90，生产源码与已验收业务b9e8a2b相同；不移动标签。原v0.14资产保留。[发布](https://github.com/h516df/walkpaint/releases/tag/v0.15) / [手机arm64APK](https://github.com/h516df/walkpaint/releases/download/v0.15/WalkPaint-v0.15-arm64-debug.apk)。
+
+code17/0.15/cn.walkpaint/schema2/原证书，手机70288416字节，SHA256 2b18acd1917b7d199cb9405fb97d0df5b321687c3c1c2e571b9166afeecfec89。服务器3资产和实际下载匹配见docs/evidence/v015/publication.json；180JVM/7guard/Google真实UI及数据保留证据见V015_DIAGNOSTICS.md。PR#22保持草稿、未合并，无CI。
+
+v0.14应用内更新可检查该新版，首次仍需本人GitHub只读授权与手机系统安装确认。**没有访问用户手机，不能说已更新或行车问题已修好。** #6驾驶/长期后台、#10可信速度桶与完整保存→匹配→渲染窗口仍未完成。不上传私人足迹或凭据；只能同签名/schema2/code>=17兼容包回退，不卸载/清库。
+
+---
+
 # 当前本地候选 — v0.15 过滤诊断完成实际 UI 验收（2026-10-10）
 
 本节优先。独立分支agent/codex/diagnostic-acceptance，目录D:\Workspaces\Codex\2026-10-10\ji-x\work\worktrees\codex-diagnostic-v014\codex-diagnostic-acceptance；诊断基线ea691b0，业务b9e8a2b4fd28338bbc4101c6ff21719769098baa。

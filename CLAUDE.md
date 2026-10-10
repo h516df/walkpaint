@@ -1,5 +1,8 @@
 # 项目规则
 
+- v0.15已按本chat用户明确确认私有分发，标签d5f33de固定；3资产服务器digest/大小及实际手机包下载SHA通过。以HANDOFF首节与docs/evidence/v015/publication.json为准。code17/schema2/原签名，PR#22草稿未合并；手机未安装/行车未验收，#6/#10保持开放。历史“待发布”只是候选时点，不重复询问已有本次发布授权。
+
+
 - 当前v0.15诊断候选业务b9e8a2b/独立agent/codex/diagnostic-acceptance，以HANDOFF首节和V015_DIAGNOSTICS.md为准。180 JVM/7 guard/Google实际报告复制、小屏和原五表保留通过；仅本地原签名/code17/schema2候选，未私人发布/手机安装，不合并。#10可信速度桶及全阶段窗口未做，#6驾车/长期后台未验收，不能宣布修好。专用AVD已停止，测试合成偏好/视口恢复；禁止操作MuMu/手机。
 
 

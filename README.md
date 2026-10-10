@@ -1,6 +1,6 @@
-# 当前阶段：v0.15诊断增强本地候选
+# 当前版本：v0.15诊断增强私有预览
 
-五类GPS过滤计数与最近30分钟/2小时线索已在专用Google实际高级诊断/反馈入口验收；180 JVM、7设备守卫及原五表保留通过。code17/schema2/原签名arm64候选在本chat outputs。**尚未发布私有Release或安装用户手机，行车涂色问题未判定修复。**[本轮证据](docs/evidence/V015_DIAGNOSTICS.md)；可信速度桶与完整保存→匹配→渲染时窗继续见已有#10，不把本阶段当全部完成。旧v0.14私人下载保持。
+五类GPS过滤计数与最近30分钟/2小时线索已在专用Google实际高级诊断/反馈入口验收；180 JVM、7设备守卫及原五表保留通过。code17/schema2/原签名arm64候选在本chat outputs。**私有预览已开放，用户手机安装和行车涂色修复仍未验收。**[本轮证据](docs/evidence/V015_DIAGNOSTICS.md)；可信速度桶与完整保存→匹配→渲染时窗继续见已有#10，不把本阶段当全部完成。[私有发布](https://github.com/h516df/walkpaint/releases/tag/v0.15) · [手机APK（约70MB）](https://github.com/h516df/walkpaint/releases/download/v0.15/WalkPaint-v0.15-arm64-debug.apk)；已核对服务器与实际下载SHA。直接覆盖安装，不卸载或清数据；已有v0.14可从“我的→更多设置→检查更新”进入。旧v0.14私人下载保持。
 
 ---
 
