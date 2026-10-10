@@ -263,12 +263,22 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
             logging.importRoadPack(fixture)
             check(logging.roadSnapshot().meters>55 && logging.roadSnapshot().matched==5)
             check(logging.lastRoadError==null)
-            // Real raw-point failure MUST remain fatal and must not pretend to record.
+            // A raw-point failure must stay honest: no false success, the fix is not stored, and the
+            // error is visible. It must NOT be process-permanent, or a transient fault (disk full,
+            // one-off SQLite error) would end recording until the user kills and restarts the app.
             logging.writableDatabase.execSQL("CREATE TRIGGER gps_failure BEFORE INSERT ON points BEGIN SELECT RAISE(ABORT,'gps-write-test'); END")
             val finalCoverage=logging.roadSnapshot().intervals
             check(!logging.addPosition(fix(46.0,6)) && logging.lastError!=null)
             check(logging.snapshot().realPointCount==6 && logging.roadSnapshot().intervals==finalCoverage)
-            result.putString("road_regression","accepted GPS survives catalog and partial coverage failures; valid reimport recovers; raw GPS write failure remains fatal")
+            // Attempts keep failing honestly for as long as the fault persists.
+            check(!logging.addPosition(fix(46.0,7))) { "a failing write reported success" }
+            check(logging.lastError!=null && logging.snapshot().realPointCount==6)
+            // Once the fault clears, recording resumes and the stale error clears with it.
+            logging.writableDatabase.execSQL("DROP TRIGGER gps_failure")
+            check(logging.addPosition(fix(32.0,8))) { "recording did not resume after the write fault cleared" }
+            check(logging.lastError==null) { "stale write error left the UI reporting a dead recorder" }
+            check(logging.snapshot().realPointCount==7)
+            result.putString("road_regression","accepted GPS survives catalog and partial coverage failures; valid reimport recovers; raw GPS write failure stays honest and recovers without a restart")
             databases.forEach { db -> check(db.readableDatabase.rawQuery("PRAGMA integrity_check",null).use { it.moveToFirst() && it.getString(0)=="ok" }) }
             result.putString("stream","V05_ISOLATED_DATABASE_PASS: v1 rows and IDs preserved; road reimport atomic; backup roundtrip deduplicated; ${result.getString("road_regression")}\n")
             resultCode=Activity.RESULT_OK

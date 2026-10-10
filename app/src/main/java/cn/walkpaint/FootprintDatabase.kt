@@ -19,8 +19,17 @@ import java.util.UUID
 class FootprintDatabase(private val context: Context) :
     SQLiteOpenHelper(context, "footprints.db", null, 2) {
 
+    /** Most recent user-visible data problem. Display only; the write gate is [fatalError]. */
     @Volatile var lastError: String? = null
         private set
+    /**
+     * Set only when the database itself is unusable, and permanent for this process.
+     * A transient write failure must never land here: it would stop recording until the
+     * user kills the app, which is exactly the recovery path this class must not require.
+     */
+    @Volatile private var fatalError: String? = null
+    /** True while a dropped GPS fix has not yet been followed by a successful commit. */
+    @Volatile private var writeFailureLatched = false
     @Volatile internal var lastRoadError: String? = null
         private set
     @Volatile var lastFilterReason: String = "NONE"
@@ -188,7 +197,8 @@ class FootprintDatabase(private val context: Context) :
             writableDatabase // Initialize before testing the legacy archive.
             migrateLegacyJson()
         } catch (e: Exception) {
-            lastError = "数据库初始化失败：请先备份原文件，不会自动清除足迹"
+            fatalError = "数据库初始化失败：请先备份原文件，不会自动清除足迹"
+            lastError = fatalError
         }
     }
 
@@ -199,6 +209,9 @@ class FootprintDatabase(private val context: Context) :
         if (legacy.exists()) {
             val source = try { TrackCodec.decode(legacy.readText(Charsets.UTF_8)) }
             catch (e: Exception) {
+                // Deliberately NOT fatal: the database is writable, only the old archive could not be
+                // read. Blocking new recording would not recover it, it would only lose new walks too.
+                // The warning stays visible because it is not a latched write failure.
                 lastError = "旧版足迹无法读取。原始文件已保留，请勿清除应用数据"
                 return
             }
@@ -264,7 +277,9 @@ class FootprintDatabase(private val context: Context) :
     }
 
     @Synchronized fun addPosition(location: Location, confidentlyMoving: Boolean = false): Boolean {
-        if (lastError != null) return false
+        // Only an unusable database blocks new attempts. A previous transient failure must not,
+        // or free space would never be noticed and the user would have to kill the app.
+        if (fatalError != null) return false
         val wallClock = System.currentTimeMillis()
         if (!Geo.plausibleTimestamp(location.time, wallClock)) { lastFilterReason = "STALE_FIX"; return false }
         val now = TrackPoint(location.latitude, location.longitude, location.time, location.accuracy)
@@ -303,9 +318,13 @@ class FootprintDatabase(private val context: Context) :
             if (!newTrip && previous != null) paintPairIsolated(db,pointId,previous,stored)
             db.setTransactionSuccessful()
         } catch (e: Exception) {
+            writeFailureLatched = true
             lastError = "足迹写入失败。请检查存储空间并尽快备份"
             return false
         } finally { db.endTransaction() }
+        // This fix was dropped and honestly reported, so nothing was pretended. A later successful
+        // commit proves storage recovered: clear the warning and keep recording without a restart.
+        if (writeFailureLatched) { writeFailureLatched = false; lastError = null }
         cached = cached?.let { state ->
             if (newTrip) state.copy(tracks = state.tracks + Track(id, now.time, false, listOf(stored)))
             else state.copy(tracks = state.tracks.map { if (it.id == id) it.copy(points = it.points + stored) else it })
@@ -402,7 +421,8 @@ class FootprintDatabase(private val context: Context) :
 
     /** A local rolling daily snapshot; separate off-device backups remain user initiated. */
     private fun maybeDailyBackup(timestamp: Long) {
-        if (lastError != null) return
+        // Resume automatic backups once storage recovers; only an unusable database stays blocked.
+        if (fatalError != null) return
         val date = localDay(timestamp)
         val previousBackup = preferences.getLong("last_auto_backup_time", 0L)
         if (previousBackup > 0 && timestamp - previousBackup < 30 * 60_000L) return
@@ -422,7 +442,7 @@ class FootprintDatabase(private val context: Context) :
         } catch (_: Exception) { /* Primary SQLite remains authoritative. */ }
     }
 
-    private fun ensureWritable() { check(lastError == null) { lastError!! } }
+    private fun ensureWritable() { check(fatalError == null) { fatalError!! } }
 }
 
 object FootprintInsights {
