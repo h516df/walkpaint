@@ -933,9 +933,11 @@ class MainActivity : ComponentActivity() {
                 style.addSource(GeoJsonSource("wp-roads", roadJson))
                 style.addSource(GeoJsonSource("wp-painted", paintedJson))
                 style.addSource(GeoJsonSource("wp-explored", exploredJson))
+                // Same colour as the trail line below, so the ground and the line are one mark on
+                // both renderers; the AMap path already follows the chosen colour.
                 style.addLayer(org.maplibre.android.style.layers.FillLayer("wp-explored-fill","wp-explored")
                     .withProperties(
-                        PropertyFactory.fillColor(ExploredRoadArgb),
+                        PropertyFactory.fillColor(roadColor),
                         PropertyFactory.fillOpacity(Explorer.EXPLORED_FILL_ALPHA)))
                 style.addLayer(LineLayer("wp-road-base","wp-roads").withProperties(
                     PropertyFactory.lineColor(UnexploredRoadArgb),

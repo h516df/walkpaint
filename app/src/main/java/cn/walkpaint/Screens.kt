@@ -141,15 +141,6 @@ private fun Section(title:String,content:@Composable ColumnScope.()->Unit) {
     }
 }
 
-/** The one card that carries live numbers; it gets the pigment tint instead of plain white. */
-@Composable
-private fun LiveCard(content:@Composable ColumnScope.()->Unit) {
-    Surface(color=Canvas,shape=CardShape,border=BorderStroke(1.dp,Line),shadowElevation=2.dp,
-        modifier=Modifier.fillMaxWidth()) {
-        Column(Modifier.fillMaxWidth().padding(20.dp)) { content() }
-    }
-}
-
 @Composable
 private fun SettingRow(title:String,detail:String="",onClick:()->Unit) {
     Row(Modifier.fillMaxWidth().clickable(onClick=onClick).heightIn(min=56.dp).padding(vertical=10.dp),
