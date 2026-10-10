@@ -34,3 +34,7 @@
 官方API核对：[高德折线绘制](https://lbs.amap.com/api/maps-sdk-for-android/guide/draw-on-map/draw-polyline)、[PolylineOptions](https://a.amap.com/lbs/static/unzip/Android_Map_Doc/3D/com/amap/api/maps/model/PolylineOptions.html)、[Android Location速度与精度](https://developer.android.com/reference/android/location/Location)。
 
 生产提交 `7c3ce8a975bb646a01354f8de4b942a6b1367680`，草稿 [PR #23](https://github.com/h516df/walkpaint/pull/23)，未合并。专用AVD经身份守卫关闭，adb实读无设备。后续仅证据/交接文本提交不改变已验收APK的生产源码；生产源指纹已逐文件复查。
+
+## 后续已授权私有分发
+
+用户本chat明确回答“好”，已发布[v0.16](https://github.com/h516df/walkpaint/releases/tag/v0.16)，三资产服务器大小/digest与实际重新下载手机包SHA匹配；标签固定b84f132，生产源码与7c3ce8a未变。[分发证据](v016/publication.json)。上文未发布为候选时点，不重复未变的产品测试。没有访问用户手机，安装/新ARM高德/实际行车和长期后台仍未验收，PR不合并。
