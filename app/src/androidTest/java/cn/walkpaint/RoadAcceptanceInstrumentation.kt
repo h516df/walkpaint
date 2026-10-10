@@ -16,8 +16,34 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
     private var fixtureProbe=false
     private var cameraProbe=false
     private var roadColorProbe=false
+    private var privateUpdateProbe=false
+    private var updateLogoutProbe=false
+    private var candidateSha:String?=null
     override fun onStart() {
         val result = Bundle()
+        if(updateLogoutProbe) {
+            try {
+                check(targetContext.getSharedPreferences("private_update_authorization",Context.MODE_PRIVATE).all.isEmpty())
+                check(!java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.containsAlias("walkpaint-update-v1"))
+                check(File(targetContext.cacheDir,"updates").listFiles().isNullOrEmpty())
+                result.putString("stream","PRIVATE_UPDATE_REAL_LOGOUT_PASS: preferences empty, device key removed, update cache empty; no credentials exported")
+                finish(Activity.RESULT_OK,result)
+            } catch(_:Throwable) {
+                result.putString("stream","PRIVATE_UPDATE_REAL_LOGOUT_FAIL")
+                finish(Activity.RESULT_CANCELED,result)
+            }
+            return
+        }
+        candidateSha?.let { sha ->
+            try { result.putString("stream",PrivateUpdateProbe.candidate(this,sha));finish(Activity.RESULT_OK,result) }
+            catch(e:Throwable) { result.putString("stream","PRIVATE_UPDATE_NEW_APK_FAIL: ${e.javaClass.simpleName}");finish(Activity.RESULT_CANCELED,result) }
+            return
+        }
+        if(privateUpdateProbe) {
+            try { result.putString("stream",PrivateUpdateProbe.run(this));finish(Activity.RESULT_OK,result) }
+            catch(e:Throwable) { result.putString("stream","PRIVATE_UPDATE_ANDROID_BOUNDARIES_FAIL: ${e.javaClass.simpleName}: ${e.message}");finish(Activity.RESULT_CANCELED,result) }
+            return
+        }
         if(roadColorProbe) {
             try { result.putString("stream",RoadColorProbe(this).run());finish(Activity.RESULT_OK,result) }
             catch(e:Throwable) { result.putString("stream","ROAD_COLOR_SDK_FAIL: ${e.javaClass.simpleName}: ${e.message}");finish(Activity.RESULT_CANCELED,result) }
@@ -258,5 +284,5 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
         // finish() can terminate the instrumented process immediately; cleanup must precede it.
         finish(resultCode,result)
     }
-    override fun onCreate(arguments:Bundle?) { roadColorProbe=arguments?.getString("roadColorProbe")=="true"; cameraProbe=arguments?.getString("cameraProbe")=="true"; fixtureProbe=arguments?.getString("fixtureProbe")=="true"; catalogProbe=arguments?.getString("catalogProbe")=="true"; networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments); start() }
+    override fun onCreate(arguments:Bundle?) { updateLogoutProbe=arguments?.getString("updateLogoutProbe")=="true";candidateSha=arguments?.getString("candidateSha");privateUpdateProbe=arguments?.getString("privateUpdateProbe")=="true";roadColorProbe=arguments?.getString("roadColorProbe")=="true"; cameraProbe=arguments?.getString("cameraProbe")=="true"; fixtureProbe=arguments?.getString("fixtureProbe")=="true"; catalogProbe=arguments?.getString("catalogProbe")=="true"; networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments); start() }
 }

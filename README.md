@@ -2,7 +2,13 @@
 
 Android 道路探索涂色应用：授权一次，日常自动记录；走过的真实道路逐渐上色。首页近全屏高德地图，柔和青绿道路、小蓝点、定位按钮和轻薄导航；成果在足迹，记录管理和诊断在我的。重复经过去重，歧义/漂移/断档保守拒绝；不显示 GPS 折线或用演示轨迹冒充涂色。
 
-## v0.13 私有预览（本机已验收，手机未验收）
+## v0.14 私有预览（应用内更新闭环通过，手机未验收）
+
+“我的 → 更多设置 → 检查更新”支持本人 GitHub 设备授权、检查私有新版、中文说明、下载与取消、安装包校验，再由 Android 系统确认覆盖安装。更新应用只读取 h516df/walkpaint，授权本机加密保存，可退出；无需服务器或复制电脑凭据。
+
+171 JVM/7 守卫；专用 Google 模拟器真实私有下载、取消/重试、拒绝来源权限、取消系统安装、确认覆盖、安装后最新版检查、原五表保留，以及授权/密钥/缓存清理全部通过。[分阶段证据、截图与回退](docs/evidence/V014.md)。[私有预览](https://github.com/h516df/walkpaint/releases/tag/v0.14) / [手机 arm64 APK](https://github.com/h516df/walkpaint/releases/download/v0.14/WalkPaint-v0.14-arm64-debug.apk)，服务器与重新下载 SHA 一致。直接覆盖安装，不卸载/清数据。code16/schema2/原签名；[草稿 PR #21](https://github.com/h516df/walkpaint/pull/21) 未合并，手机是否安装、vivo 户外/长期后台/ARM 高德仍未验收。旧 v0.13 下载保留。
+
+## v0.13 历史私有预览（本机已验收，手机未验收）
 
 延续简洁我的/分步授权，新增本机问题反馈与预览分享、中文本版更新说明和私有发布页浏览器入口；不兼容高德的设备使用已有离线地图。129 JVM/7守卫、Google真实反馈全链/同签名覆盖旧行保留/实际公开道路50.04米彩路/后台及短时锁屏通过。[证据、失败修正、截图与回退](docs/evidence/V013.md)。code14/schema2/原签名，手机未安装、vivo户外/长期后台仍未验收，更新当前为浏览器降级路径。按本轮“做完再上传”要求已统一[私有分发](https://github.com/h516df/walkpaint/releases/tag/v0.13) / [手机APK](https://github.com/h516df/walkpaint/releases/download/v0.13/WalkPaint-v0.13-arm64-debug.apk)，服务器与实际下载SHA一致；原v0.11保留，v0.12不另发布。
 

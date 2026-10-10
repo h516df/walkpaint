@@ -1,0 +1,17 @@
+{
+  "expected_apk_sha256": "f2ba1250fe50690b599f1cb286a62427cf923eb0432399e8b3ee3f5e09e8e0f4",
+  "original_install_mode": "default",
+  "actual_private_new_version_detected": true,
+  "actual_download_cancelled_and_partial_removed": true,
+  "actual_private_download_finished": true,
+  "download_hash_matches_final_artifact": true,
+  "refusing_source_permission_keeps_old_app_and_rows": true,
+  "cancelling_installer_preserves_old_app_and_rows": true,
+  "real_system_cover_install_code_15_to_16": true,
+  "installed_apk_matches_final_artifact": true,
+  "all_original_database_rows_unchanged": true,
+  "install_permission_restored": true,
+  "authorization_survives_cover_install_and_no_update_is_real": true,
+  "local_logout_cache_cleanup_and_rows_retained": true,
+  "staged_continuation_after_installer_done": true
+}
