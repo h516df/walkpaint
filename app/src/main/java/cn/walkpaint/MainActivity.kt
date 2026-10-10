@@ -296,6 +296,7 @@ class MainActivity : ComponentActivity() {
                 AppShell(
                     selectedTab = currentTab,
                     onTab = {
+                        if(it!=2 && privateUpdateState.busy) privateUpdater.cancel()
                         if(it==0 && currentTab!=0 && selectedDay==null) { follow.locate();lastCameraPoint=null }
                         currentTab=it;syncHeadingLifecycle()
                     },
