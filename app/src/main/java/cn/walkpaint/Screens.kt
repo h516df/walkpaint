@@ -2,6 +2,7 @@ package cn.walkpaint
 
 import android.location.Location
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
@@ -155,6 +156,10 @@ private fun TripsPage(state:TrackState,onTrip:(Track)->Unit) {
     val todayDay=days.firstOrNull { it.key==today }
     val byMonth=remember(days) { days.groupBy { it.key.take(7) } }
     val busiestDay=remember(days) { days.maxOfOrNull { it.meters } ?: 0.0 }
+    val exploration=remember(state) {
+        Explorer.of(state,java.time.LocalDate.now().atStartOfDay(java.time.ZoneId.systemDefault())
+            .toInstant().toEpochMilli())
+    }
     LazyColumn(Modifier.fillMaxSize(),
         contentPadding=PaddingValues(start=20.dp,end=20.dp,top=20.dp,bottom=32.dp),
         verticalArrangement=Arrangement.spacedBy(16.dp)) {
@@ -173,6 +178,7 @@ private fun TripsPage(state:TrackState,onTrip:(Track)->Unit) {
                 }
             }
         }
+        item { ExplorationCard(exploration) }
         item { FootprintCalendar(days,today,onTrip) }
         if(days.isEmpty()) {
             item { Text("开启自动记录后，走过的地方会在地图上留下颜色。",color=Muted,fontSize=BodySize) }
@@ -189,6 +195,40 @@ private fun TripsPage(state:TrackState,onTrip:(Track)->Unit) {
 }
 
 private fun monthLabel(month:String):String = "${month.take(4)} 年 ${month.substring(5).toInt()} 月"
+
+/**
+ * The progress reading, plus the single moment of reward.
+ *
+ * There is no percentage, on purpose: an area ratio has no honest denominator, and a frame built
+ * from the tracks collapses to zero as soon as someone travels far. What is left is the number the
+ * app can actually stand behind, and the one that moves when you go somewhere new. New cells count
+ * up rather than snapping, which is the whole loop.
+ */
+@Composable
+private fun ExplorationCard(exploration:Exploration) {
+    val lit by animateIntAsState(targetValue=exploration.newToday,label="newCells")
+    Section("探索") {
+        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.Bottom) {
+            Column(Modifier.weight(1f)) {
+                Text("已点亮",color=Muted,fontSize=CaptionSize)
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment=Alignment.Bottom) {
+                    Text("${exploration.cellsVisited}",color=Pigment,fontSize=36.sp,
+                        fontWeight=FontWeight.Bold,style=TabularFigures)
+                    Text(" 块",color=Pigment,fontSize=17.sp,fontWeight=FontWeight.Bold,
+                        modifier=Modifier.padding(bottom=4.dp))
+                }
+            }
+            if(exploration.newToday>0) Surface(color=PigmentSoft,shape=ChipShape) {
+                Text("今天新点亮 $lit 块",color=Pigment,fontSize=CaptionSize,fontWeight=FontWeight.Medium,
+                    modifier=Modifier.padding(horizontal=12.dp,vertical=8.dp))
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Text("一块约 550 米见方。走过哪块就点亮哪块，同一条路再走一遍不会重复计数。",
+            color=Muted,fontSize=MicroSize,lineHeight=17.sp)
+    }
+}
 
 @Composable
 private fun StatChip(text:String) {

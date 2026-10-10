@@ -21,9 +21,9 @@ android {
         applicationId = "cn.walkpaint"
         minSdk = 26
         targetSdk = 36
-        // A distinct upgrade from the distributed code 22 preview (v0.20).
-        versionCode = 23
-        versionName = "0.21"
+        // A distinct upgrade from the distributed code 23 preview (v0.21).
+        versionCode = 24
+        versionName = "0.22"
         testInstrumentationRunner = "cn.walkpaint.RoadAcceptanceInstrumentation"
         // Optional phone-sized APK; the default universal debug APK remains emulator-compatible.
         if (providers.gradleProperty("walkpaintArm64Only").orNull == "true") {
