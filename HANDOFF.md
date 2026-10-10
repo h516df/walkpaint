@@ -1,4 +1,14 @@
-# 当前交付 — v0.13 / #10 #11 #12 #17（2026-10-10）
+# 当前进行 — v0.14 私有更新补全 / #11（2026-10-10）
+
+唯一写手 `agent/codex/issue11-private-updater` / `D:\Workspaces\Codex\2026-10-10\new-chat\work\worktrees\WalkPaint\codex-issue11-private-updater`；业务与 code16 APK `bcec979015593e67f8ae3567bcbce4bfec0f5f9b`，继承 ed6ee80，草稿 [PR #21](https://github.com/h516df/walkpaint/pull/21) 未合并。171 JVM/7 Google guard、实际私有设备授权与旧 manifest/hash/重开、Keystore/package/provider 和新包预校验通过；原五表保持、两包 dex/说明一致。详情优先 [V014](docs/evidence/V014.md)。
+
+**当前不是完整交付：v0.14 4 资产已为私有 draft 上传并核对 digest，自动审核拒绝 draft=false，正在等待用户明确允许现在开放私有预览，以完成实际下载→系统覆盖验收。** 不绕过，不更换发布途径。新 App 用户已明确同意仅 walkpaint Contents/Metadata read，安装页已实读生效；不使用服务器/secret/private key/PC token，设备令牌仅 Keystore 本机加密。账户切换已由本人完成，浏览器和 CLI 现为 h516df；不再让用户重做授权决定。
+
+Google AVD 仍为唯一自动目标 emulator-5556/WalkPaint_Google_API36。当前已装本地 code15 授权 bootstrap（未分发），本机更新授权仍用于尚未完成的本次验收；结束前必须通过 App 退出清理授权/cache，并停止专用 AVD。最终候选 code16/0.14/schema2/原签名；手机 70288352 字节 SHA 04985a845d7cd882995097bd106823e6ec052ccde2ee79b4a76ab0d8b0bfddf2；通用 f2ba1250fe50690b599f1cb286a62427cf923eb0432399e8b3ee3f5e09e8e0f4。vivo/ARM高德/长期后台仍未验收，旧 #6 等保持；不动其他 worktree/MuMu/手机，不改记录/DB/阈值。回退同签名/schema2/code>=16 覆盖修复包。
+
+---
+
+# 历史交付 — v0.13 / #10 #11 #12 #17（2026-10-10）
 
 本节优先于下方历史。用户要求“你先都做完，再上传吧”：先完成软件整合/验收，再统一私有分发，不单发v0.12。唯一写手串行工作区 `D:\Workspaces\Codex\2026-10-10\new-chat\work\worktrees\WalkPaint\codex-issue11-updates` / `agent/codex/issue11-updates`，最终业务SHA `349cd9d528a5693aa49ebda2a040da487fa89a3c`，基线PR #16 c7bba2c；地图/反馈分支各只有自有新提交。原canonical/其他写手目录未修改。
 

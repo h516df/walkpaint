@@ -1,5 +1,7 @@
 # 项目规则
 
+- 当前继续 #11/v0.14，最新状态优先 HANDOFF 首节与 docs/evidence/V014.md；草稿PR #21。171 JVM/7 guard、真实私有授权/旧 manifest/hash/重开、Android crypto/package/provider 与新 code16 包预校验通过；尚不是完整下载安装闭环。v0.14 私有 draft 4 资产已核对，自动审核要求现在开放预览的明确确认，确认前不能绕过。用户已确认仅 walkpaint 只读 App，服务器安装范围已实读；公开 client id 非秘密，严禁 App secret/private key/PC token。Google 当前 code15 仅本地 bootstrap，最终 APK code16/0.14/schema2/原签名，手机未装/未验收；测试结束必须退出本地更新授权清 cache 并停止专用 AVD。只用 Google guard，不动其他工作区/私人MuMu/手机、不改记录/DB/matcher，不关闭真机事项，不合并。此节优先于以下历史。
+
 - 当前串行完成 v0.13 的 #10 反馈/#11 浏览器更新MVP/#17 ARM兼容和#12继承整合；以HANDOFF首节和docs/evidence/V013.md为准。129 JVM/7守卫/Google真实反馈、覆盖升级、私有浏览器入口与50.04米真实GPS彩路通过；两包dex/内置说明一致。v0.13私有预览已分发并实际下载验SHA，PR未合并、手机未安装；已按本轮用户“做完再上传”授权统一私有分发，不单发v0.12。#11不冒充自动下载；vivo P0/长期后台与ARM高德本轮未验收。禁止改服务、DB、GPS/matcher阈值或测试私人MuMu。反馈仅固定白名单、本地有界留存、沿用诊断写入线程，不新增遥测/监控服务。回退原签名/schema2/code>=14。此节优先于以下历史状态。
 
 - 当前串行推进 #12/v0.12，业务/候选包/测试与限制以 HANDOFF 首节及 docs/evidence/V012.md 为准。仅简化我的/权限引导/地图数据提示；禁止改记录服务、DB、GPS/matcher阈值。111 JVM、7 Google guard 和真实 Google UI/入库分段验收通过；Google 高德黑屏是已复现 v0.11 基线限制，底图/彩路像素未通过。APK 尚未发布，具体 v0.12 私有分发需用户确认；手机未安装，vivo P0 未解决，不关闭 #6/#7/#8/#12。不操作 MuMu/手机，后续只认 Google guard。回退同签名/schema2/code>=13。
