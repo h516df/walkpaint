@@ -130,6 +130,7 @@ internal object RecordingDiagnostics {
         fun string(key: String) = values[key] as? String ?: "无"
         val failed = synchronized(lock) { persistenceFailed }
         val now = System.currentTimeMillis()
+        val recent = recent(context)
         fun age(key: String): String = long(key).let {
             if (it == 0L) "无" else "${(now - it).coerceAtLeast(0) / 1000} 秒前"
         }
@@ -138,6 +139,8 @@ internal object RecordingDiagnostics {
             "服务心跳：${age("heartbeat_at")}（仅进程活性）",
             "GPS 注册：${age("registration_at")} · ${string("registration")}",
             "本次服务：GPS回调 ${long("session_gps_count")} / 有效GPS ${long("session_valid_gps_count")} / 已入库 ${long("session_saved_count")} / 过滤 ${long("session_filtered_count")}",
+            GpsFilterDiagnostics.session(values),
+            GpsFilterDiagnostics.recent(recent.entries, recent.enabled, recent.saveFailed, now),
             "系统GPS/订阅：${string("provider_state")} · ${age("provider_at")}（订阅成功不代表已定位）",
             "卫星状态：${string("gnss_state")} · ${age("gnss_state_at")}",
             "最近卫星观测：${if (long("gnss_at") == 0L) "无" else "可见 ${long("gnss_visible")} / 参与定位 ${long("gnss_used")} · ${age("gnss_at")}"}",
@@ -145,7 +148,7 @@ internal object RecordingDiagnostics {
             "GPS 最近回调：${age("gps_callback_at")} · 累计 ${long("gps_count")} 次",
             "最近有效 GPS：${age("valid_gps_at")} · 累计 ${long("valid_gps_count")} 次（通过时间、坐标、精度检查）",
             "最近入库：${age("saved_at")} · 累计 ${long("saved_count")} 点（实际 SQLite 提交）",
-            "最近过滤：${string("filter_reason")} · ${age("filtered_at")}",
+            "最近过滤：${if (long("filtered_at") == 0L) "无" else GpsFilterCategory.safeReason(string("filter_reason"))} · ${age("filtered_at")}",
             "最近失败：${string("failure_reason")} · ${age("failure_at")}",
             "回调断档 >45秒：${long("gap_count")} 次 · 最近 ${long("last_gap_ms") / 1000} 秒 · 最长 ${long("max_gap_ms") / 1000} 秒",
             "服务停止：${string("stop_reason")} · ${age("service_stop_at")}",

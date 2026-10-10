@@ -27,13 +27,7 @@ internal enum class ProblemCode(val label:String, val hint:String, val critical:
             "stop" -> RECORDING_STOPPED
             "register" -> if(reason in setOf("GPS_REGISTERED","GPS_RETRY_REGISTERED")) GPS_REGISTERED else RECORDING_FAILED
             "gps" -> if(gap!=null) GPS_GAP else null
-            "filtered" -> when(reason) {
-                "MISSING_ACCURACY","UNRELIABLE_ACCURACY" -> GPS_ACCURACY
-                "STALE_FIX","NON_INCREASING_TIME" -> GPS_STALE
-                "STATIONARY_OR_SMALL_MOVE" -> GPS_STATIONARY
-                "JUMP_OR_TOO_FAST" -> GPS_JUMP
-                else -> GPS_FILTERED
-            }
+            "filtered" -> GpsFilterCategory.fromReason(reason).problemCode
             "failure" -> RECORDING_FAILED
             "exit" -> PROCESS_EXIT
             "recovery" -> RECOVERY

@@ -7,9 +7,10 @@ internal class DiagnosticBuffer(initial: Map<String, Any?> = emptyMap()) {
         private set
 
     fun record(kind: String, reason: String, at: Long, gap: Long? = null): Boolean {
+        val safeReason = if (kind == "filtered") GpsFilterCategory.safeReason(reason) else reason
         fun count(key: String) { values[key] = long(key) + 1 }
         values["last_event_at"] = at
-        values["last_event"] = reason
+        values["last_event"] = safeReason
         when (kind) {
             "start" -> {
                 values["service_start_at"] = at; count("start_count")
@@ -17,6 +18,7 @@ internal class DiagnosticBuffer(initial: Map<String, Any?> = emptyMap()) {
                 listOf("gps", "valid_gps", "saved", "filtered").forEach {
                     values["session_${it}_count"] = 0L
                 }
+                GpsFilterCategory.entries.forEach { values[it.sessionKey] = 0L }
                 // A previous session's satellite visibility is not current evidence.
                 listOf("gnss_state_at", "gnss_at", "gnss_visible", "gnss_used", "gnss_first_fix_at", "gnss_ttff_ms").forEach { values[it] = 0L }
                 values["gnss_state"] = "尚无本次卫星状态"
@@ -29,7 +31,8 @@ internal class DiagnosticBuffer(initial: Map<String, Any?> = emptyMap()) {
             "recovery" -> { values["recovery_at"] = at; values["recovery_reason"] = reason; count("recovery_count") }
             "saved" -> { values["saved_at"] = at; count("saved_count") }
             "filtered" -> {
-                values["filtered_at"] = at; values["filter_reason"] = reason; count("filtered_count")
+                values["filtered_at"] = at; values["filter_reason"] = safeReason; count("filtered_count")
+                count(GpsFilterCategory.fromReason(safeReason).sessionKey)
             }
             "failure" -> { values["failure_at"] = at; values["failure_reason"] = reason }
             "register" -> { values["registration_at"] = at; values["registration"] = reason }

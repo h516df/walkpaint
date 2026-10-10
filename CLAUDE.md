@@ -1,5 +1,13 @@
 # 项目规则
 
+- v0.15已按本chat用户明确确认私有分发，标签d5f33de固定；3资产服务器digest/大小及实际手机包下载SHA通过。以HANDOFF首节与docs/evidence/v015/publication.json为准。code17/schema2/原签名，PR#22草稿未合并；手机未安装/行车未验收，#6/#10保持开放。历史“待发布”只是候选时点，不重复询问已有本次发布授权。
+
+
+- 当前v0.15诊断候选业务b9e8a2b/独立agent/codex/diagnostic-acceptance，以HANDOFF首节和V015_DIAGNOSTICS.md为准。180 JVM/7 guard/Google实际报告复制、小屏和原五表保留通过；仅本地原签名/code17/schema2候选，未私人发布/手机安装，不合并。#10可信速度桶及全阶段窗口未做，#6驾车/长期后台未验收，不能宣布修好。专用AVD已停止，测试合成偏好/视口恢复；禁止操作MuMu/手机。
+
+
+- 当前为 v0.14 真机反馈后的诊断增强，唯一写手目录 `D:\Worktrees\WalkPaint\codex-diagnostic-v014` / `fix/v014-diagnostic-breakdown`，基线 bcec979；以 HANDOFF 最新节及 docs/evidence/V014_DIAGNOSTICS.md 为准。只增加本次服务过滤五类计数、复用既有5分钟历史桶的30分钟/2小时统计与诊断/主动预览显示。跨窗口桶不得按比例分配，旧版未分类/关闭/清空/裁剪的线索不可回溯。保留白名单，未知过滤文本只记 OTHER_FILTER；沿用诊断线程/30秒持久化，不改 GPS/道路匹配阈值、SQLite/schema、上传或服务。180 JVM/7 guard/通用debug构建通过；无已启动的合规Google AVD，真实渲染与真机行车未验收。仅本地候选，未安装/发布/推送/合并，禁止据此称原故障已修复。本节优先于下方历史状态。
+
 - 当前 #11/v0.14 软件更新闭环已通过，最新状态看 HANDOFF 首节与 docs/evidence/V014.md。171 JVM/7 guard、Google 真实私有授权/下载/取消重试/拒绝来源/取消安装/确认覆盖/原五表保留/新版检查/退出清理通过；系统 Done 导航修正后分段续验，不伪称整轮重跑。用户明确确认后私有预览开放，服务器与重新下载指纹一致，code16/0.14/schema2/原签名；草稿 PR #21 未合并，手机/vivo 户外长期后台/ARM 高德未验收。仅 walkpaint Contents/Metadata read App，无服务器/secret/private key/PC token；专用 Google 授权/Keystore/cache 已清，AVD 已停止。不动其他目录/MuMu/手机，不改记录/DB/matcher，不擅自关闭真机事项。此节优先以下历史。
 
 - 当前串行完成 v0.13 的 #10 反馈/#11 浏览器更新MVP/#17 ARM兼容和#12继承整合；以HANDOFF首节和docs/evidence/V013.md为准。129 JVM/7守卫/Google真实反馈、覆盖升级、私有浏览器入口与50.04米真实GPS彩路通过；两包dex/内置说明一致。v0.13私有预览已分发并实际下载验SHA，PR未合并、手机未安装；已按本轮用户“做完再上传”授权统一私有分发，不单发v0.12。#11不冒充自动下载；vivo P0/长期后台与ARM高德本轮未验收。禁止改服务、DB、GPS/matcher阈值或测试私人MuMu。反馈仅固定白名单、本地有界留存、沿用诊断写入线程，不新增遥测/监控服务。回退原签名/schema2/code>=14。此节优先于以下历史状态。

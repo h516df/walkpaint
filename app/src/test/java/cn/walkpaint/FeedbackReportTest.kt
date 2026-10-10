@@ -19,4 +19,39 @@ class FeedbackReportTest {
         val text=FeedbackReport.build(facts().copy(currentConfirmable=2),"道路涂色","",180_000)
         assertTrue(text.contains("当前复算可确认，但累计涂色为空"))
     }
+    @Test fun previewIncludesIndependentSessionAndBothWindowsEvenBeyondThirtyVisibleClues() {
+        val now = 10_000_000L
+        val b = DiagnosticBuffer()
+        b.record("start", "USER_OR_BOOT_START", now - 1000)
+        b.record("filtered", "JUMP_OR_TOO_FAST", now)
+        val recent = List(40) { ProblemEntry(ProblemCode.RECORDING_FAILED, now, now, 1) } +
+            ProblemEntry(ProblemCode.GPS_JUMP, now - 100, now - 1, 42)
+        val text = FeedbackReport.build(facts().copy(diagnostics=b.snapshot(),history=recent), "道路涂色", "", now)
+        assertTrue(text.contains("本次服务GPS过滤分类"))
+        assertTrue(text.contains("已分类 1 / 过滤总数 1"))
+        assertTrue(text.contains("最近30分钟")); assertTrue(text.contains("最近2小时"))
+        assertEquals(2, Regex("JUMP_OR_TOO_FAST 42").findAll(text).count())
+        assertFalse(text.contains("位置跳变未采用")) // This clue is outside the separate 30-row presentation cap.
+        assertTrue(text.contains("不能判断行车时段"))
+    }
+    @Test fun automaticallyCollectedFilterPayloadsCannotEnterPreviewOrPersistedHistory() {
+        val payload = "51.75 -1.25 speed=88 SECRET_ROAD SECRET_ID SECRET_KEY raw-track"
+        val b = DiagnosticBuffer()
+        b.record("filtered", payload, 1)
+        val h = ProblemHistory(now=1)
+        h.record(ProblemCode.fromRecording("filtered", payload, null)!!, 1)
+        val injected = b.snapshot() + mapOf("session_filter_time_count" to payload, "road_id" to "SECRET_ID")
+        val text = FeedbackReport.build(facts().copy(diagnostics=injected,history=h.snapshot(1)), "定位", "", 1)
+        listOf("51.75", "-1.25", "speed=88", "SECRET_ROAD", "SECRET_ID", "SECRET_KEY", "raw-track").forEach {
+            assertFalse(text.contains(it)); assertFalse(h.encode().contains(it)); assertFalse(b.snapshot().toString().contains(it))
+        }
+        assertTrue(text.contains("其他 1"))
+    }
+    @Test fun oldSessionAndDisabledEmptyHistoryStayExplicitlyUnrecoverable() {
+        val text = FeedbackReport.build(facts().copy(
+            diagnostics=mapOf("session_filtered_count" to 1025L),collected=false,historySaveFailed=true), "定位", "", 180_000)
+        assertTrue(text.contains("不可回溯 1025"))
+        assertTrue(text.contains("已关闭收集")); assertTrue(text.contains("保存失败"))
+        assertTrue(text.contains("无保留过滤桶，不代表没有过滤"))
+    }
 }

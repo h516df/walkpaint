@@ -1,3 +1,37 @@
+# 当前分发 — v0.15 私有预览已开放（2026-10-10）
+
+用户在本chat明确选择“确认发布 v0.15 私有预览”。在现有私人仓库先创建草稿并上传3资产，逐个服务器大小/digest核对通过后开放prerelease，实际重新下载手机APK验SHA通过；private=true/draft=false/prerelease=true。标签v0.15固定业务及完整交接提交d5f33de2cb109ee697f443d010cd7936e5f78c90，生产源码与已验收业务b9e8a2b相同；不移动标签。原v0.14资产保留。[发布](https://github.com/h516df/walkpaint/releases/tag/v0.15) / [手机arm64APK](https://github.com/h516df/walkpaint/releases/download/v0.15/WalkPaint-v0.15-arm64-debug.apk)。
+
+code17/0.15/cn.walkpaint/schema2/原证书，手机70288416字节，SHA256 2b18acd1917b7d199cb9405fb97d0df5b321687c3c1c2e571b9166afeecfec89。服务器3资产和实际下载匹配见docs/evidence/v015/publication.json；180JVM/7guard/Google真实UI及数据保留证据见V015_DIAGNOSTICS.md。PR#22保持草稿、未合并，无CI。
+
+v0.14应用内更新可检查该新版，首次仍需本人GitHub只读授权与手机系统安装确认。**没有访问用户手机，不能说已更新或行车问题已修好。** #6驾驶/长期后台、#10可信速度桶与完整保存→匹配→渲染窗口仍未完成。不上传私人足迹或凭据；只能同签名/schema2/code>=17兼容包回退，不卸载/清库。
+
+---
+
+# 当前本地候选 — v0.15 过滤诊断完成实际 UI 验收（2026-10-10）
+
+本节优先。独立分支agent/codex/diagnostic-acceptance，目录D:\Workspaces\Codex\2026-10-10\ji-x\work\worktrees\codex-diagnostic-v014\codex-diagnostic-acceptance；诊断基线ea691b0，业务b9e8a2b4fd28338bbc4101c6ff21719769098baa。
+
+**状态：180 JVM/7 guard/专用Google真实诊断、反馈复制、小屏及数据保留通过；v0.15/code17/原签名/schema2手机候选就绪，未发布/安装手机，不合并。**详见docs/evidence/V015_DIAGNOSTICS.md。五分类和窗口沿用上一诊断候选，不改变GPS、matcher或DB。两包dex/说明一致。5表trips3/points19/roads6/road_matches16/coverage1逐行保持；合成诊断偏好/视口恢复，AVD停止。
+
+真实vivo驾车/长期后台未验收，#6开放；可信速度桶及保存→匹配→绘制各阶段窗口仍在已有#10，不把此候选说成全部完成。v0.14私人下载继续为已发布保底；本地旧诊断曾沿用code16而未发布，现候选明确增为code17。只能同签名/schema2/code>=17修复包回退，不卸载清库。私人发布需本轮具体确认；源码草稿PR属于内部交付。
+
+---
+
+# 当前本地候选 — v0.14 GPS 过滤诊断增强（2026-10-10）
+
+本节优先于以下历史。唯一写手 `D:\Worktrees\WalkPaint\codex-diagnostic-v014` / `fix/v014-diagnostic-breakdown`，从此 worktree 当前 v0.14/code16 的 bcec979015593e67f8ae3567bcbce4bfec0f5f9b 实现，不使用旧 main、不修改其他目录/分支。用户真机反馈的1088有效GPS/63入库/1025过滤仅为输入线索；未收到对应行车分类数据，不能认定原因是停车或跳变。
+
+**状态：代码及本地通用 APK 已就绪，180 JVM/7设备守卫测试/构建通过；合规 Google AVD 未启动，真实 UI 和 Android16 真机行车尚未验收。未安装、上传、发布、推送或合并。** 详细测试、APK指纹与复现命令见 [V014_DIAGNOSTICS](docs/evidence/V014_DIAGNOSTICS.md)。
+
+诊断摘要和主动预览反馈包新增本次服务过滤五类计数（静止/小位移、JUMP_OR_TOO_FAST、精度、时间、其他），与四阶段计数独立。旧版计数不倒推为其他，明确列出不可回溯数量。窗口复用原 ProblemHistory 最多500条、7天、单原因最多5分钟的聚合；显示30分钟/2小时完全落在窗口内的桶，以及跨起点桶的全部次数，禁止分摊；关闭/清空/裁剪/升级前未记录的缺失明确提示。报告窗口统计使用全部保留桶，不受线索列表30行展示上限影响。无行车识别或完整窗口覆盖的推断。
+
+五个固定 Long 计数沿用原诊断线程和30秒批量保存，重启清零、重载保留；未知过滤文本在入缓存前归一到 OTHER_FILTER，历史仍用固定枚举。无坐标/原始速度轨迹/道路名或敏感ID；无新上传、服务或数据库迁移；GPS/道路逻辑、阈值和旧数据未改。可选已保存道路最近窗口复算本轮未增加，现有最近最多2000段的当前目录只读复算保留。
+
+回退：回退本次源码差异即可；schema2/原签名/code16保持，新增偏好计数被旧版忽略。禁止用卸载/清空数据来回退；若未来正式分发，应另行核对签名、版本及目标环境覆盖升级。此候选不能代表用户手机已生效，也不能关闭原行车涂色问题。
+
+---
+
 # 当前交付 — v0.14 私有更新 / #11（2026-10-10）
 
 唯一写手 `agent/codex/issue11-private-updater` / `D:\Workspaces\Codex\2026-10-10\new-chat\work\worktrees\WalkPaint\codex-issue11-private-updater`，业务与 code16 APK `bcec979015593e67f8ae3567bcbce4bfec0f5f9b`，继承 ed6ee80；[草稿 PR #21](https://github.com/h516df/walkpaint/pull/21) 未合并。**应用内更新软件闭环通过；v0.14 私有预览已开放，手机未安装/未验收。** 171 JVM/7 guard，真实 App 授权、私有 manifest/下载、取消重试、拒绝来源、取消系统安装、确认覆盖 code15→16、安装 SHA、原五表逐行保留、重开核对最新0.14、退出授权及 Keystore/key/cache 清理通过。仅 Google AVD，已停止。详情 [V014](docs/evidence/V014.md)。
