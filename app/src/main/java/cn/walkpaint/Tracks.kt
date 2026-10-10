@@ -40,29 +40,37 @@ object Geo {
     // Do not reapply the stricter no-motion filter when counting recorded distance:
     // a short but genuine accepted step would otherwise be drawn but report 0 m.
     fun distance(points: List<TrackPoint>): Double = points.zipWithNext().sumOf { (a, b) ->
-        val dt = (b.time - a.time) / 1000.0
         val distance = meters(a, b)
-        if (a.segment == b.segment && dt > 0 && distance >= 3.0 &&
-            distance <= max(60.0, dt * 8.0) && distance / dt <= 8.0) distance else 0.0
+        if (RecordedTrail.connected(a,b) && distance >= 3.0) distance else 0.0
     }
     // Speed or three consistent recent GPS fixes may lower the minimum movement
     // threshold. With no motion evidence, retain the strict drift rejection.
     fun accept(previous: TrackPoint?, next: TrackPoint, confidentlyMoving: Boolean = false): Boolean =
         rejectionReason(previous, next, confidentlyMoving) == null
 
-    fun rejectionReason(previous: TrackPoint?, next: TrackPoint, confidentlyMoving: Boolean = false): String? {
+    fun rejectionReason(previous: TrackPoint?, next: TrackPoint, confidentlyMoving: Boolean = false,
+                        reportedSpeed: Double? = null): String? {
         if (!next.lat.isFinite() || !next.lon.isFinite() || next.lat !in -90.0..90.0 ||
             next.lon !in -180.0..180.0) return "INVALID_COORDINATE"
         if (!next.accuracy.isFinite() || next.accuracy !in 1f..35f) return "UNRELIABLE_ACCURACY"
         if (previous == null) return null
         val seconds = (next.time - previous.time) / 1000.0
         if (seconds <= 0) return "NON_INCREASING_TIME"
+        // A new point after a callback gap begins a separate line in storage/display.
+        if (seconds * 1000 > RecordedTrail.MAX_GAP_MS) return null
         val distance = meters(previous, next)
         val maxAccuracy = max(previous.accuracy.toDouble(), next.accuracy.toDouble())
         val minimumMove = if (confidentlyMoving) max(3.0, maxAccuracy * 0.55)
                           else max(4.0, maxAccuracy * 1.25)
         if (distance < minimumMove) return "STATIONARY_OR_SMALL_MOVE"
-        if (distance > max(60.0, seconds * 8.0) || distance / seconds > 8.0) return "JUMP_OR_TOO_FAST"
+        val speed=distance/seconds
+        if (speed>RecordedTrail.MAX_SPEED_MPS) return "JUMP_OR_TOO_FAST"
+        // Fast travel needs precise fixes; available GNSS speed must agree with the displacement.
+        if(speed>8.0) {
+            if(maxAccuracy>20.0) return "UNRELIABLE_ACCURACY"
+            if(reportedSpeed!=null && (!reportedSpeed.isFinite() || reportedSpeed !in 0.0..RecordedTrail.MAX_SPEED_MPS ||
+                kotlin.math.abs(speed-reportedSpeed)>max(8.0,maxAccuracy*2/seconds))) return "JUMP_OR_TOO_FAST"
+        }
         return null
     }
 

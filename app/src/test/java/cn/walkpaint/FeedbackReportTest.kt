@@ -3,6 +3,12 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class FeedbackReportTest {
+    @Test fun directTrailsWithNoRoadPackageDoNotReportPreparationAsTheProblem() {
+        val text=FeedbackReport.build(facts().copy(directTrail=true,trailLines=2,trailMetres=500),"道路涂色","",180_000)
+        assertTrue(text.contains("已保存的轨迹直接在地图上涂色"))
+        assertTrue(text.contains("连续轨迹 2 段")); assertTrue(text.contains("累计记录 500 米"))
+        assertFalse(text.contains("尚未准备")); assertFalse(text.contains("累计涂色为空"))
+    }
     private fun facts()=FeedbackFacts("0.13",14,36,"Google","test",false,false,false,false,false,2,6,0,1,0,0,1,false,
         mapOf("session_gps_count" to 5L,"latitude" to 51.75,"longitude" to -1.25,"road_name" to "SECRET_ROAD", "failure_reason" to "https://private/path?token=SECRET_KEY", "saved_at" to 120_000L,"logcat" to "SECRET_LOG"),emptyList(),true)
     @Test fun reportProjectsNumericWhitelistedFieldsOnly() {

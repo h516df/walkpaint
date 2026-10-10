@@ -33,6 +33,7 @@ internal class AmapMapController(private val context: Context, private val onGes
     private var initialFocusPending = true
     private var exploredColor=ExploredRoadArgb
     private val paintedLines=mutableListOf<com.amap.api.maps.model.Polyline>()
+    private val paintedSeeds=mutableListOf<com.amap.api.maps.model.Circle>()
     private var retainedCamera:com.amap.api.maps.model.CameraPosition?=null
     private val density = context.resources.displayMetrics.density
     private val blueDot by lazy {
@@ -86,18 +87,23 @@ internal class AmapMapController(private val context: Context, private val onGes
         val a = map ?: return
         a.clear()
         paintedLines.clear()
+        paintedSeeds.clear()
         currentMarker = null
-        roads.roads.forEach { road ->
-            a.addPolyline(PolylineOptions().addAll(road.points.map { toAmap(it.lat,it.lon) }).width(2.5f*density).color(UnexploredRoadArgb))
-            roads.coverage.highlighted(road).forEach { line ->
-                a.addPolyline(PolylineOptions().addAll(line.map { toAmap(it.lat,it.lon) }).width(7f*density).color(Color.argb(220,244,247,245)))
-                paintedLines += a.addPolyline(PolylineOptions().addAll(line.map { toAmap(it.lat,it.lon) }).width(5f*density).color(exploredColor))
+        RecordedTrail.paths(state.realTracks).forEach { line ->
+            if(line.size==1) {
+                val p=line.single()
+                paintedSeeds+=a.addCircle(CircleOptions().center(toAmap(p.lat,p.lon)).radius(2.5)
+                    .fillColor(exploredColor).strokeColor(Color.WHITE).strokeWidth(1.5f*density))
+            } else {
+                val coordinates=line.map { toAmap(it.lat,it.lon) }
+                a.addPolyline(PolylineOptions().addAll(coordinates).width(7f*density).color(Color.argb(220,244,247,245)))
+                paintedLines+=a.addPolyline(PolylineOptions().addAll(coordinates).width(5f*density).color(exploredColor))
             }
         }
         updateUser(latestPosition)
         if(initialFocusPending) {
             val current=latestPosition?.let { TrackPoint(it.latitude,it.longitude,it.time,it.accuracy) }
-            RoadMapFocus.choose(state,current,roads)?.let { point ->
+            RoadMapFocus.choose(state,current,RoadState())?.let { point ->
                 a.moveCamera(CameraUpdateFactory.newLatLngZoom(toAmap(point.lat,point.lon),17f))
                 initialFocusPending=false
             }
@@ -107,6 +113,7 @@ internal class AmapMapController(private val context: Context, private val onGes
     fun setExploredColor(color:Int) {
         exploredColor=color
         paintedLines.forEach { it.color=color }
+        paintedSeeds.forEach { it.fillColor=color }
     }
 
     fun updateUser(location: Location?) {
@@ -148,6 +155,7 @@ internal class AmapMapController(private val context: Context, private val onGes
         if (view !== currentView) return
         retainedCamera=map?.cameraPosition
         paintedLines.clear()
+        paintedSeeds.clear()
         currentMarker = null
         map = null
         currentView = null

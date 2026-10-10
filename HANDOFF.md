@@ -1,3 +1,13 @@
+# 当前 v0.16：联网高德直接轨迹涂色候选
+
+按用户最新明确要求，取消准备地图前提，在应用内高德联网地图上直接显示已保存GPS轨迹。旧版道路包/道路匹配/禁止GPS折线契约已被本次需求替代。单写手agent/codex/direct-trails，基线f202d8a，目录本chat work/worktrees/codex-diagnostic-acceptance/codex-direct-trails。
+
+186 JVM/7 guard、Android无道路隔离库步行/骑行/驾车/断档、Google实际直接轨迹/日期/换色/联网备用底图/重开/320dp及原五表保留通过；code18/schema2/原签名手机候选和源指纹见docs/evidence/V016_DIRECT_TRAILS.md、v016/acceptance.json。本机有签名验证与同dex证据；ARM高德及vivo户外长期后台未验收，#4/#6保留。不得操作MuMu/手机、卸载/清库或把公开模拟夹具当真人行车。测试原偏好/视口已恢复，专用Google App停止，AVD收尾按实读记录。
+
+v0.16尚未发布，需本次明确确认。v0.15已发布，不重复询问v0.15授权。不合并依赖历史PR。当前已保存GPS直接画，旧道路表仅兼容保留；旧未入库定位不能恢复。同签名schema2/code>=18修复包回退。
+
+---
+
 # 当前分发 — v0.15 私有预览已开放（2026-10-10）
 
 用户在本chat明确选择“确认发布 v0.15 私有预览”。在现有私人仓库先创建草稿并上传3资产，逐个服务器大小/digest核对通过后开放prerelease，实际重新下载手机APK验SHA通过；private=true/draft=false/prerelease=true。标签v0.15固定业务及完整交接提交d5f33de2cb109ee697f443d010cd7936e5f78c90，生产源码与已验收业务b9e8a2b相同；不移动标签。原v0.14资产保留。[发布](https://github.com/h516df/walkpaint/releases/tag/v0.15) / [手机arm64APK](https://github.com/h516df/walkpaint/releases/download/v0.15/WalkPaint-v0.15-arm64-debug.apk)。

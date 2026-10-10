@@ -23,8 +23,8 @@ internal fun RoadColorDialog(selected:Int,onSelect:(Int)->Unit,onDismiss:()->Uni
     val parsed=RoadPaintColor.parse(custom)
     AlertDialog(onDismissRequest=onDismiss,containerColor=PageBackground,title={Text("涂色外观",color=Ink)},text={
         Column(Modifier.heightIn(max=420.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-            Text("已探索道路",color=Ink,fontWeight=FontWeight.SemiBold)
-            Text("选择后即保存，过去已确认的道路也会换色。",color=Muted,fontSize=13.sp)
+            Text("足迹轨迹",color=Ink,fontWeight=FontWeight.SemiBold)
+            Text("选择后即保存，过去记录的足迹也会换色。",color=Muted,fontSize=13.sp)
             RoadColorPreview(selected)
             Text("示意预览 · 下滑可输入自定义颜色",color=Muted,fontSize=12.sp)
             RoadPaintColor.presets.forEach { preset ->
