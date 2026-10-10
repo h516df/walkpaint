@@ -26,6 +26,7 @@ class UpdateInfoTest {
         }
     }
     @Test fun malformedMetadataFailsBeforeClaimingAnInstalledVersion() {
-        assertThrows(IllegalArgumentException::class.java) { CurrentRelease.decode(text.replace("\"0.14\"","\"https://evil\"")) }
+        val malformed=org.json.JSONObject(text).put("versionName","https://evil").toString()
+        assertThrows(IllegalArgumentException::class.java) { CurrentRelease.decode(malformed) }
     }
 }

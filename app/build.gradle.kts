@@ -21,9 +21,9 @@ android {
         applicationId = "cn.walkpaint"
         minSdk = 26
         targetSdk = 36
-        // Code 15 was a local-only authorization bootstrap; the distributed preview is code 16.
-        versionCode = 16
-        versionName = "0.14"
+        // A distinct upgrade from the already distributed code 16 preview.
+        versionCode = 17
+        versionName = "0.15"
         testInstrumentationRunner = "cn.walkpaint.RoadAcceptanceInstrumentation"
         // Optional phone-sized APK; the default universal debug APK remains emulator-compatible.
         if (providers.gradleProperty("walkpaintArm64Only").orNull == "true") {
