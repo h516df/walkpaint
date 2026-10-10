@@ -279,7 +279,9 @@ class FootprintDatabase(private val context: Context) :
         val gap = if (previous == null) Long.MAX_VALUE else now.time - previous.time
         val newTrip = currentId == null || previous == null || gap > 25 * 60_000L ||
             localDay(now.time) != localDay(previous.time)
-        val rejection = Geo.rejectionReason(if (newTrip) null else previous, now, confidentlyMoving)
+        val reportedSpeed = if(location.hasSpeed() &&
+            (!location.hasSpeedAccuracy() || location.speedAccuracyMetersPerSecond in 0f..3f)) location.speed.toDouble() else null
+        val rejection = Geo.rejectionReason(if (newTrip) null else previous, now, confidentlyMoving,reportedSpeed)
         if (rejection != null) { lastFilterReason = rejection; return false }
 
         val db = writableDatabase

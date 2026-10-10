@@ -10,8 +10,7 @@ import org.json.JSONObject
 internal object TrackMapJson {
     fun encode(tracks: List<Track>): String {
         val features = JSONArray()
-        tracks.forEach { trip ->
-            trip.points.groupBy { it.segment }.values.forEach { segment ->
+        RecordedTrail.paths(tracks).forEach { segment ->
                 if (segment.isEmpty()) return@forEach
                 val first = segment.first()
                 features.put(JSONObject()
@@ -39,7 +38,6 @@ internal object TrackMapJson {
                             .put("type", "LineString")
                             .put("coordinates", coordinates)))
                 }
-            }
         }
         return JSONObject().put("type", "FeatureCollection").put("features", features).toString()
     }

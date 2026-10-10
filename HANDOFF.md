@@ -1,3 +1,25 @@
+# 当前分发：v0.16 私有预览已发布（2026-10-10）
+
+用户在本chat回答“好”，明确批准上传v0.16私人预览；按既有私有渠道先草稿上传3资产、服务器大小/digest验收，再发布prerelease并实际重新下载手机包验SHA通过。仓库private=true、draft=false、prerelease=true，标签固定b84f13200e7ca6f28fbefc062e70e515a22fc55c，不移动标签；生产代码与已验收7c3ce8a相同。旧v0.15保留。[发布](https://github.com/h516df/walkpaint/releases/tag/v0.16) / [手机APK](https://github.com/h516df/walkpaint/releases/download/v0.16/WalkPaint-v0.16-arm64-debug.apk)。
+
+高德联网地图直接涂色，不需要准备道路包。code18/schema2/cn.walkpaint/原证书；手机70,271,924字节，SHA256 18e04e055c58f0cce5199f66f8149f2c5485a9e28f5ac883d16e4ac1ab372484。186 JVM/7 guard与Google直接轨迹/日期/颜色/联网备用地图/重开/320dp/旧五表保留，详见V016_DIRECT_TRAILS.md；分发校验见v016/publication.json。实际下载成功，不代表手机已安装，新ARM高德/真实驾车/长期后台仍未验收，#4/#6保留。PR #23仍草稿未合并，无Actions。专用AVD此前已关闭。
+
+可在“我的→更多设置→检查更新”取得该版本：发布说明文件名/版本码和arm64资产名满足现有客户端选择规则，API实读显示为最新可见发布。首次授权与手机系统安装仍需本人确认，没有读取手机或假称已更新。只允许同签名schema2/code>=18兼容修复包回退，禁止卸载清库。
+
+---
+
+# 当前 v0.16：联网高德直接轨迹涂色候选
+
+按用户最新明确要求，取消准备地图前提，在应用内高德联网地图上直接显示已保存GPS轨迹。旧版道路包/道路匹配/禁止GPS折线契约已被本次需求替代。单写手agent/codex/direct-trails，基线f202d8a，目录本chat work/worktrees/codex-diagnostic-acceptance/codex-direct-trails。
+
+186 JVM/7 guard、Android无道路隔离库步行/骑行/驾车/断档、Google实际直接轨迹/日期/换色/联网备用底图/重开/320dp及原五表保留通过；code18/schema2/原签名手机候选和源指纹见docs/evidence/V016_DIRECT_TRAILS.md、v016/acceptance.json。本机有签名验证与同dex证据；ARM高德及vivo户外长期后台未验收，#4/#6保留。不得操作MuMu/手机、卸载/清库或把公开模拟夹具当真人行车。测试原偏好/视口已恢复，专用Google App停止，专用Google AVD已通过身份守卫关闭，adb实读无设备。
+
+生产提交7c3ce8a975bb646a01354f8de4b942a6b1367680；草稿PR #23 https://github.com/h516df/walkpaint/pull/23 已推送/可合并但不合并，无Actions。现有项目索引PR agent-rules#29仍Active且开放，无需重复登记。
+
+v0.16尚未发布，需本次明确确认。v0.15已发布，不重复询问v0.15授权。不合并依赖历史PR。当前已保存GPS直接画，旧道路表仅兼容保留；旧未入库定位不能恢复。同签名schema2/code>=18修复包回退。
+
+---
+
 # 当前分发 — v0.15 私有预览已开放（2026-10-10）
 
 用户在本chat明确选择“确认发布 v0.15 私有预览”。在现有私人仓库先创建草稿并上传3资产，逐个服务器大小/digest核对通过后开放prerelease，实际重新下载手机APK验SHA通过；private=true/draft=false/prerelease=true。标签v0.15固定业务及完整交接提交d5f33de2cb109ee697f443d010cd7936e5f78c90，生产源码与已验收业务b9e8a2b相同；不移动标签。原v0.14资产保留。[发布](https://github.com/h516df/walkpaint/releases/tag/v0.15) / [手机arm64APK](https://github.com/h516df/walkpaint/releases/download/v0.15/WalkPaint-v0.15-arm64-debug.apk)。

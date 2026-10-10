@@ -356,7 +356,7 @@ class MainActivity : ComponentActivity() {
                     onRevoke = { AmbientTracking.stop(this); updateUi() },
                     onCopyDiagnostics = { openRecordingDiagnostics() },
                     internalBackupCount = repository.backupFiles().size,
-                    mapProviderLabel = if (amapActive) "高德地图" else if(onlineMap) "OpenFreeMap" else "本地离线道路",
+                    mapProviderLabel = if (amapActive) "高德联网地图" else if(onlineMap) "OpenFreeMap 联网备用地图" else "离线足迹视图",
                     roadColor = roadColor,
                     onRoadAppearance = { showRoadAppearance=true },
                     onChooseAmap = {
@@ -383,7 +383,7 @@ class MainActivity : ComponentActivity() {
                 if(showOnlineConsent) AlertDialog(
                     onDismissRequest={ showOnlineConsent=false },
                     title={ Text("联网显示底图？") },
-                    text={ Text("OpenFreeMap 将收到当前及浏览地图区域、IP 和地图请求；区域可能反映私人位置。同意后会记住选择，今后打开地图也会联网；可随时在此选择离线。不上传足迹文件，也不从瓦片采集道路。默认离线，拒绝仍可记录、匹配和涂色。") },
+                    text={ Text("OpenFreeMap 备用地图将收到当前及浏览地图区域、IP 和地图请求；区域可能反映私人位置。同意后会记住选择，今后打开地图也会联网；可随时撤回联网授权。不上传足迹文件，不需要下载道路包。拒绝仍可记录并显示已保存的足迹。") },
                     confirmButton={ Button(onClick={
                         onlineMap=true; showOnlineConsent=false
                         getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE).edit()
@@ -395,7 +395,7 @@ class MainActivity : ComponentActivity() {
                         onlineMap=false; showOnlineConsent=false; currentTab=2
                         getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE).edit()
                             .putBoolean("openfreemap_basemap_consent",false).apply()
-                    }) { Text("使用离线道路") } }
+                    }) { Text("使用离线足迹视图") } }
                 )
 
                 if(showRoadPack) AlertDialog(
@@ -565,21 +565,7 @@ class MainActivity : ComponentActivity() {
         }
         trackingStatus = diagnosis + "\n" + gpsLabel + " · 已存 " +
             snapshot.realPointCount + " 点 · 上次实际入库 " + savedLabel
-        roadAreaHint = when {
-            roadState.error != null -> roadState.error!!
-            roadState.roads.isEmpty() -> "还没有附近道路，GPS 记录独立保存；下载需单次同意"
-            userFix==null -> ""
-            else -> {
-                if(boundaryRoads !== roadState.roads) {
-                    boundaryRoads=roadState.roads
-                    boundaryCatalog=runCatching { RoadCatalog(roadState.roads) }.getOrNull()
-                }
-                val fix=userFix!!
-                if(boundaryCatalog?.near(TrackPoint(fix.latitude,fix.longitude,fix.time,fix.accuracy))?.isEmpty()==true)
-                    "当前位置附近没有已导入道路 · 已存足迹保留，新区域暂不上色"
-                else ""
-            }
-        }
+        roadAreaHint = ""
         if ((lastRevision != repository.revision || dailyRoadDate != DailyFootprints.key(System.currentTimeMillis())) && refreshing.compareAndSet(false, true)) {
             val day=selectedDay
             refreshExecutor.execute {
@@ -589,12 +575,12 @@ class MainActivity : ComponentActivity() {
                     // Compute expensive history/geometry work away from the UI thread.
                     next.totalMeters; FootprintInsights.traveledDays(next); FootprintInsights.exploredCells(next)
                     val road = repository.roadSnapshot()
-                    val roadBase = road.geoJson(false)
+                    val roadBase = geoJson(emptyList())
                     val today = DailyFootprints.key(System.currentTimeMillis())
-                    val daily = dailyRoadCache.refresh(next,road,day) { repository.roadSnapshotForDay(it) }
-                    val displayedRoad = if(day==null) road else daily[day] ?: repository.roadSnapshotForDay(day)
+                    val daily = emptyMap<String,RoadState>()
+                    val displayedRoad = RoadState()
                     val displayedTrack = DailyFootprints.select(next,day)
-                    val painted = displayedRoad.geoJson(true)
+                    val painted = geoJson(displayedTrack.realTracks)
                     val real = geoJson(displayedTrack.realTracks)
                     val demo = geoJson(next.tracks.filter { it.demo })
                     runOnUiThread {
@@ -809,19 +795,19 @@ class MainActivity : ComponentActivity() {
             "状态：" + trackingStatus.substringBefore("\n")
         )
         return rows.joinToString("\n") + "\n\n" + RecordingDiagnostics.summary(this) +
-            "\n\n道路包：${roadState.roads.size} 条；确认段 ${roadState.matched}；未确认段 ${roadState.unmapped}。本机匹配，无瓦片数据采集。" +
+            "\n\n绘制来源：已保存GPS直接涂色，无需准备地图。连续轨迹 ${RecordedTrail.paths(snapshot.realTracks).count { it.size>=2 }} 段；累计记录 ${snapshot.totalMeters.toLong()} 米（重复出行累计，不是去重道路里程）。" +
             "\n\n持续 GPS 已启用，不长期持有 CPU 唤醒锁；常规诊断每30秒批量保存，异常退出最多损失末尾30秒诊断（不影响 SQLite 足迹）。vivo 等厂商需允许后台运行；强制停止后须手动打开 App，不能保证永不断录。"
     }
 
     private fun openRecordingDiagnostics() {
         val base=trackingDiagnostics()
         val state=snapshot; val roads=roadState
-        diagnosticText=base + "\n\n正在整理道路匹配原因…"
+        diagnosticText=base
         showDiagnostics=true
         refreshExecutor.execute {
             val details=runCatching { RoadMatchDiagnostics.report(state,roads) }
                 .getOrDefault("道路复算暂不可用，原始记录保留")
-            runOnUiThread { diagnosticText=base + "\n\n" + details }
+            runOnUiThread { diagnosticText=base + "\n\n旧道路数据只读诊断（不控制直接轨迹涂色）\n" + details }
         }
     }
 
@@ -846,7 +832,8 @@ class MainActivity : ComponentActivity() {
                     Build.BRAND,Build.MODEL,enabled,running,fine,background,notifications,
                     state.realPointCount,roads.roads.size,roads.matched,roads.unmapped,roads.meters.toLong(),
                     counts.confirmable,counts.noCandidates,counts.unavailable,RecordingDiagnostics.snapshot(application),
-                    recent.entries,recent.enabled,recent.saveFailed),category,description,System.currentTimeMillis())
+                    recent.entries,recent.enabled,recent.saveFailed,true,
+                    RecordedTrail.paths(state.realTracks).count { it.size>=2 },state.totalMeters.toLong()),category,description,System.currentTimeMillis())
             }.getOrElse { "报告暂时无法整理，足迹保留。请稍后重试。" }
             runOnUiThread { feedbackBusy=false;feedbackReport=text }
         }
@@ -930,6 +917,9 @@ class MainActivity : ComponentActivity() {
                 style.addLayer(LineLayer("wp-painted-line","wp-painted").withProperties(
                     PropertyFactory.lineColor(roadColor),PropertyFactory.lineWidth(6f),
                     PropertyFactory.lineCap(Property.LINE_CAP_ROUND),PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)))
+                style.addLayer(CircleLayer("wp-trail-seed","wp-painted").withProperties(
+                    PropertyFactory.circleColor(roadColor),PropertyFactory.circleRadius(4f),
+                    PropertyFactory.circleStrokeColor(android.graphics.Color.WHITE),PropertyFactory.circleStrokeWidth(1.5f)))
                 style.addLayer(CircleLayer("wp-user-halo", "wp-user").withProperties(
                     PropertyFactory.circleColor(android.graphics.Color.rgb(29, 132, 211)),
                     PropertyFactory.circleRadius(16f),
@@ -970,6 +960,8 @@ class MainActivity : ComponentActivity() {
         amapController.setExploredColor(color)
         mapInstance?.style?.getLayerAs<LineLayer>("wp-painted-line")
             ?.setProperties(PropertyFactory.lineColor(color))
+        mapInstance?.style?.getLayerAs<CircleLayer>("wp-trail-seed")
+            ?.setProperties(PropertyFactory.circleColor(color))
     }
 
     private fun updateMapLayers() {

@@ -17,10 +17,16 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
     private var cameraProbe=false
     private var roadColorProbe=false
     private var privateUpdateProbe=false
+    private var directTrailProbe=false
     private var updateLogoutProbe=false
     private var candidateSha:String?=null
     override fun onStart() {
         val result = Bundle()
+        if(directTrailProbe) {
+            try { result.putString("stream",DirectTrailProbe.run(this));finish(Activity.RESULT_OK,result) }
+            catch(e:Throwable) { result.putString("stream","DIRECT_TRAIL_DB_FAIL: ${e.javaClass.simpleName}: ${e.message}");finish(Activity.RESULT_CANCELED,result) }
+            return
+        }
         if(updateLogoutProbe) {
             try {
                 check(targetContext.getSharedPreferences("private_update_authorization",Context.MODE_PRIVATE).all.isEmpty())
@@ -284,5 +290,5 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
         // finish() can terminate the instrumented process immediately; cleanup must precede it.
         finish(resultCode,result)
     }
-    override fun onCreate(arguments:Bundle?) { updateLogoutProbe=arguments?.getString("updateLogoutProbe")=="true";candidateSha=arguments?.getString("candidateSha");privateUpdateProbe=arguments?.getString("privateUpdateProbe")=="true";roadColorProbe=arguments?.getString("roadColorProbe")=="true"; cameraProbe=arguments?.getString("cameraProbe")=="true"; fixtureProbe=arguments?.getString("fixtureProbe")=="true"; catalogProbe=arguments?.getString("catalogProbe")=="true"; networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments); start() }
+    override fun onCreate(arguments:Bundle?) { directTrailProbe=arguments?.getString("directTrailProbe")=="true"; updateLogoutProbe=arguments?.getString("updateLogoutProbe")=="true";candidateSha=arguments?.getString("candidateSha");privateUpdateProbe=arguments?.getString("privateUpdateProbe")=="true";roadColorProbe=arguments?.getString("roadColorProbe")=="true"; cameraProbe=arguments?.getString("cameraProbe")=="true"; fixtureProbe=arguments?.getString("fixtureProbe")=="true"; catalogProbe=arguments?.getString("catalogProbe")=="true"; networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments); start() }
 }

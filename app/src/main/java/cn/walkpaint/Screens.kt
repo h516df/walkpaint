@@ -40,7 +40,6 @@ internal fun AppShell(
     feedbackContent: @Composable (onBack:()->Unit)->Unit,
     updatesContent: @Composable (onBack:()->Unit)->Unit, mapContent: @Composable () -> Unit
 ) {
-    var preparationDismissed by rememberSaveable { mutableStateOf(false) }
     Scaffold(containerColor=PageBackground, bottomBar={
         Surface(color=PageBackground.copy(alpha=0.98f)) {
             Row(Modifier.fillMaxWidth().navigationBarsPadding().height(58.dp)) {
@@ -61,10 +60,8 @@ internal fun AppShell(
     }) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when(selectedTab) {
-                0 -> MapPage(mapNotice,selectedDay,onShowAll,onLocate,{onTab(2)},
-                    automatic && fix!=null && roadAreaHint.isNotBlank() && roadState.error==null && !preparationDismissed,
-                    {preparationDismissed=true;onRoadPack()},{preparationDismissed=true},mapContent)
-                1 -> TripsPage(state,roadState,dailyRoads,onTrip)
+                0 -> MapPage(mapNotice,selectedDay,onShowAll,onLocate,{onTab(2)},mapContent)
+                1 -> TripsPage(state,onTrip)
                 else -> ProfilePage(automatic,profileNotice,onResolveTracking,
                     onToggleTracking,onRevoke,onBackgroundSettings,onPowerSettings,onCopyDiagnostics,
                     roadState,roadAreaHint,onRoadPack,onExport,onImport,internalBackupCount,
@@ -76,7 +73,7 @@ internal fun AppShell(
 
 @Composable
 private fun MapPage(notice: String?,day: String?,onShowAll: ()->Unit,onLocate: ()->Unit,
-    onSettings: ()->Unit,needsMapData:Boolean,onMapData:()->Unit,onDismissPreparation:()->Unit,mapContent: @Composable ()->Unit) {
+    onSettings: ()->Unit,mapContent: @Composable ()->Unit) {
     val uriHandler=LocalUriHandler.current
     Box(Modifier.fillMaxSize()) {
         mapContent()
@@ -87,15 +84,6 @@ private fun MapPage(notice: String?,day: String?,onShowAll: ()->Unit,onLocate: (
             if(day!=null) Surface(onClick=onShowAll,color=PageBackground.copy(alpha=0.96f),shape=RoundedCornerShape(8.dp)) {
                 Text("$day · 返回全部探索  ›",color=Accent,fontSize=12.sp,
                     modifier=Modifier.padding(horizontal=12.dp,vertical=10.dp))
-            }
-            if(day==null && needsMapData) Surface(color=Panel.copy(alpha=0.96f),shape=RoundedCornerShape(8.dp)) {
-                Column(Modifier.padding(horizontal=12.dp,vertical=6.dp)) {
-                    Text("还没准备好这里的地图",color=Ink,fontSize=13.sp)
-                    Row {
-                        TextButton(onClick=onMapData) { Text("准备地图") }
-                        TextButton(onClick=onDismissPreparation) { Text("暂不") }
-                    }
-                }
             }
         }
         Surface(onClick=onLocate,shape=CircleShape,color=PageBackground.copy(alpha=0.96f),
@@ -144,53 +132,32 @@ private fun SettingRow(title:String,detail:String="",onClick:()->Unit) {
 }
 
 @Composable
-private fun TripsPage(state:TrackState,roads:RoadState,daily:Map<String,RoadState>,onTrip:(Track)->Unit) {
+private fun TripsPage(state:TrackState,onTrip:(Track)->Unit) {
     val days=remember(state) { DailyFootprints.days(state) }
     val today=DailyFootprints.key(System.currentTimeMillis())
     val todayDay=days.firstOrNull { it.key==today }
-    val todayRoad=daily[today]
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(20.dp)) {
-        item { Heading("足迹","一点点走过，一点点解锁。") }
+        item { Heading("足迹","走过哪里，就在地图上留下颜色。") }
         item {
             Column(Modifier.fillMaxWidth().padding(vertical=4.dp)) {
-                Text("累计已探索道路",color=Muted,fontSize=13.sp)
+                Text("累计记录里程",color=Muted,fontSize=13.sp)
                 Spacer(Modifier.height(8.dp))
-                Text(exploredDistance(roads.meters),color=Accent,fontSize=38.sp,fontWeight=FontWeight.Medium)
+                Text(exploredDistance(state.totalMeters),color=Accent,fontSize=38.sp,fontWeight=FontWeight.Medium)
                 Spacer(Modifier.height(14.dp))
-                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(24.dp)) {
-                    Text("${roads.intervals.map { it.roadId }.distinct().size} 条道路已点亮",color=Ink,fontSize=13.sp)
-                    Text("${days.size} 天探索",color=Muted,fontSize=13.sp)
-                }
+                Text("${days.size} 天有足迹",color=Muted,fontSize=13.sp)
             }
         }
-        item {
-            Section("今天的探索") {
-                Text(todayRoad?.let { exploredDistance(it.meters) } ?: if(todayDay==null) "0 米" else "正在整理…",
-                    color=Accent,fontSize=24.sp,fontWeight=FontWeight.Medium)
-                Spacer(Modifier.height(6.dp))
-                Text(if(todayDay==null) "还没有新的足迹，出门走走吧。" else "今天走过的真实道路，重复经过只计一次。",
-                    color=Muted,fontSize=13.sp,lineHeight=20.sp)
-                if(todayDay!=null) SettingRow("查看今天走过的道路",onClick={onTrip(todayDay.focusTrack())})
-            }
-        }
-        item {
-            if(roads.roads.isNotEmpty()) {
-                val fraction=(roads.meters/roads.totalMeters.coerceAtLeast(1.0)).coerceIn(0.0,1.0).toFloat()
-                Column {
-                    Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
-                        Text("当前道路区域",color=Ink,fontSize=13.sp)
-                        Text("%.2f%%".format(Locale.CHINA,fraction*100),color=Accent,fontSize=13.sp)
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    LinearProgressIndicator(progress={fraction},modifier=Modifier.fillMaxWidth().height(4.dp),
-                        color=ExploredRoadColor,trackColor=AccentSoft,drawStopIndicator={})
-                    Spacer(Modifier.height(8.dp))
-                    Text("进度仅针对已下载道路，新的区域会扩大探索范围。",color=Muted,fontSize=12.sp,lineHeight=18.sp)
-                }
-            } else Text("在「我的」准备附近道路，走过的路才会逐渐上色。",color=Muted,fontSize=13.sp,lineHeight=20.sp)
-        }
+        item { Section("今天的足迹") {
+            Text(exploredDistance(todayDay?.meters ?: 0.0),color=Accent,fontSize=24.sp,fontWeight=FontWeight.Medium)
+            Spacer(Modifier.height(6.dp))
+            Text(if(todayDay==null) "还没有新的足迹，出门走走吧。" else "步行、骑行和驾车的已记录轨迹直接显示在地图上。",
+                color=Muted,fontSize=13.sp,lineHeight=20.sp)
+            if(todayDay!=null) SettingRow("查看今天的足迹",onClick={onTrip(todayDay.focusTrack())})
+        } }
+        item { Text("无需准备地图或下载道路包。里程按已记录的出行累计，重复经过会累计；定位中断期间不补画连线。",
+            color=Muted,fontSize=13.sp,lineHeight=20.sp) }
         item { Text("每日足迹",color=Ink,fontSize=17.sp,fontWeight=FontWeight.SemiBold) }
-        if(days.isEmpty()) item { Text("你的第一条道路，等你来探索。",color=Muted,fontSize=14.sp) }
+        if(days.isEmpty()) item { Text("开启自动记录后，实际经过的轨迹会逐渐涂色。",color=Muted,fontSize=14.sp) }
         items(days,key={it.key}) { day ->
             Row(Modifier.fillMaxWidth().clickable { onTrip(day.focusTrack()) }.heightIn(min=64.dp).padding(vertical=8.dp),
                 verticalAlignment=Alignment.CenterVertically) {
@@ -199,8 +166,7 @@ private fun TripsPage(state:TrackState,roads:RoadState,daily:Map<String,RoadStat
                 Column(Modifier.weight(1f)) {
                     Text(if(day.key==today) "今天" else day.key,color=Ink,fontSize=15.sp,fontWeight=FontWeight.Medium)
                     Spacer(Modifier.height(6.dp))
-                    Text(daily[day.key]?.let { "已探索 ${exploredDistance(it.meters)}" } ?: "点击查看当天道路",
-                        color=Muted,fontSize=12.sp)
+                    Text("已记录 ${exploredDistance(day.meters)}",color=Muted,fontSize=12.sp)
                 }
                 Text("›",color=Muted,fontSize=22.sp)
             }
@@ -235,7 +201,7 @@ private fun ProfilePage(automatic:Boolean,notice:String?,onResolve:()->Unit,
                         Column(Modifier.weight(1f)) {
                             Text(if(automatic) "已开启" else "未开启",color=Ink,fontSize=16.sp,fontWeight=FontWeight.Medium)
                             Spacer(Modifier.height(6.dp))
-                            Text("开启后，出门会自动记录走过的道路",color=Muted,fontSize=13.sp,lineHeight=20.sp)
+                            Text("开启后，步行、骑行和驾车都会记录足迹",color=Muted,fontSize=13.sp,lineHeight=20.sp)
                         }
                         Switch(checked=automatic,onCheckedChange=onToggle,
                             modifier=Modifier.semantics { contentDescription="自动记录" })
@@ -244,14 +210,13 @@ private fun ProfilePage(automatic:Boolean,notice:String?,onResolve:()->Unit,
                 } }
                 item { Section("偏好") {
                     SettingRow("涂色颜色",RoadPaintColor.name(roadColor),onAppearance)
-                    SettingRow("更多设置","备份、隐私与地图数据") { page="更多设置" }
+                    SettingRow("更多设置","备份、隐私与联网地图") { page="更多设置" }
                 } }
                 item { Text("足迹涂色  ${BuildConfig.VERSION_NAME}",color=Muted,fontSize=12.sp,modifier=Modifier.padding(vertical=8.dp)) }
             }
             "更多设置" -> item { Section("设置") {
                 SettingRow("备份与恢复","保存或找回你的足迹") { page="备份与恢复" }
                 SettingRow("隐私与权限","管理授权与后台运行") { page="隐私与权限" }
-                SettingRow("地图数据","准备这里的地图",onRoadPack)
                 SettingRow("问题反馈","预览并分享本机故障线索") { page="问题反馈" }
                 SettingRow("检查更新","当前版本 ${BuildConfig.VERSION_NAME}") { page="检查更新" }
                 SettingRow("高级诊断","记录异常时查看原因",onDiagnostics)
@@ -271,8 +236,8 @@ private fun ProfilePage(automatic:Boolean,notice:String?,onResolve:()->Unit,
                 } }
                 item { Section("地图与隐私") {
                     SettingRow("地图服务与隐私",provider,onAmap)
-                    SettingRow("联网底图 / 离线道路","管理联网地图授权",onOnline)
-                    Text("原始足迹保存在本机。联网地图与地图数据下载需要单独同意；开自动记录不会替你同意联网。",color=Muted,fontSize=13.sp,lineHeight=20.sp)
+                    SettingRow("联网地图授权","管理备用地图联网授权",onOnline)
+                    Text("高德地图联网显示底图，足迹直接画在地图上，无需准备地图。原始足迹保存在本机，首次使用地图服务需同意其隐私说明。",color=Muted,fontSize=13.sp,lineHeight=20.sp)
                 } }
             }
             "关于" -> item { Section("足迹涂色") {

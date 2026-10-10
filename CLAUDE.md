@@ -1,5 +1,11 @@
 # 项目规则
 
+- v0.16已获本chat本次明确发布同意并私有分发；标签固定b84f132，3服务器资产/实际手机包下载SHA通过。以HANDOFF首节和docs/evidence/v016/publication.json为准，历史待发布仅候选时点，不重复请求已有授权。code18/schema2/原签名，PR #23保持草稿，手机安装/新ARM高德及vivo户外长期后台未测。
+
+
+- 当前v0.16用户契约：直接在应用内高德联网地图涂色保存的真实GPS轨迹，不准备/下载道路包。此契约优先于下方历史禁止原始GPS折线、道路匹配前提及不得改GPS阈值规则；本次准确步行/骑行/正常驾车过滤已按需修改。code18/schema2/原签名/数据保留，旧road表仅兼容。186 JVM/7 guard、Google实际直接绘制/当天/颜色/联网备用地图/重开/320dp/五表保留通过；新ARM高德及vivo长期后台未测。候选尚未发布，具体SHA/证据/回退见HANDOFF首节与docs/evidence/V016_DIRECT_TRAILS.md；禁止测试私人MuMu/手机，不合并。
+
+
 - v0.15已按本chat用户明确确认私有分发，标签d5f33de固定；3资产服务器digest/大小及实际手机包下载SHA通过。以HANDOFF首节与docs/evidence/v015/publication.json为准。code17/schema2/原签名，PR#22草稿未合并；手机未安装/行车未验收，#6/#10保持开放。历史“待发布”只是候选时点，不重复询问已有本次发布授权。
 
 
