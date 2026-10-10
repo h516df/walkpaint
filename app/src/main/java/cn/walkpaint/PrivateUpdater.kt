@@ -37,8 +37,8 @@ internal class PrivateUpdater(context:Context,private val changed:(PrivateUpdate
         task=worker.submit {
             try { operation(http,g) }
             catch(_:InterruptedException) { }
-            catch(e:UpdateFailure) { publish(state.copy(message=e.userMessage,busy=false,userCode=null,progress=null,ready=null),g) }
-            catch(_:Exception) { publish(state.copy(message="暂时无法完成更新，请检查网络后重试",busy=false,userCode=null,progress=null,ready=null),g) }
+            catch(e:UpdateFailure) { publish(state.copy(message=e.userMessage,busy=false,userCode=null,progress=null,ready=null,authorized=store.load()!=null),g) }
+            catch(_:Exception) { publish(state.copy(message="暂时无法完成更新，请检查网络后重试",busy=false,userCode=null,progress=null,ready=null,authorized=store.load()!=null),g) }
         }
     }
     fun check() {
@@ -84,7 +84,7 @@ internal class PrivateUpdater(context:Context,private val changed:(PrivateUpdate
         updateRequire(repo.getLong("id")==PrivateUpdatePolicy.REPO_ID && repo.getBoolean("private") && repo.getString("full_name")==PrivateUpdatePolicy.REPO)
         val releases=JSONArray(http.json("/releases?per_page=100",access))
         updateRequire(releases.length()<100,"发布资料太多，暂时无法完整核对，请打开发布页")
-        var newest:UpdateCandidate?=null
+        val published=mutableListOf<PublishedUpdate>()
         for(i in 0 until releases.length()) {
             http.checkCancelled();val r=releases.getJSONObject(i)
             if(r.optBoolean("draft",true)) continue
@@ -97,20 +97,12 @@ internal class PrivateUpdater(context:Context,private val changed:(PrivateUpdate
             val bytes=http.asset(a.id,access) { http.readBounded(it,65536) }
             updateRequire(bytes.size.toLong()==a.size && digest(bytes)==a.digest)
             val notes=CurrentRelease.decode(String(bytes,Charsets.UTF_8));updateRequire(tag=="v${notes.version}")
-            val apk=rows.singleOrNull { it.optString("name")==PrivateUpdatePolicy.apkName(notes.version,Build.SUPPORTED_ABIS.toList()) }
-            // A phone-only older preview need not have an emulator variant. Never report latest from it.
-            if(apk==null) {
-                if(notes.code>BuildConfig.VERSION_CODE) throw UpdateFailure("新版暂未提供适合这台设备的安装包，请打开发布页")
-                continue
-            }
-            val candidate=UpdateCandidate(notes,PrivateUpdatePolicy.asset(apk))
-            if(newest==null || notes.code>newest.notes.code) newest=candidate
+            published+=PublishedUpdate(notes,rows)
         }
-        updateRequire(newest!=null,"发布资料尚未就绪，请打开发布页核对版本")
-        val n=newest!!
-        val newer=n.notes.code>BuildConfig.VERSION_CODE
-        publish(PrivateUpdateState(message=if(newer) "发现新版本 ${n.notes.version}" else "已核对发布记录，当前版本无需更新",
-            authorized=true,candidate=if(newer)n else null),g)
+        when(val result=UpdateCatalog.select(published,BuildConfig.VERSION_CODE,Build.SUPPORTED_ABIS.toList())) {
+            is UpdateCatalogResult.Current -> publish(PrivateUpdateState(message="最新发布 ${result.latest.version}，当前版本无需更新",authorized=true),g)
+            is UpdateCatalogResult.Available -> publish(PrivateUpdateState(message="发现新版本 ${result.candidate.notes.version}",authorized=true,candidate=result.candidate),g)
+        }
     }
     fun download() {
         val candidate=state.candidate ?: return
