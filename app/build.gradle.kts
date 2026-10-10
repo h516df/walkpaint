@@ -11,7 +11,7 @@ val amapKey = (mapProperties.getProperty("walkpaintAmapKey")
     ?: providers.gradleProperty("walkpaintAmapKey").orNull).orEmpty().trim()
 require(amapKey.matches(Regex("[A-Za-z0-9]*"))) { "Invalid AMap Android Key" }
 // Public GitHub App client id only. Never put a client secret or a PC token here.
-val updateClientId = providers.gradleProperty("walkpaintUpdateClientId").orNull.orEmpty().trim()
+val updateClientId = (providers.gradleProperty("walkpaintUpdateClientId").orNull ?: "Iv23liQM3N2avCTc0QAd").trim()
 require(updateClientId.matches(Regex("[A-Za-z0-9.]*"))) { "Invalid public update client id" }
 
 android {
