@@ -255,21 +255,14 @@ class RecordingService : Service(), LocationListener {
 
     private fun isConfidentMovement(fix: Location): Boolean {
         // Provider-reported speed is a good walking cue when reasonably accurate.
-        if (fix.hasSpeed() && fix.speed in 0.55f..3.5f &&
-            (!fix.hasSpeedAccuracy() || fix.speedAccuracyMetersPerSecond < 1.3f)) return true
+        if (MovementCue.fromProviderSpeed(fix.hasSpeed(), fix.speed,
+                fix.hasSpeedAccuracy(), fix.speedAccuracyMetersPerSecond)) return true
         val a = rawFixBeforeLast ?: return false
         val b = lastRawFix ?: return false
-        if (a.accuracy > 15f || b.accuracy > 15f || fix.accuracy > 15f ||
-            fix.time <= b.time || b.time <= a.time || fix.time - a.time > 30_000) return false
-        val d1 = a.distanceTo(b)
-        val d2 = b.distanceTo(fix)
-        val direct = a.distanceTo(fix)
-        val speed = direct / ((fix.time - a.time) / 1000f)
-        val turn = kotlin.math.abs((b.bearingTo(fix) - a.bearingTo(b) + 540f) % 360f - 180f)
-        return d1 >= 2.5f && d2 >= 2.5f && turn <= 50f &&
-            speed in 0.5f..3.5f &&
-            direct > maxOf(7f, maxOf(a.accuracy, b.accuracy, fix.accuracy) * 0.75f)
+        return MovementCue.fromGeometry(a.toMotionFix(), b.toMotionFix(), fix.toMotionFix())
     }
+
+    private fun Location.toMotionFix() = MotionFix(latitude, longitude, time, accuracy)
 
     private val gpsListener = object : LocationListener {
         override fun onLocationChanged(fix: Location) = this@RecordingService.onLocationChanged(fix)

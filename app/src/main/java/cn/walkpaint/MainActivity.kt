@@ -912,14 +912,14 @@ class MainActivity : ComponentActivity() {
                     PropertyFactory.lineColor(UnexploredRoadArgb),
                     PropertyFactory.lineWidth(3f),PropertyFactory.lineOpacity(0.85f)))
                 style.addLayer(LineLayer("wp-painted-outline","wp-painted").withProperties(
-                    PropertyFactory.lineColor(android.graphics.Color.WHITE),PropertyFactory.lineWidth(8f),
+                    PropertyFactory.lineColor(TrailOutlineArgb),PropertyFactory.lineWidth(9f),
                     PropertyFactory.lineCap(Property.LINE_CAP_ROUND),PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)))
                 style.addLayer(LineLayer("wp-painted-line","wp-painted").withProperties(
                     PropertyFactory.lineColor(roadColor),PropertyFactory.lineWidth(6f),
                     PropertyFactory.lineCap(Property.LINE_CAP_ROUND),PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)))
                 style.addLayer(CircleLayer("wp-trail-seed","wp-painted").withProperties(
                     PropertyFactory.circleColor(roadColor),PropertyFactory.circleRadius(4f),
-                    PropertyFactory.circleStrokeColor(android.graphics.Color.WHITE),PropertyFactory.circleStrokeWidth(1.5f)))
+                    PropertyFactory.circleStrokeColor(TrailOutlineArgb),PropertyFactory.circleStrokeWidth(1.5f)))
                 style.addLayer(CircleLayer("wp-user-halo", "wp-user").withProperties(
                     PropertyFactory.circleColor(android.graphics.Color.rgb(29, 132, 211)),
                     PropertyFactory.circleRadius(16f),

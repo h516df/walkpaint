@@ -6,8 +6,14 @@ import java.util.Locale
 internal object RoadPaintColor {
     const val DEFAULT=0xFF579B8C.toInt()
     data class Preset(val name:String,val argb:Int)
-    val presets=listOf(Preset("青绿",DEFAULT),Preset("雾蓝",0xFF647D9E.toInt()),
-        Preset("灰紫",0xFF887A9D.toInt()),Preset("石墨",0xFF657778.toInt()),Preset("赭金",0xFFA38556.toInt()))
+    val presets=listOf(
+        // Muted set, kept because it was chosen deliberately.
+        Preset("青绿",DEFAULT),Preset("雾蓝",0xFF647D9E.toInt()),
+        Preset("灰紫",0xFF887A9D.toInt()),Preset("石墨",0xFF657778.toInt()),Preset("赭金",0xFFA38556.toInt()),
+        // High-contrast set, for reading the trail against an online basemap full of grey roads
+        // and pale green land. Without these the only choices were greyish and hard to see.
+        Preset("亮青",0xFF00A98F.toInt()),Preset("橘橙",0xFFE2611C.toInt()),
+        Preset("品红",0xFFC2185B.toInt()),Preset("亮蓝",0xFF1565D8.toInt()))
     fun parse(text:String?):Int? {
         val digits=text?.trim()?.removePrefix("#") ?: return null
         if(!digits.matches(Regex("[0-9a-fA-F]{6}"))) return null

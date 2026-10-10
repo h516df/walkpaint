@@ -89,15 +89,20 @@ internal class AmapMapController(private val context: Context, private val onGes
         paintedLines.clear()
         paintedSeeds.clear()
         currentMarker = null
-        RecordedTrail.paths(state.realTracks).forEach { line ->
+        val paths = RecordedTrail.paths(state.realTracks)
+        // Every casing first, then every core: a later line's casing must not cover an earlier core.
+        paths.filter { it.size > 1 }.forEach { line ->
+            a.addPolyline(PolylineOptions().addAll(line.map { toAmap(it.lat, it.lon) })
+                .width(9f * density).color(TrailOutlineArgb))
+        }
+        paths.forEach { line ->
             if(line.size==1) {
                 val p=line.single()
                 paintedSeeds+=a.addCircle(CircleOptions().center(toAmap(p.lat,p.lon)).radius(2.5)
-                    .fillColor(exploredColor).strokeColor(Color.WHITE).strokeWidth(1.5f*density))
+                    .fillColor(exploredColor).strokeColor(TrailOutlineArgb).strokeWidth(1.5f*density))
             } else {
-                val coordinates=line.map { toAmap(it.lat,it.lon) }
-                a.addPolyline(PolylineOptions().addAll(coordinates).width(7f*density).color(Color.argb(220,244,247,245)))
-                paintedLines+=a.addPolyline(PolylineOptions().addAll(coordinates).width(5f*density).color(exploredColor))
+                paintedLines+=a.addPolyline(PolylineOptions().addAll(line.map { toAmap(it.lat,it.lon) })
+                    .width(6f * density).color(exploredColor))
             }
         }
         updateUser(latestPosition)

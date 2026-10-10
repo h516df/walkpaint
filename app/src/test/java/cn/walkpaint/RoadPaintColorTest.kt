@@ -4,9 +4,11 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class RoadPaintColorTest {
-    @Test fun defaultsAndFiveDistinctOpaquePresets() {
+    @Test fun defaultsAndPresetsStayDistinctAndOpaque() {
         assertEquals(0xFF579B8C.toInt(),RoadPaintColor.stored(null))
-        assertEquals(5,RoadPaintColor.presets.map { it.argb }.distinct().size)
+        // Five muted presets plus four high-contrast ones, added because the muted set alone was
+        // hard to read against an online basemap.
+        assertEquals(9,RoadPaintColor.presets.map { it.argb }.distinct().size)
         for(preset in RoadPaintColor.presets) assertEquals(255,preset.argb ushr 24)
     }
     @Test fun customInputRoundTripsWithOpaqueCanonicalHex() {
