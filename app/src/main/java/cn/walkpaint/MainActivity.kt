@@ -94,7 +94,8 @@ class MainActivity : ComponentActivity() {
     private var feedbackHistory by mutableStateOf(RecordingDiagnostics.HistoryView(emptyList(),true,false))
     private var feedbackReport by mutableStateOf<String?>(null)
     private var feedbackBusy by mutableStateOf(false)
-    private var updateNotice by mutableStateOf<String?>(null)
+    private var privateUpdateState by mutableStateOf(PrivateUpdateState())
+    private val privateUpdater by lazy { PrivateUpdater(this) { privateUpdateState=it } }
     private val currentRelease by lazy {
         CurrentRelease.decode(assets.open("release-notes.json").bufferedReader().use { it.readText() })
     }
@@ -369,7 +370,11 @@ class MainActivity : ComponentActivity() {
                         onClosePreview={feedbackReport=null},onCopy={copyFeedback()},onShare={shareFeedback()},
                         onCollection={RecordingDiagnostics.collectHistory(this,it)},
                         onClear={RecordingDiagnostics.clearHistory(this)}) },
-                    updatesContent = { onBack -> UpdatesPage(currentRelease,updateNotice,onBack,::checkUpdates) },
+                    updatesContent = { onBack -> UpdatesPage(currentRelease,privateUpdateState,
+                        { if(privateUpdateState.busy) privateUpdater.cancel();onBack() },::checkUpdates,
+                        { privateUpdater.authorize() },{ openUpdateBrowser(PrivateUpdatePolicy.VERIFY) },
+                        { privateUpdater.download() },::installUpdate,{ privateUpdater.cancel() },
+                        { privateUpdater.logout() },{ openUpdateBrowser(UpdateDestination.URL) }) },
                     mapContent = { if (amapActive) AmapNativeView() else NativeMapView() }
                 )
 
@@ -862,10 +867,27 @@ class MainActivity : ComponentActivity() {
         val capabilities=connectivity.getNetworkCapabilities(connectivity.activeNetwork)
         val available=capabilities?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)==true &&
             capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-        updateNotice=UpdateDestination.notice(available)
-        if(!available) return
-        try { startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(UpdateDestination.URL)).addCategory(Intent.CATEGORY_BROWSABLE)) }
-        catch(_:android.content.ActivityNotFoundException) { updateNotice=UpdateDestination.NO_BROWSER }
+        if(!available) { privateUpdater.notice(UpdateDestination.OFFLINE);return }
+        privateUpdateState=privateUpdater.snapshot();privateUpdater.check()
+    }
+    private fun openUpdateBrowser(url:String) {
+        try { startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)) }
+        catch(_:android.content.ActivityNotFoundException) { privateUpdater.notice(UpdateDestination.NO_BROWSER) }
+    }
+    private fun installUpdate() {
+        privateUpdater.prepareInstall { file ->
+            try {
+                if(!packageManager.canRequestPackageInstalls()) {
+                    privateUpdater.notice("请允许足迹涂色安装更新，返回后再点击安装；拒绝不会影响原版本")
+                    startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,Uri.parse("package:$packageName")))
+                } else {
+                    val uri=androidx.core.content.FileProvider.getUriForFile(this,"$packageName.updates",file)
+                    startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri,"application/vnd.android.package-archive")
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                    privateUpdater.notice("请在系统窗口确认覆盖安装；取消后仍可使用原版本")
+                }
+            } catch(_:Exception) { privateUpdater.notice("暂时无法打开系统安装，请重新下载后重试") }
+        }
     }
 
     private fun openAppSettings() {
@@ -1099,6 +1121,7 @@ class MainActivity : ComponentActivity() {
         super.onPause()
     }
     override fun onDestroy() {
+        privateUpdater.close()
         headingSensor.stop()
         roadDownload?.cancel()
         mainHandler.removeCallbacksAndMessages(null)

@@ -26,6 +26,6 @@ class UpdateInfoTest {
         }
     }
     @Test fun malformedMetadataFailsBeforeClaimingAnInstalledVersion() {
-        assertThrows(IllegalArgumentException::class.java) { CurrentRelease.decode(text.replace("\"0.13\"","\"https://evil\"")) }
+        assertThrows(IllegalArgumentException::class.java) { CurrentRelease.decode(text.replace("\"0.14\"","\"https://evil\"")) }
     }
 }

@@ -16,8 +16,14 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
     private var fixtureProbe=false
     private var cameraProbe=false
     private var roadColorProbe=false
+    private var privateUpdateProbe=false
     override fun onStart() {
         val result = Bundle()
+        if(privateUpdateProbe) {
+            try { result.putString("stream",PrivateUpdateProbe.run(this));finish(Activity.RESULT_OK,result) }
+            catch(e:Throwable) { result.putString("stream","PRIVATE_UPDATE_ANDROID_BOUNDARIES_FAIL: ${e.javaClass.simpleName}: ${e.message}");finish(Activity.RESULT_CANCELED,result) }
+            return
+        }
         if(roadColorProbe) {
             try { result.putString("stream",RoadColorProbe(this).run());finish(Activity.RESULT_OK,result) }
             catch(e:Throwable) { result.putString("stream","ROAD_COLOR_SDK_FAIL: ${e.javaClass.simpleName}: ${e.message}");finish(Activity.RESULT_CANCELED,result) }
@@ -258,5 +264,5 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
         // finish() can terminate the instrumented process immediately; cleanup must precede it.
         finish(resultCode,result)
     }
-    override fun onCreate(arguments:Bundle?) { roadColorProbe=arguments?.getString("roadColorProbe")=="true"; cameraProbe=arguments?.getString("cameraProbe")=="true"; fixtureProbe=arguments?.getString("fixtureProbe")=="true"; catalogProbe=arguments?.getString("catalogProbe")=="true"; networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments); start() }
+    override fun onCreate(arguments:Bundle?) { privateUpdateProbe=arguments?.getString("privateUpdateProbe")=="true";roadColorProbe=arguments?.getString("roadColorProbe")=="true"; cameraProbe=arguments?.getString("cameraProbe")=="true"; fixtureProbe=arguments?.getString("fixtureProbe")=="true"; catalogProbe=arguments?.getString("catalogProbe")=="true"; networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments); start() }
 }
