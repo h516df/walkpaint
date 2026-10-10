@@ -47,6 +47,10 @@ internal class AmapMapController(private val context: Context, private val onGes
         BitmapDescriptorFactory.fromBitmap(bitmap)
     }
 
+    private var gestureActive = false
+    private var pendingState: TrackState? = null
+    private var pendingRoads: RoadState? = null
+
     fun create(state: TrackState, location: Location?, roads: RoadState, color:Int=ExploredRoadArgb): MapView {
         exploredColor=color
         check(BuildConfig.AMAP_KEY.isNotBlank()) { "高德地图 Key 尚未设置" }
@@ -69,9 +73,11 @@ internal class AmapMapController(private val context: Context, private val onGes
         map?.setOnMapTouchListener { event ->
             taps.onTouchEvent(event)
             when(event.actionMasked) {
-                android.view.MotionEvent.ACTION_DOWN -> { downX=event.x;downY=event.y }
+                android.view.MotionEvent.ACTION_DOWN -> { downX=event.x;downY=event.y;gestureActive=true }
                 android.view.MotionEvent.ACTION_POINTER_DOWN -> onGesture()
                 android.view.MotionEvent.ACTION_MOVE -> if(kotlin.math.hypot(event.x-downX,event.y-downY)>slop) onGesture()
+                android.view.MotionEvent.ACTION_UP,
+                android.view.MotionEvent.ACTION_CANCEL -> endGesture()
             }
         }
         map?.setOnMapLoadedListener { onReady() }
@@ -83,7 +89,26 @@ internal class AmapMapController(private val context: Context, private val onGes
         return view
     }
 
+    /**
+     * A full rebuild clears the map and re-adds every overlay, so if one lands in the middle of a
+     * pinch or a drag the gesture visibly hitches. A request raised during a gesture is held and
+     * applied once the finger lifts.
+     */
     fun render(state: TrackState, roads: RoadState) {
+        if (gestureActive) { pendingState = state; pendingRoads = roads; return }
+        renderNow(state, roads)
+    }
+
+    private fun endGesture() {
+        gestureActive = false
+        val state = pendingState
+        val roads = pendingRoads
+        pendingState = null
+        pendingRoads = null
+        if (state != null && roads != null) renderNow(state, roads)
+    }
+
+    private fun renderNow(state: TrackState, roads: RoadState) {
         val a = map ?: return
         a.clear()
         paintedLines.clear()
@@ -143,12 +168,21 @@ internal class AmapMapController(private val context: Context, private val onGes
         map?.animateCamera(CameraUpdateFactory.newLatLngZoom(toAmap(lat, lon), zoom.toFloat()))
     }
 
-    fun followCamera(fix: Location, bearing: Float, animate: Boolean) {
+    /**
+     * [minZoom] is supplied only when the person explicitly asked to be located: it lifts a wide
+     * camera to street level. Following a moving fix leaves the camera's own zoom alone.
+     */
+    fun followCamera(fix: Location, bearing: Float, animate: Boolean, minZoom: Float? = null) {
         val a=map ?: return
         val current=a.cameraPosition
+        val zoom=when {
+            minZoom!=null -> maxOf(current.zoom,minZoom)
+            current.zoom<5f -> 18f
+            else -> current.zoom
+        }
         val target=com.amap.api.maps.model.CameraPosition.builder(current)
             .target(toAmap(fix.latitude,fix.longitude)).bearing(bearing)
-            .zoom(if(current.zoom<5f) 18f else current.zoom).build()
+            .zoom(zoom).build()
         val update=CameraUpdateFactory.newCameraPosition(target)
         if(animate) a.animateCamera(update,200,null) else a.moveCamera(update)
     }

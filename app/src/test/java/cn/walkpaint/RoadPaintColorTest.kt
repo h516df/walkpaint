@@ -5,7 +5,7 @@ import org.junit.Test
 
 class RoadPaintColorTest {
     @Test fun defaultsAndPresetsStayDistinctAndOpaque() {
-        assertEquals(0xFF579B8C.toInt(),RoadPaintColor.stored(null))
+        assertEquals(0xFF0B8C77.toInt(),RoadPaintColor.stored(null))
         // Five muted presets plus four high-contrast ones, added because the muted set alone was
         // hard to read against an online basemap.
         assertEquals(9,RoadPaintColor.presets.map { it.argb }.distinct().size)

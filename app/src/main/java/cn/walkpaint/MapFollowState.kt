@@ -1,5 +1,11 @@
 package cn.walkpaint
 
+/**
+ * Street-level zoom used when the person explicitly asks to be located. Following a moving fix
+ * deliberately does not force this, so looking around while walking does not yank the camera back.
+ */
+internal const val StreetZoom = 17f
+
 /** Display-only interaction state. No GPS recording or road matching decisions. */
 internal class MapFollowState {
     enum class Mode { FOLLOWING, BROWSING, HISTORY }

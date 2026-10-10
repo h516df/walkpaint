@@ -4,7 +4,12 @@ import java.util.Locale
 
 /** Opaque display colors only. Never used for GPS, road matching or backup data. */
 internal object RoadPaintColor {
-    const val DEFAULT=0xFF579B8C.toInt()
+    /**
+     * The default trail colour is also the app's pigment, so the interface and the paint it
+     * leaves on the map read as one thing. The previous value was a desaturated grey-green that
+     * vanished against the online basemap.
+     */
+    const val DEFAULT=0xFF0B8C77.toInt()
     data class Preset(val name:String,val argb:Int)
     val presets=listOf(
         // Muted set, kept because it was chosen deliberately.

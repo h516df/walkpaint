@@ -13,38 +13,38 @@ internal data class RecordingStatus(val code: String, val title: String, val hin
     companion object {
         fun assess(s: RecordingSignals): RecordingStatus {
             fun recent(at: Long, window: Long = 45_000) = at > 0 && s.now - at in 0..window
-            if (!s.enabled) return RecordingStatus("PAUSED", "自动足迹已暂停", "已暂停 · 不会记录位置")
-            if (!s.fine) return RecordingStatus("PERMISSION", "缺少精确定位权限", "请在系统设置允许精确位置")
-            if (!s.gpsEnabled) return RecordingStatus("GPS_DISABLED", "系统 GPS 已关闭", "开启系统位置后将尝试恢复；中断区间不会补画")
-            if (!s.running) return RecordingStatus("SERVICE_STOPPED", "记录服务未运行", "返回应用可尝试恢复；系统强停后必须手动打开")
+            if (!s.enabled) return RecordingStatus("PAUSED", "已暂停记录", "暂停期间不会记录位置")
+            if (!s.fine) return RecordingStatus("PERMISSION", "缺少精确定位权限", "请在系统设置里允许「精确位置」")
+            if (!s.gpsEnabled) return RecordingStatus("GPS_DISABLED", "手机定位已关闭", "打开手机定位后会自动继续；中间那段不会补画")
+            if (!s.running) return RecordingStatus("SERVICE_STOPPED", "记录已停止", "回到应用可尝试恢复；被系统强制停止后需要手动打开")
             if (s.databaseError != null || (s.failure.startsWith("DATABASE_") && s.failureAt > s.savedAt))
-                return RecordingStatus("SAVE_FAILED", "足迹保存失败", "请查看诊断并检查存储空间，原数据保留")
+                return RecordingStatus("SAVE_FAILED", "这次没能存下来", "请检查手机存储空间；已有的足迹没有丢")
             if (s.failure.startsWith("GPS_REGISTER_") && s.failureAt >= s.startedAt && s.failureAt > s.callbackAt)
-                return RecordingStatus("REGISTER_FAILED", "GPS 注册失败", "正在限频重试，尚未恢复记录")
+                return RecordingStatus("REGISTER_FAILED", "定位没有启动", "正在重试，暂时还没在记录")
             val currentCallback = s.callbackAt.takeIf { it >= s.startedAt } ?: 0
             if (!recent(currentCallback)) {
                 if (currentCallback > 0 || !recent(s.startedAt))
-                    return RecordingStatus("CALLBACK_INTERRUPTED", "GPS 回调已中断", "监听仍开启，尚未收到新定位；原因未确定，请查看诊断")
-                return RecordingStatus("STARTING", "正在搜寻 GPS", "尚未获得本次有效定位，不代表已经保存足迹")
+                    return RecordingStatus("CALLBACK_INTERRUPTED", "收不到定位信号", "监听还开着，但没有新的定位进来；请到室外或稍等")
+                return RecordingStatus("STARTING", "正在搜寻定位", "还没拿到第一个有效定位，此时并没有在记录")
             }
             if (s.validAt < s.startedAt || !recent(s.validAt) || s.filterAt > s.validAt && s.filter in setOf(
                     "UNRELIABLE_ACCURACY", "MISSING_ACCURACY", "INVALID_COORDINATE", "STALE_FIX")) {
                 val hint = when (s.filter) {
-                    "UNRELIABLE_ACCURACY", "MISSING_ACCURACY" -> "定位精度不足，暂不记录新足迹"
-                    "STALE_FIX" -> "收到过期定位，已拒绝保存"
-                    "INVALID_COORDINATE" -> "收到无效定位，已拒绝保存"
-                    else -> "收到定位回调，尚无新的有效 GPS"
+                    "UNRELIABLE_ACCURACY", "MISSING_ACCURACY" -> "定位精度不够，暂时不记录"
+                    "STALE_FIX" -> "收到的定位已过期，没有保存"
+                    "INVALID_COORDINATE" -> "收到的定位无效，没有保存"
+                    else -> "有定位进来，但还不足以上报足迹"
                 }
-                return RecordingStatus("INVALID_FIX", "等待可靠 GPS", hint)
+                return RecordingStatus("INVALID_FIX", "定位信号较弱", hint)
             }
-            if (s.savedAt >= maxOf(s.startedAt,s.filterAt) && recent(s.savedAt, 30_000)) return RecordingStatus("SAVED", "新足迹已保存",
-                "刚刚保存新足迹 · 仅确认匹配的道路上色", true)
+            if (s.savedAt >= maxOf(s.startedAt,s.filterAt) && recent(s.savedAt, 30_000)) return RecordingStatus("SAVED", "刚刚记下新足迹",
+                "这一笔已经存好了", true)
             val hint = when (s.filter) {
-                "JUMP_OR_TOO_FAST" -> "定位跳跃或速度超出当前记录范围，本次未保存"
-                "NON_INCREASING_TIME" -> "重复或倒序定位，本次未保存"
-                else -> "GPS 持续更新 · 尚无新的可靠位移，未新增足迹"
+                "JUMP_OR_TOO_FAST" -> "这一步跳得太远，不像真的走过，本次未保存"
+                "NON_INCREASING_TIME" -> "收到的定位重复或时间倒序，本次未保存"
+                else -> "定位在更新，但还没走出可记录的距离"
             }
-            return RecordingStatus("WAITING_MOVEMENT", "GPS 已更新 · 等待位移", hint, true)
+            return RecordingStatus("WAITING_MOVEMENT", "定位正常 · 还没走出距离", hint, true)
         }
     }
 }

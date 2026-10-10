@@ -286,13 +286,7 @@ class MainActivity : ComponentActivity() {
             !amapConsent && !mapPref.getBoolean("amap_sdk_decision_seen", false)
         updateUi()
         setContent {
-            MaterialTheme(
-                colorScheme = lightColorScheme(
-                    primary = Accent, onPrimary = Color.White,
-                    background = PageBackground, surface = PageBackground,
-                    onSurface = Ink, secondary = Accent, surfaceContainerLow = PageBackground
-                )
-            ) {
+            WalkPaintTheme {
                 AppShell(
                     selectedTab = currentTab,
                     onTab = {
@@ -673,7 +667,7 @@ class MainActivity : ComponentActivity() {
         val fix = chooseMapFix(listOfNotNull(userFix,latestSystemLocation(),AmbientTracking.lastGps))
             ?.takeIf { follow.accepts(fixQuality(it)) }
         if (fix != null) {
-            updatePosition(fix, true)
+            updatePosition(fix, true, streetZoom = true)
             pendingCenter = false
         } else {
             pendingCenter = true
@@ -754,12 +748,12 @@ class MainActivity : ComponentActivity() {
         }.start()
     }
 
-    private fun updatePosition(fix: Location, center: Boolean) {
+    private fun updatePosition(fix: Location, center: Boolean, streetZoom: Boolean = false) {
         val chosen=chooseMapFix(listOfNotNull(fix,userFix,AmbientTracking.lastGps)) ?: return
         userFix = chosen
         AmbientTracking.lastFix = chosen
         updateLocationLayer()
-        syncFollowCamera(force=center || firstMapCenter)
+        syncFollowCamera(force=center || firstMapCenter, streetZoom=streetZoom)
     }
 
     private fun trackingDiagnostics(): String {
@@ -994,7 +988,7 @@ class MainActivity : ComponentActivity() {
         syncHeadingLifecycle()
     }
 
-    private fun syncFollowCamera(force:Boolean=false) {
+    private fun syncFollowCamera(force:Boolean=false, streetZoom:Boolean=false) {
         if(!follow.following) return
         val fix=userFix?.takeIf { follow.accepts(fixQuality(it)) } ?: return
         val point=TrackPoint(fix.latitude,fix.longitude,fix.elapsedRealtimeNanos/1_000_000L,fix.accuracy)
@@ -1002,15 +996,19 @@ class MainActivity : ComponentActivity() {
         if(!force && lastCameraPoint?.let { Geo.meters(it,point)<1.0 }==true &&
             kotlin.math.abs(HeadingFilter.delta(lastCameraBearing,mapHeading))<1f) return
         val animate=Settings.Global.getFloat(contentResolver,Settings.Global.ANIMATOR_DURATION_SCALE,1f)>0f
+        // Only an explicit "where am I" lifts a wide camera to street level.
+        val minZoom=if(streetZoom) StreetZoom else null
         if(amapActive) {
             if(amapController.view()==null) return
-            amapController.followCamera(fix,mapHeading,animate)
+            amapController.followCamera(fix,mapHeading,animate,minZoom)
         } else {
             val map=mapInstance ?: return
             val camera=map.cameraPosition
+            val zoom=minZoom?.let { maxOf(camera.zoom,it.toDouble()) }
+                ?: if(camera.zoom<5.0) 18.0 else camera.zoom
             val target=org.maplibre.android.camera.CameraPosition.Builder(camera)
                 .target(LatLng(fix.latitude,fix.longitude)).bearing(mapHeading.toDouble())
-                .zoom(if(camera.zoom<5.0)18.0 else camera.zoom).build()
+                .zoom(zoom).build()
             val update=CameraUpdateFactory.newCameraPosition(target)
             if(animate) map.easeCamera(update,200) else map.moveCamera(update)
         }

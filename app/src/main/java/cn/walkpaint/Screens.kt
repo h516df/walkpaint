@@ -103,31 +103,47 @@ private fun MapPage(notice: String?,day: String?,onShowAll: ()->Unit,onLocate: (
 
 @Composable
 private fun Heading(title:String,subtitle:String) {
-    Column(Modifier.padding(top=8.dp,bottom=12.dp)) {
-        Text(title,color=Ink,fontSize=28.sp,fontWeight=FontWeight.SemiBold)
-        Spacer(Modifier.height(7.dp))
-        Text(subtitle,color=Muted,fontSize=13.sp,lineHeight=20.sp)
+    Column(Modifier.padding(top=4.dp,bottom=18.dp)) {
+        Text(title,color=Ink,fontSize=TitleSize,fontWeight=FontWeight.Bold,letterSpacing=(-0.6).sp)
+        Spacer(Modifier.height(8.dp))
+        Text(subtitle,color=Muted,fontSize=CaptionSize,lineHeight=20.sp)
     }
 }
 
+/**
+ * A real card: white on the paper background, a hairline border and a soft edge. The previous
+ * version tinted the panel three percent away from the page, which read as nothing at all.
+ */
 @Composable
 private fun Section(title:String,content:@Composable ColumnScope.()->Unit) {
-    Column(Modifier.fillMaxWidth().background(Panel,RoundedCornerShape(12.dp)).padding(16.dp)) {
-        Text(title,color=Ink,fontSize=16.sp,fontWeight=FontWeight.SemiBold)
-        Spacer(Modifier.height(12.dp))
-        content()
+    Surface(color=Canvas,shape=CardShape,border=BorderStroke(1.dp,Line),shadowElevation=2.dp,
+        modifier=Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().padding(20.dp)) {
+            Text(title,color=Ink,fontSize=SectionSize,fontWeight=FontWeight.SemiBold)
+            Spacer(Modifier.height(14.dp))
+            content()
+        }
+    }
+}
+
+/** The one card that carries live numbers; it gets the pigment tint instead of plain white. */
+@Composable
+private fun LiveCard(content:@Composable ColumnScope.()->Unit) {
+    Surface(color=Canvas,shape=CardShape,border=BorderStroke(1.dp,Line),shadowElevation=2.dp,
+        modifier=Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().padding(20.dp)) { content() }
     }
 }
 
 @Composable
 private fun SettingRow(title:String,detail:String="",onClick:()->Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick=onClick).heightIn(min=52.dp).padding(vertical=8.dp),
+    Row(Modifier.fillMaxWidth().clickable(onClick=onClick).heightIn(min=56.dp).padding(vertical=10.dp),
         verticalAlignment=Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(title,color=Ink,fontSize=14.sp)
-            if(detail.isNotEmpty()) { Spacer(Modifier.height(4.dp));Text(detail,color=Muted,fontSize=12.sp,lineHeight=18.sp) }
+            Text(title,color=Ink,fontSize=BodySize,fontWeight=FontWeight.Medium)
+            if(detail.isNotEmpty()) { Spacer(Modifier.height(4.dp));Text(detail,color=Muted,fontSize=CaptionSize,lineHeight=18.sp) }
         }
-        Text("›",color=Muted,fontSize=22.sp,modifier=Modifier.padding(start=12.dp))
+        Text("›",color=Faint,fontSize=20.sp,modifier=Modifier.padding(start=12.dp))
     }
 }
 
@@ -136,44 +152,118 @@ private fun TripsPage(state:TrackState,onTrip:(Track)->Unit) {
     val days=remember(state) { DailyFootprints.days(state) }
     val today=DailyFootprints.key(System.currentTimeMillis())
     val todayDay=days.firstOrNull { it.key==today }
-    LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(20.dp)) {
+    val byMonth=remember(days) { days.groupBy { it.key.take(7) } }
+    val busiestDay=remember(days) { days.maxOfOrNull { it.meters } ?: 0.0 }
+    LazyColumn(Modifier.fillMaxSize(),
+        contentPadding=PaddingValues(start=20.dp,end=20.dp,top=20.dp,bottom=32.dp),
+        verticalArrangement=Arrangement.spacedBy(16.dp)) {
         item { Heading("足迹","走过哪里，就在地图上留下颜色。") }
         item {
-            Column(Modifier.fillMaxWidth().padding(vertical=4.dp)) {
-                Text("累计记录里程",color=Muted,fontSize=13.sp)
-                Spacer(Modifier.height(8.dp))
-                Text(exploredDistance(state.totalMeters),color=Accent,fontSize=38.sp,fontWeight=FontWeight.Medium)
-                Spacer(Modifier.height(14.dp))
-                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(24.dp)) {
-                    Text("走过 ${FootprintInsights.exploredCells(state)} 个不同区域",color=Ink,fontSize=13.sp)
-                    Text("${days.size} 天有足迹",color=Muted,fontSize=13.sp)
+            Column(Modifier.fillMaxWidth()) {
+                Text("累计记录里程",color=Muted,fontSize=CaptionSize)
+                Spacer(Modifier.height(10.dp))
+                Text(exploredDistance(state.totalMeters),color=Pigment,fontSize=DisplaySize,
+                    fontWeight=FontWeight.Bold,style=TabularFigures)
+                Spacer(Modifier.height(16.dp))
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                    StatChip("走过 ${FootprintInsights.exploredCells(state)} 个区域")
+                    StatChip("${days.size} 天有足迹")
                 }
             }
         }
-        item { Section("今天的足迹") {
-            Text(exploredDistance(todayDay?.meters ?: 0.0),color=Accent,fontSize=24.sp,fontWeight=FontWeight.Medium)
-            Spacer(Modifier.height(6.dp))
-            Text(if(todayDay==null) "还没有新的足迹，出门走走吧。" else "步行、骑行和驾车的已记录轨迹直接显示在地图上。",
-                color=Muted,fontSize=13.sp,lineHeight=20.sp)
+        item { HeatmapCard(days,onTrip) }
+        item { LiveCard {
+            Text("今天",color=Muted,fontSize=CaptionSize)
+            Spacer(Modifier.height(8.dp))
+            Text(exploredDistance(todayDay?.meters ?: 0.0),color=Pigment,fontSize=27.sp,
+                fontWeight=FontWeight.Bold,style=TabularFigures)
+            Spacer(Modifier.height(8.dp))
+            Text(if(todayDay==null) "还没有新的足迹，出门走走吧。" else "步行、骑行和驾车经过的都会记下来。",
+                color=Muted,fontSize=CaptionSize,lineHeight=20.sp)
             if(todayDay!=null) SettingRow("查看今天的足迹",onClick={onTrip(todayDay.focusTrack())})
         } }
-        item { Text("无需准备地图或下载道路包。里程按已记录的出行累计，重复经过会累计；区域数按去过的地方去重。定位中断期间不补画连线。",
-            color=Muted,fontSize=13.sp,lineHeight=20.sp) }
-        item { Text("每日足迹",color=Ink,fontSize=17.sp,fontWeight=FontWeight.SemiBold) }
-        if(days.isEmpty()) item { Text("开启自动记录后，实际经过的轨迹会逐渐涂色。",color=Muted,fontSize=14.sp) }
-        items(days,key={it.key}) { day ->
-            Row(Modifier.fillMaxWidth().clickable { onTrip(day.focusTrack()) }.heightIn(min=64.dp).padding(vertical=8.dp),
-                verticalAlignment=Alignment.CenterVertically) {
-                Icon(painterResource(R.drawable.ic_route),null,tint=Lilac,modifier=Modifier.size(22.dp))
-                Spacer(Modifier.width(14.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(if(day.key==today) "今天" else day.key,color=Ink,fontSize=15.sp,fontWeight=FontWeight.Medium)
-                    Spacer(Modifier.height(6.dp))
-                    Text("已记录 ${exploredDistance(day.meters)}",color=Muted,fontSize=12.sp)
+        if(days.isEmpty()) {
+            item { Text("开启自动记录后，走过的地方会在地图上留下颜色。",color=Muted,fontSize=BodySize) }
+        } else {
+            byMonth.forEach { (month,tracks) ->
+                item(key="m:$month") {
+                    Text(monthLabel(month),color=Ink,fontSize=SectionSize,fontWeight=FontWeight.SemiBold,
+                        modifier=Modifier.padding(top=6.dp))
                 }
-                Text("›",color=Muted,fontSize=22.sp)
+                items(tracks,key={it.key}) { day -> DayRow(day,today,busiestDay,onTrip) }
             }
-            HorizontalDivider(color=AccentSoft)
+        }
+    }
+}
+
+private fun monthLabel(month:String):String = "${month.take(4)} 年 ${month.substring(5).toInt()} 月"
+
+@Composable
+private fun StatChip(text:String) {
+    Surface(color=CanvasSoft,shape=ChipShape) {
+        Text(text,color=Ink,fontSize=CaptionSize,modifier=Modifier.padding(horizontal=12.dp,vertical=7.dp))
+    }
+}
+
+/** The bar carries the information: how the day compares with this person's busiest day. */
+@Composable
+private fun DayRow(day:DailyFootprint,today:String,busiest:Double,onTrip:(Track)->Unit) {
+    val fraction=if(busiest<=0.0) 0f else (day.meters/busiest).coerceIn(0.0,1.0).toFloat()
+    Column(Modifier.fillMaxWidth().clickable { onTrip(day.focusTrack()) }.padding(vertical=12.dp)) {
+        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+            Text(if(day.key==today) "今天" else day.key.replace('-','/'),color=Ink,
+                fontSize=BodySize,fontWeight=FontWeight.Medium,modifier=Modifier.weight(1f))
+            Text(exploredDistance(day.meters),color=Ink,fontSize=BodySize,style=TabularFigures)
+            Text("›",color=Faint,fontSize=18.sp,modifier=Modifier.padding(start=8.dp))
+        }
+        Spacer(Modifier.height(8.dp))
+        Box(Modifier.fillMaxWidth().height(5.dp).background(Line,CircleShape)) {
+            if(fraction>0f) Box(Modifier.fillMaxWidth(fraction).height(5.dp).background(Pigment,CircleShape))
+        }
+    }
+}
+
+/**
+ * A rolling year of footprints. Months and years tile continuously, the newest week is scrolled
+ * into view, and tapping a day opens it, so "where did I walk last spring" is one glance away
+ * instead of a list you have to read date by date.
+ */
+@Composable
+private fun HeatmapCard(days:List<DailyFootprint>,onTrip:(Track)->Unit) {
+    val today=remember { java.time.LocalDate.now() }
+    val byKey=remember(days) { days.associateBy { it.key } }
+    val grid=remember(days) { YearHeatmap.build(today,byKey.mapValues { it.value.meters }) }
+    Section("最近一年") {
+        val scroll=rememberScrollState()
+        LaunchedEffect(grid) { scroll.scrollTo(scroll.maxValue) }
+        Row(Modifier.horizontalScroll(scroll)) {
+            grid.forEach { week ->
+                Column(Modifier.padding(end=3.dp),horizontalAlignment=Alignment.CenterHorizontally) {
+                    week.cells.forEach { cell ->
+                        val fill=when {
+                            cell.level<0 -> androidx.compose.ui.graphics.Color.Transparent
+                            cell.level==0 -> Line
+                            else -> Pigment.copy(alpha=0.22f+0.195f*(cell.level-1))
+                        }
+                        val known=byKey[cell.date.toString()]
+                        Box(Modifier.size(13.dp)
+                            .background(fill,RoundedCornerShape(3.dp))
+                            .then(if(known!=null) Modifier.clickable { onTrip(known.focusTrack()) } else Modifier))
+                        Spacer(Modifier.height(3.dp))
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text(week.monthLabel ?: "",color=Muted,fontSize=9.sp,maxLines=1)
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+            Text(if(days.isEmpty()) "还没有记录" else "颜色越深，那天走得越多",color=Muted,fontSize=MicroSize,
+                modifier=Modifier.weight(1f))
+            repeat(4) { step ->
+                Box(Modifier.size(11.dp).background(Pigment.copy(alpha=0.22f+0.195f*step),RoundedCornerShape(3.dp)))
+                if(step<3) Spacer(Modifier.width(3.dp))
+            }
         }
     }
 }
@@ -210,16 +300,23 @@ private fun ProfilePage(automatic:Boolean,notice:String?,onResolve:()->Unit,
                             modifier=Modifier.semantics { contentDescription="自动记录" })
                     }
                     if(automatic && notice!=null) SettingRow(notice,"去解决",onResolve)
+                    else if(automatic) {
+                        Spacer(Modifier.height(4.dp))
+                        Row(verticalAlignment=Alignment.CenterVertically) {
+                            Box(Modifier.size(8.dp).background(Pigment,CircleShape))
+                            Spacer(Modifier.width(8.dp))
+                            Text("记录中，不用管它",color=Muted,fontSize=CaptionSize)
+                        }
+                    }
                 } }
                 item { Section("常用") {
                     SettingRow("备份与恢复","保存或找回你的足迹") { page="备份与恢复" }
-                    SettingRow("问题反馈","预览并分享本机故障线索") { page="问题反馈" }
+                    SettingRow("问题反馈","把遇到的问题发给开发者") { page="问题反馈" }
                     SettingRow("检查更新","当前版本 ${BuildConfig.VERSION_NAME}") { page="检查更新" }
-                    SettingRow("高级诊断","记录异常时查看原因",onDiagnostics)
                 } }
                 item { Section("偏好") {
                     SettingRow("涂色颜色",RoadPaintColor.name(roadColor),onAppearance)
-                    SettingRow("更多设置","隐私、地图与关于") { page="更多设置" }
+                    SettingRow("更多设置","隐私、地图、诊断与关于") { page="更多设置" }
                 } }
                 item { Text("足迹涂色  ${BuildConfig.VERSION_NAME}",color=Muted,fontSize=12.sp,modifier=Modifier.padding(vertical=8.dp)) }
             }
