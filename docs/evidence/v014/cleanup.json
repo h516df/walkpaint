@@ -1,0 +1,11 @@
+{
+  "installed_code": 16,
+  "all_original_row_hashes_unchanged": true,
+  "temporary_update_authorization_preferences_empty": true,
+  "update_keystore_key_removed": true,
+  "update_cache_empty": true,
+  "no_recording_foreground_service": true,
+  "automatic_recording_disabled": true,
+  "guarded_avd_only": "emulator-5556 / WalkPaint_Google_API36",
+  "dedicated_avd_stopped": true
+}

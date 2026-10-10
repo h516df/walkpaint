@@ -1,6 +1,6 @@
 # 项目规则
 
-- 当前继续 #11/v0.14，最新状态优先 HANDOFF 首节与 docs/evidence/V014.md；草稿PR #21。171 JVM/7 guard、真实私有授权/旧 manifest/hash/重开、Android crypto/package/provider 与新 code16 包预校验通过；尚不是完整下载安装闭环。v0.14 私有 draft 4 资产已核对，自动审核要求现在开放预览的明确确认，确认前不能绕过。用户已确认仅 walkpaint 只读 App，服务器安装范围已实读；公开 client id 非秘密，严禁 App secret/private key/PC token。Google 当前 code15 仅本地 bootstrap，最终 APK code16/0.14/schema2/原签名，手机未装/未验收；测试结束必须退出本地更新授权清 cache 并停止专用 AVD。只用 Google guard，不动其他工作区/私人MuMu/手机、不改记录/DB/matcher，不关闭真机事项，不合并。此节优先于以下历史。
+- 当前 #11/v0.14 软件更新闭环已通过，最新状态看 HANDOFF 首节与 docs/evidence/V014.md。171 JVM/7 guard、Google 真实私有授权/下载/取消重试/拒绝来源/取消安装/确认覆盖/原五表保留/新版检查/退出清理通过；系统 Done 导航修正后分段续验，不伪称整轮重跑。用户明确确认后私有预览开放，服务器与重新下载指纹一致，code16/0.14/schema2/原签名；草稿 PR #21 未合并，手机/vivo 户外长期后台/ARM 高德未验收。仅 walkpaint Contents/Metadata read App，无服务器/secret/private key/PC token；专用 Google 授权/Keystore/cache 已清，AVD 已停止。不动其他目录/MuMu/手机，不改记录/DB/matcher，不擅自关闭真机事项。此节优先以下历史。
 
 - 当前串行完成 v0.13 的 #10 反馈/#11 浏览器更新MVP/#17 ARM兼容和#12继承整合；以HANDOFF首节和docs/evidence/V013.md为准。129 JVM/7守卫/Google真实反馈、覆盖升级、私有浏览器入口与50.04米真实GPS彩路通过；两包dex/内置说明一致。v0.13私有预览已分发并实际下载验SHA，PR未合并、手机未安装；已按本轮用户“做完再上传”授权统一私有分发，不单发v0.12。#11不冒充自动下载；vivo P0/长期后台与ARM高德本轮未验收。禁止改服务、DB、GPS/matcher阈值或测试私人MuMu。反馈仅固定白名单、本地有界留存、沿用诊断写入线程，不新增遥测/监控服务。回退原签名/schema2/code>=14。此节优先于以下历史状态。
 

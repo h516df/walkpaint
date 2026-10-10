@@ -80,6 +80,7 @@ try:
     checks['installed_apk_matches_final_artifact']=hashlib.sha256(run('exec-out','cat',remote,binary=True)).hexdigest()==expected
     assert checks['installed_apk_matches_final_artifact']
     assert original==rows();checks['all_original_database_rows_unchanged']=True
+    if 'App installed.' in labels():tap('Done')
     launch();update_page();tap('检查新版');wait_for('最新发布 0.14，当前版本无需更新')
     checks['authorization_survives_cover_install_and_no_update_is_real']=True;shot('updated-version-private-check')
     tap('退出更新授权');tap('退出授权');wait_for('已退出更新授权，原足迹保留')
