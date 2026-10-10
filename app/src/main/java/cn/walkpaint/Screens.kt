@@ -18,6 +18,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Locale
@@ -166,22 +167,13 @@ private fun TripsPage(state:TrackState,onTrip:(Track)->Unit) {
                     fontWeight=FontWeight.Bold,style=TabularFigures)
                 Spacer(Modifier.height(16.dp))
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                    StatChip("今天 ${exploredDistance(todayDay?.meters ?: 0.0)}")
                     StatChip("走过 ${FootprintInsights.exploredCells(state)} 个区域")
                     StatChip("${days.size} 天有足迹")
                 }
             }
         }
-        item { HeatmapCard(days,onTrip) }
-        item { LiveCard {
-            Text("今天",color=Muted,fontSize=CaptionSize)
-            Spacer(Modifier.height(8.dp))
-            Text(exploredDistance(todayDay?.meters ?: 0.0),color=Pigment,fontSize=27.sp,
-                fontWeight=FontWeight.Bold,style=TabularFigures)
-            Spacer(Modifier.height(8.dp))
-            Text(if(todayDay==null) "还没有新的足迹，出门走走吧。" else "步行、骑行和驾车经过的都会记下来。",
-                color=Muted,fontSize=CaptionSize,lineHeight=20.sp)
-            if(todayDay!=null) SettingRow("查看今天的足迹",onClick={onTrip(todayDay.focusTrack())})
-        } }
+        item { FootprintCalendar(days,today,onTrip) }
         if(days.isEmpty()) {
             item { Text("开启自动记录后，走过的地方会在地图上留下颜色。",color=Muted,fontSize=BodySize) }
         } else {
@@ -228,27 +220,78 @@ private fun DayRow(day:DailyFootprint,today:String,busiest:Double,onTrip:(Track)
  * into view, and tapping a day opens it, so "where did I walk last spring" is one glance away
  * instead of a list you have to read date by date.
  */
+/** Day, month and year, drilled one into the other. */
+private enum class CalendarMode { DAY, MONTH, YEAR }
+
+private fun heatFill(level:Int) = when {
+    level<0 -> androidx.compose.ui.graphics.Color.Transparent
+    level==0 -> Line
+    else -> Pigment.copy(alpha=0.22f+0.195f*(level-1))
+}
+
+/** White text only where the tint is dark enough to need it. */
+private fun heatInk(level:Int) = if(level>=3) androidx.compose.ui.graphics.Color.White else Ink
+
+/**
+ * The three levels of the same picture.
+ *
+ * A year grid answers "did I keep it up" but cannot show which day of this week was skipped, and a
+ * single day cannot show a habit. So the year is the overview, the month is the page you actually
+ * read, and the day answers the one question neither can: when during the day did I walk. All three
+ * share [YearHeatmap] banding, so a shade means the same thing wherever you are.
+ */
 @Composable
-private fun HeatmapCard(days:List<DailyFootprint>,onTrip:(Track)->Unit) {
+private fun FootprintCalendar(days:List<DailyFootprint>,todayKey:String,onTrip:(Track)->Unit) {
     val today=remember { java.time.LocalDate.now() }
     val byKey=remember(days) { days.associateBy { it.key } }
-    val grid=remember(days) { YearHeatmap.build(today,byKey.mapValues { it.value.meters }) }
-    Section("最近一年") {
-        val scroll=rememberScrollState()
-        LaunchedEffect(grid) { scroll.scrollTo(scroll.maxValue) }
+    val meters=remember(days) { byKey.mapValues { it.value.meters } }
+    var modeName by rememberSaveable { mutableStateOf(CalendarMode.MONTH.name) }
+    var monthKey by rememberSaveable { mutableStateOf(todayKey.take(7)) }
+    var dayKey by rememberSaveable { mutableStateOf(todayKey) }
+    val mode=runCatching { CalendarMode.valueOf(modeName) }.getOrDefault(CalendarMode.MONTH)
+    Section("足迹日历") {
+        Row(Modifier.fillMaxWidth().background(CanvasSoft,ChipShape).padding(3.dp)) {
+            CalendarMode.entries.forEach { entry ->
+                val selected=entry==mode
+                Surface(onClick={ modeName=entry.name },
+                    color=if(selected) Canvas else androidx.compose.ui.graphics.Color.Transparent,
+                    shape=ChipShape, shadowElevation=if(selected) 1.dp else 0.dp,
+                    modifier=Modifier.weight(1f)) {
+                    Text(calendarName(entry),color=if(selected) Ink else Muted,fontSize=CaptionSize,
+                        fontWeight=if(selected) FontWeight.SemiBold else FontWeight.Normal,
+                        textAlign=TextAlign.Center,modifier=Modifier.fillMaxWidth().padding(vertical=8.dp))
+                }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+        when(mode) {
+            CalendarMode.YEAR -> YearStrip(today,meters) { date ->
+                monthKey=date.toString().take(7); modeName=CalendarMode.MONTH.name }
+            CalendarMode.MONTH -> MonthPage(monthKey,today,meters,byKey,dayKey,
+                onShiftMonth={ monthKey=it }, onPickDay={ dayKey=it; modeName=CalendarMode.DAY.name })
+            CalendarMode.DAY -> DayPage(dayKey,byKey,today,todayKey,onTrip)
+        }
+    }
+}
+
+private fun calendarName(mode:CalendarMode)=when(mode) {
+    CalendarMode.DAY -> "日"; CalendarMode.MONTH -> "月"; CalendarMode.YEAR -> "年"
+}
+
+/** The rolling year, still the overview: tapping a cell opens that month. */
+@Composable
+private fun YearStrip(today:java.time.LocalDate,meters:Map<String,Double>,onPickMonth:(java.time.LocalDate)->Unit) {
+    val grid=remember(meters) { YearHeatmap.build(today,meters) }
+    val scroll=rememberScrollState()
+    LaunchedEffect(grid) { scroll.scrollTo(scroll.maxValue) }
+    Column {
         Row(Modifier.horizontalScroll(scroll)) {
             grid.forEach { week ->
                 Column(Modifier.padding(end=3.dp),horizontalAlignment=Alignment.CenterHorizontally) {
                     week.cells.forEach { cell ->
-                        val fill=when {
-                            cell.level<0 -> androidx.compose.ui.graphics.Color.Transparent
-                            cell.level==0 -> Line
-                            else -> Pigment.copy(alpha=0.22f+0.195f*(cell.level-1))
-                        }
-                        val known=byKey[cell.date.toString()]
                         Box(Modifier.size(13.dp)
-                            .background(fill,RoundedCornerShape(3.dp))
-                            .then(if(known!=null) Modifier.clickable { onTrip(known.focusTrack()) } else Modifier))
+                            .background(heatFill(cell.level),RoundedCornerShape(3.dp))
+                            .then(if(cell.level>=0) Modifier.clickable { onPickMonth(cell.date) } else Modifier))
                         Spacer(Modifier.height(3.dp))
                     }
                     Spacer(Modifier.height(4.dp))
@@ -256,16 +299,98 @@ private fun HeatmapCard(days:List<DailyFootprint>,onTrip:(Track)->Unit) {
                 }
             }
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(10.dp))
+        Text("一格是一天，点一格看那个月",color=Muted,fontSize=MicroSize)
+    }
+}
+
+/** A real calendar page: the day number plus its shade, so a skipped day is obvious. */
+@Composable
+private fun MonthPage(monthKey:String,today:java.time.LocalDate,meters:Map<String,Double>,
+    byKey:Map<String,DailyFootprint>,selectedKey:String,
+    onShiftMonth:(String)->Unit,onPickDay:(String)->Unit) {
+    val ym=runCatching { java.time.YearMonth.parse(monthKey) }
+        .getOrDefault(java.time.YearMonth.from(today))
+    val grid=remember(ym,meters) { YearHeatmap.monthGrid(ym.year,ym.monthValue,today,meters) }
+    Column {
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-            Text(if(days.isEmpty()) "还没有记录" else "颜色越深，那天走得越多",color=Muted,fontSize=MicroSize,
-                modifier=Modifier.weight(1f))
-            repeat(4) { step ->
-                Box(Modifier.size(11.dp).background(Pigment.copy(alpha=0.22f+0.195f*step),RoundedCornerShape(3.dp)))
-                if(step<3) Spacer(Modifier.width(3.dp))
+            TextButton(onClick={ onShiftMonth(ym.minusMonths(1).toString()) }) { Text("‹",fontSize=20.sp) }
+            Text(grid.label,color=Ink,fontSize=SectionSize,fontWeight=FontWeight.SemiBold,
+                textAlign=TextAlign.Center,modifier=Modifier.weight(1f))
+            TextButton(onClick={ onShiftMonth(ym.plusMonths(1).toString()) }) { Text("›",fontSize=20.sp) }
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(Modifier.fillMaxWidth()) {
+            listOf("一","二","三","四","五","六","日").forEach { label ->
+                Text(label,color=Muted,fontSize=MicroSize,textAlign=TextAlign.Center,modifier=Modifier.weight(1f))
             }
         }
+        Spacer(Modifier.height(6.dp))
+        grid.weeks.forEach { week ->
+            Row(Modifier.fillMaxWidth()) {
+                week.forEach { cell ->
+                    Box(Modifier.weight(1f).padding(2.dp)) {
+                        if(cell!=null) {
+                            val key=cell.date.toString()
+                            val hasData=byKey.containsKey(key)
+                            Box(Modifier.fillMaxWidth().aspectRatio(1f)
+                                .background(heatFill(cell.level),RoundedCornerShape(9.dp))
+                                .then(if(hasData) Modifier.clickable { onPickDay(key) } else Modifier),
+                                contentAlignment=Alignment.Center) {
+                                Text(cell.date.dayOfMonth.toString(),
+                                    color=if(hasData) heatInk(cell.level) else Faint,
+                                    fontSize=CaptionSize,
+                                    fontWeight=if(key==selectedKey) FontWeight.Bold else FontWeight.Normal)
+                            }
+                        } else Box(Modifier.fillMaxWidth().aspectRatio(1f))
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Text("颜色越深，那天走得越多",color=Muted,fontSize=MicroSize)
     }
+}
+
+/** One day: how far, and when during the day. */
+@Composable
+private fun DayPage(dayKey:String,byKey:Map<String,DailyFootprint>,today:java.time.LocalDate,
+    todayKey:String,onTrip:(Track)->Unit) {
+    val day=byKey[dayKey]
+    val hours=remember(dayKey) { YearHeatmap.hourStrip(day?.tracks.orEmpty()) }
+    val peak=hours.maxOrNull() ?: 0.0
+    Column {
+        Text(if(dayKey==todayKey) "今天" else dayKey.replace('-','/'),color=Muted,fontSize=CaptionSize)
+        Spacer(Modifier.height(8.dp))
+        Text(exploredDistance(day?.meters ?: 0.0),color=Pigment,fontSize=27.sp,
+            fontWeight=FontWeight.Bold,style=TabularFigures)
+        Spacer(Modifier.height(4.dp))
+        Text(if(day==null) "这一天没有记录" else "记下 ${day.points} 个点 · ${hourRange(hours)}",
+            color=Muted,fontSize=CaptionSize)
+        Spacer(Modifier.height(16.dp))
+        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(3.dp),
+            verticalAlignment=Alignment.Bottom) {
+            hours.forEachIndexed { hour, meters ->
+                val fraction=if(peak<=0.0) 0f else (meters/peak).coerceIn(0.0,1.0).toFloat()
+                Column(Modifier.weight(1f),horizontalAlignment=Alignment.CenterHorizontally) {
+                    Box(Modifier.fillMaxWidth().height(40.dp),contentAlignment=Alignment.BottomCenter) {
+                        Box(Modifier.fillMaxWidth().height((maxOf(fraction,0.04f)*40f).dp)
+                            .background(if(fraction>0f) Pigment else Line,RoundedCornerShape(2.dp)))
+                    }
+                    if(hour%6==0) Text(hour.toString(),color=Muted,fontSize=9.sp) else Text("",fontSize=9.sp)
+                }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        if(day!=null) SettingRow("在地图上查看这一天",onClick={ onTrip(day.focusTrack()) })
+    }
+}
+
+/** "9 点到 11 点" style summary of when the day's walking happened. */
+private fun hourRange(hours:List<Double>):String {
+    val active=hours.withIndex().filter { it.value>0.0 }.map { it.index }
+    if(active.isEmpty()) return "无活动时段"
+    return "${active.first()} 点到 ${active.last()+1} 点"
 }
 
 private val ExploredRoadColor=androidx.compose.ui.graphics.Color(ExploredRoadArgb)
