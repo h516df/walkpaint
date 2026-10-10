@@ -1,3 +1,18 @@
+# 当前分发：v0.26（DSH 分支，2026-10-10）
+
+> 本节由 DSH 追加，**取代**下方 v0.16 段落作为当前状态；v0.16 及更早内容保留为历史，不要据此判断现状。
+
+- **分支**：`fix/dsh-lasterror-recovery`，基线 v0.16（`b84f132`）。标签 `v0.17` … `v0.26` 逐版推送。工作副本在 `D:\Worktrees\WalkPaint\dsh-lasterror`，与 `D:\Projects\WalkPaint` 完全隔离，**主副本未被改动**。
+- **最新发布**：`v0.26`，`WalkPaint-v0.26-arm64-debug.apk` 70,354,212 字节，SHA256 `f93615b21ea69c9d4ec126baba67e46da8b8edc2fea971e7160721948be950b9`；服务器 digest、重新下载、本地构建三方一致。
+- **升级兼容**：`versionCode` 19…28 递增，`versionName` 0.17…0.26；签名 SHA-1 `fae3df35…` 与 v0.1 起所有版本相同，schema2 未动，可覆盖升级、不丢足迹。
+- **每版验收口径**：JVM 单测（v0.26 为 251 个全过）、Google API36 插桩回归 `V05_ISOLATED_DATABASE_PASS`、模拟器实拍、发布包指纹三方核对。逐版明细见 `CHANGELOG.md` 新增段。
+- **关键实现位置**：`Explorer`（点亮格子、长条合并、连续天数）、`Diagnosis`（结论 + 症状编号）、`MovementCue`（是否真在移动）、`YearHeatmap`（年 / 月 / 日与 24 小时条）、`UiTokens.kt` + `Theme.kt`（中性纸白与单一颜料色）、`AmapMapController`（手势期间不重建、点亮层、街道级定位）。
+- **等用户真机回答两件事**：① 高德底图上"点亮过的地面"淡色深浅是否合适；② 户外长时间锁屏记录是否连续。这两条决定下一步是调视觉，还是回去查记录链路。
+- **已放弃的做法，不要重走**：探索度百分比（分母无界，实测恒为 0%）、把道路包作为前置条件（v0.16 转向的原因）、毛玻璃 / 模糊层（可读性差且吃 GPU）。
+- **本地工具**：已装 Maestro CLI 于 `D:\Apps\Maestro\maestro\bin\maestro.bat`（2.11.0，含 `hierarchy` / `mcp`）。检索用工作区 `websearch.py`，不要用 DSH 内置 `web_search`（该 provider 早已禁用）。
+
+---
+
 # 当前分发：v0.16 私有预览已发布（2026-10-10）
 
 用户在本chat回答“好”，明确批准上传v0.16私人预览；按既有私有渠道先草稿上传3资产、服务器大小/digest验收，再发布prerelease并实际重新下载手机包验SHA通过。仓库private=true、draft=false、prerelease=true，标签固定b84f13200e7ca6f28fbefc062e70e515a22fc55c，不移动标签；生产代码与已验收7c3ce8a相同。旧v0.15保留。[发布](https://github.com/h516df/walkpaint/releases/tag/v0.16) / [手机APK](https://github.com/h516df/walkpaint/releases/download/v0.16/WalkPaint-v0.16-arm64-debug.apk)。
