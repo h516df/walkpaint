@@ -297,6 +297,8 @@ class RecordingService : Service(), LocationListener {
         }
         RecordingDiagnostics.event(this, "valid_gps", "VALID_GPS_RECEIVED")
         val inferredMovement = isConfidentMovement(reliableFix)
+        // Recorded so the diagnosis can tell a desk-bound phone from a broken recorder.
+        if (inferredMovement) RecordingDiagnostics.event(this, "moving", "CONFIDENT_MOVEMENT")
         if (reliableFix.accuracy <= 20f) {
             rawFixBeforeLast = lastRawFix
             lastRawFix = reliableFix

@@ -15,7 +15,10 @@ internal class DiagnosticBuffer(initial: Map<String, Any?> = emptyMap()) {
             "start" -> {
                 values["service_start_at"] = at; count("start_count")
                 values.putIfAbsent("staged_counts_since", at)
-                listOf("gps", "valid_gps", "saved", "filtered").forEach {
+                // "moving" counts fixes where the receiver looked like it was genuinely travelling.
+                // Without it a diagnosis cannot tell "nothing to record because the phone is on a
+                // desk" from "recording is broken while the person walks".
+                listOf("gps", "valid_gps", "saved", "filtered", "moving").forEach {
                     values["session_${it}_count"] = 0L
                 }
                 GpsFilterCategory.entries.forEach { values[it.sessionKey] = 0L }
@@ -30,6 +33,7 @@ internal class DiagnosticBuffer(initial: Map<String, Any?> = emptyMap()) {
             "exit" -> { values["process_exit_at"] = at; values["process_exit_reason"] = reason }
             "recovery" -> { values["recovery_at"] = at; values["recovery_reason"] = reason; count("recovery_count") }
             "saved" -> { values["saved_at"] = at; count("saved_count") }
+            "moving" -> { values["moving_at"] = at; count("moving_count") }
             "filtered" -> {
                 values["filtered_at"] = at; values["filter_reason"] = safeReason; count("filtered_count")
                 count(GpsFilterCategory.fromReason(safeReason).sessionKey)

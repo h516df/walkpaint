@@ -788,9 +788,33 @@ class MainActivity : ComponentActivity() {
             "本地足迹点：" + snapshot.realPointCount,
             "状态：" + trackingStatus.substringBefore("\n")
         )
-        return rows.joinToString("\n") + "\n\n" + RecordingDiagnostics.summary(this) +
-            "\n\n绘制来源：已保存GPS直接涂色，无需准备地图。连续轨迹 ${RecordedTrail.paths(snapshot.realTracks).count { it.size>=2 }} 段；累计记录 ${snapshot.totalMeters.toLong()} 米（重复出行累计，不是去重道路里程）。" +
-            "\n\n持续 GPS 已启用，不长期持有 CPU 唤醒锁；常规诊断每30秒批量保存，异常退出最多损失末尾30秒诊断（不影响 SQLite 足迹）。vivo 等厂商需允许后台运行；强制停止后须手动打开 App，不能保证永不断录。"
+        val facts = DiagnosisFacts(
+            enabled = AmbientTracking.enabled(this),
+            running = AmbientTracking.running,
+            fineLocation = AmbientTracking.hasFineLocation(this),
+            backgroundLocation = AmbientTracking.hasBackgroundLocation(this),
+            phoneLocationOn = gpsEnabled,
+            batteryWhitelisted = power.isIgnoringBatteryOptimizations(packageName),
+            callbackAgeMs = ((lastFix?.time ?: 0L).takeIf { it > 0L }
+                ?: (diagnostic["gps_callback_at"] as? Number)?.toLong()?.takeIf { it > 0L })
+                ?.let { (now - it).coerceAtLeast(0L) },
+            savedAgeMs = lastSaved?.let { (now - it).coerceAtLeast(0L) },
+            savedCount = (diagnostic["saved_count"] as? Number)?.toLong() ?: snapshot.realPointCount.toLong(),
+            movingThisSession = (diagnostic["session_moving_count"] as? Number)?.toLong() ?: 0L,
+            savedThisSession = (diagnostic["session_saved_count"] as? Number)?.toLong() ?: 0L,
+            filteredCount = (diagnostic["filtered_count"] as? Number)?.toLong() ?: 0L,
+            stationaryFiltered = (diagnostic["session_filter_stationary_count"] as? Number)?.toLong() ?: 0L,
+            jumpFiltered = (diagnostic["session_filter_jump_count"] as? Number)?.toLong() ?: 0L,
+            accuracyFiltered = (diagnostic["session_filter_accuracy_count"] as? Number)?.toLong() ?: 0L,
+            longestGapMs = (diagnostic["max_gap_ms"] as? Number)?.toLong() ?: 0L,
+            serviceStartCount = (diagnostic["start_count"] as? Number)?.toLong() ?: 0L,
+            databaseError = repository.lastError,
+            dozeIdle = power.isDeviceIdleMode
+        )
+        return Diagnosis.report(facts) + "\n\n—— 原始计数（给开发者看） ——\n" +
+            rows.joinToString("\n") + "\n\n" + RecordingDiagnostics.summary(this) +
+            "\n\n绘制来源：已保存的定位直接涂色。连续轨迹 ${RecordedTrail.paths(snapshot.realTracks).count { it.size>=2 }} 段；累计记录 ${snapshot.totalMeters.toLong()} 米（重复出行累计，不是去重道路里程）。" +
+            "\n\n持续定位已启用，不长期持有 CPU 唤醒锁；常规诊断每30秒批量保存，异常退出最多损失末尾30秒诊断（不影响 SQLite 足迹）。vivo 等厂商需允许后台运行；强制停止后须手动打开 App，不能保证永不断录。"
     }
 
     private fun openRecordingDiagnostics() {
