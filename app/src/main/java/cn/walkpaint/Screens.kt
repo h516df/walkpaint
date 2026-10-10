@@ -42,6 +42,12 @@ internal fun AppShell(
     feedbackContent: @Composable (onBack:()->Unit)->Unit,
     updatesContent: @Composable (onBack:()->Unit)->Unit, mapContent: @Composable () -> Unit
 ) {
+    // Progress belongs where the walking happens: you should be able to watch the number move
+    // without leaving the map and going back to the footprints page to check.
+    val explored=remember(state) {
+        Explorer.of(state,java.time.LocalDate.now().atStartOfDay(java.time.ZoneId.systemDefault())
+            .toInstant().toEpochMilli())
+    }
     Scaffold(containerColor=PageBackground, bottomBar={
         Surface(color=PageBackground.copy(alpha=0.98f)) {
             Row(Modifier.fillMaxWidth().navigationBarsPadding().height(58.dp)) {
@@ -62,7 +68,8 @@ internal fun AppShell(
     }) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when(selectedTab) {
-                0 -> MapPage(mapNotice,selectedDay,onShowAll,onLocate,{onTab(2)},mapContent)
+                0 -> MapPage(mapNotice,selectedDay,onShowAll,onLocate,{onTab(2)},
+                    explored.cellsVisited,explored.newToday,mapContent)
                 1 -> TripsPage(state,onTrip)
                 else -> ProfilePage(automatic,profileNotice,onResolveTracking,
                     onToggleTracking,onRevoke,onBackgroundSettings,onPowerSettings,onCopyDiagnostics,
@@ -75,7 +82,7 @@ internal fun AppShell(
 
 @Composable
 private fun MapPage(notice: String?,day: String?,onShowAll: ()->Unit,onLocate: ()->Unit,
-    onSettings: ()->Unit,mapContent: @Composable ()->Unit) {
+    onSettings: ()->Unit,exploredCells:Int,newToday:Int,mapContent: @Composable ()->Unit) {
     val uriHandler=LocalUriHandler.current
     Box(Modifier.fillMaxSize()) {
         mapContent()
@@ -86,6 +93,12 @@ private fun MapPage(notice: String?,day: String?,onShowAll: ()->Unit,onLocate: (
             if(day!=null) Surface(onClick=onShowAll,color=PageBackground.copy(alpha=0.96f),shape=RoundedCornerShape(8.dp)) {
                 Text("$day · 返回全部探索  ›",color=Accent,fontSize=12.sp,
                     modifier=Modifier.padding(horizontal=12.dp,vertical=10.dp))
+            }
+            // Only worth showing once something has actually been lit; "0 blocks" on day one is noise.
+            if(exploredCells>0) Surface(color=PigmentSoft,shape=ChipShape) {
+                Text(if(newToday>0) "已点亮 $exploredCells 块 · 今天 +$newToday" else "已点亮 $exploredCells 块",
+                    color=Pigment,fontSize=CaptionSize,fontWeight=FontWeight.Medium,
+                    modifier=Modifier.padding(horizontal=12.dp,vertical=8.dp))
             }
         }
         Surface(onClick=onLocate,shape=CircleShape,color=PageBackground.copy(alpha=0.96f),
