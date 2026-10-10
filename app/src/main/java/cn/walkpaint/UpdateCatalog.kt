@@ -7,6 +7,12 @@ internal sealed class UpdateCatalogResult {
     class Available(val candidate:UpdateCandidate):UpdateCatalogResult()
 }
 internal object UpdateCatalog {
+    fun manifestAsset(tag:String,assets:List<JSONObject>):JSONObject? {
+        updateRequire(tag.matches(Regex("v[0-9]+\\.[0-9]+")))
+        val matches=assets.filter { it.optString("name") in setOf("release-notes.json","WalkPaint-$tag-release-notes.json") }
+        updateRequire(matches.size<=1,"更新说明重复，请打开发布页核对版本")
+        return matches.singleOrNull()
+    }
     fun select(releases:List<PublishedUpdate>,installed:Int,abis:List<String>):UpdateCatalogResult {
         updateRequire(releases.isNotEmpty(),"发布资料尚未就绪，请打开发布页核对版本")
         updateRequire(releases.map { it.notes.code }.distinct().size==releases.size,"版本资料有冲突，请打开发布页核对版本")

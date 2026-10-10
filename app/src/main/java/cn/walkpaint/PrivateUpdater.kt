@@ -92,7 +92,7 @@ internal class PrivateUpdater(context:Context,private val changed:(PrivateUpdate
             // Old releases predate the manifest; absence is allowed, corruption is not hidden.
             val assets=r.getJSONArray("assets")
             val rows=(0 until assets.length()).map { assets.getJSONObject(it) }
-            val metadata=rows.singleOrNull { it.optString("name")=="release-notes.json" } ?: continue
+            val metadata=UpdateCatalog.manifestAsset(tag,rows) ?: continue
             val a=PrivateUpdatePolicy.asset(metadata);updateRequire(a.size<=65536)
             val bytes=http.asset(a.id,access) { http.readBounded(it,65536) }
             updateRequire(bytes.size.toLong()==a.size && digest(bytes)==a.digest)

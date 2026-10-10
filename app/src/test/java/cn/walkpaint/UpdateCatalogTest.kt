@@ -4,6 +4,20 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class UpdateCatalogTest {
+    @Test fun existingVersionPrefixedManifestIsRecognizedWithoutChangingPublishedAssets() {
+        val existing=JSONObject().put("name","WalkPaint-v0.13-release-notes.json")
+        assertSame(existing,UpdateCatalog.manifestAsset("v0.13",listOf(existing)))
+        val plain=JSONObject().put("name","release-notes.json")
+        assertSame(plain,UpdateCatalog.manifestAsset("v0.14",listOf(plain)))
+    }
+    @Test fun anotherVersionsNotesAndArbitraryJsonAreNotAccepted() {
+        assertNull(UpdateCatalog.manifestAsset("v0.14",listOf(JSONObject().put("name","WalkPaint-v0.13-release-notes.json"),
+            JSONObject().put("name","arbitrary.json"))))
+    }
+    @Test fun duplicateManifestsFailInsteadOfPickingOneAtRandom() {
+        assertThrows(UpdateFailure::class.java) { UpdateCatalog.manifestAsset("v0.14",listOf(JSONObject().put("name","release-notes.json"),
+            JSONObject().put("name","WalkPaint-v0.14-release-notes.json"))) }
+    }
     private fun notes(version:String,code:Int)=CurrentRelease(version,code,listOf("新增" to listOf("中文说明")))
     private fun apk(version:String,abi:String="universal")=JSONObject().put("id",1).put("name","WalkPaint-v$version-$abi-debug.apk")
         .put("size",100).put("state","uploaded").put("digest","sha256:"+"a".repeat(64))
