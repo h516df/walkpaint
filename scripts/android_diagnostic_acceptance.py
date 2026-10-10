@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 
 root = Path(__file__).resolve().parents[1]
+provided_apk = Path(sys.argv[1]).resolve() if len(sys.argv)>1 else root / 'app/build/outputs/apk/debug/app-debug.apk'
 sys.path.insert(0, str(root / 'scripts'))
 sys.argv = [__file__]
 __file__ = str(root / 'scripts/android_profile_acceptance.py')
@@ -22,7 +23,7 @@ def scroll():
     nodes = [n for n in ui().iter('node') if n.get('scrollable') == 'true']
     assert nodes, 'Expected a scrollable report'
     x1, y1, x2, y2 = map(int, re.findall(r'\d+', nodes[0].get('bounds')))
-    sh('input', 'swipe', str((x1+x2)//2), str(y2-45), str((x1+x2)//2), str(y1+45), '350')
+    sh('input', 'swipe', str((x1+x2)//2), str(y2-45), str((x1+x2)//2), str(max(y1+45,y2-650)), '600')
     time.sleep(.5)
 
 def ensure(text):
@@ -65,7 +66,7 @@ try:
             saved[name] = run('exec-out', 'run-as', 'cn.walkpaint', 'cat', 'shared_prefs/'+name+'.xml', binary=True)
         except RuntimeError:
             saved[name] = None
-    apk = root / 'app/build/outputs/apk/debug/app-debug.apk'
+    apk = provided_apk
     assert 'Success' in run('install', '-r', str(apk), timeout=150)
     checks['source_sha'] = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root).decode().strip()
     checks['apk_sha256'] = hashlib.sha256(apk.read_bytes()).hexdigest()
@@ -111,12 +112,15 @@ try:
     scroll(); shot('feedback-window')
     top(); tap('复制报告'); checks['feedback_copy_action'] = True
     time.sleep(10)
-    for _ in range(10):
+    for _ in range(6):
         scroll()
     shot('feedback-report-end')
     assert '自动信息仅含版本' in '\n'.join(labels())
     back()
     sh('wm','size','320x710'); sh('wm','density','160'); time.sleep(3)
+    # Viewport changes recreate the Activity. Re-enter through the actual tab.
+    sh('am','force-stop','cn.walkpaint'); launch()
+    tap('我的'); tap('更多设置'); ensure('问题反馈')
     ensure('预览反馈报告'); time.sleep(2); report_assertions(); shot('feedback-320dp')
     scroll(); shot('feedback-320dp-filters')
     top(); tap('复制报告'); time.sleep(10); back()

@@ -1,3 +1,13 @@
+# 当前本地候选 — v0.15 过滤诊断完成实际 UI 验收（2026-10-10）
+
+本节优先。独立分支agent/codex/diagnostic-acceptance，目录D:\Workspaces\Codex\2026-10-10\ji-x\work\worktrees\codex-diagnostic-v014\codex-diagnostic-acceptance；诊断基线ea691b0，业务b9e8a2b4fd28338bbc4101c6ff21719769098baa。
+
+**状态：180 JVM/7 guard/专用Google真实诊断、反馈复制、小屏及数据保留通过；v0.15/code17/原签名/schema2手机候选就绪，未发布/安装手机，不合并。**详见docs/evidence/V015_DIAGNOSTICS.md。五分类和窗口沿用上一诊断候选，不改变GPS、matcher或DB。两包dex/说明一致。5表trips3/points19/roads6/road_matches16/coverage1逐行保持；合成诊断偏好/视口恢复，AVD停止。
+
+真实vivo驾车/长期后台未验收，#6开放；可信速度桶及保存→匹配→绘制各阶段窗口仍在已有#10，不把此候选说成全部完成。v0.14私人下载继续为已发布保底；本地旧诊断曾沿用code16而未发布，现候选明确增为code17。只能同签名/schema2/code>=17修复包回退，不卸载清库。私人发布需本轮具体确认；源码草稿PR属于内部交付。
+
+---
+
 # 当前本地候选 — v0.14 GPS 过滤诊断增强（2026-10-10）
 
 本节优先于以下历史。唯一写手 `D:\Worktrees\WalkPaint\codex-diagnostic-v014` / `fix/v014-diagnostic-breakdown`，从此 worktree 当前 v0.14/code16 的 bcec979015593e67f8ae3567bcbce4bfec0f5f9b 实现，不使用旧 main、不修改其他目录/分支。用户真机反馈的1088有效GPS/63入库/1025过滤仅为输入线索；未收到对应行车分类数据，不能认定原因是停车或跳变。
