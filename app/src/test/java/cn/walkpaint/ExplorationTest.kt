@@ -62,4 +62,71 @@ class ExplorationTest {
         assertEquals(0, e.cellsVisited)
         assertEquals(0, e.newToday)
     }
+
+    // ---- lit cells merged into drawable strips ----
+    // Offsets sit in the middle of their cell, so floating point cannot move a point across a
+    // boundary and change the answer.
+
+    @Test fun adjacentCellsOnARowBecomeOneStrip() {
+        val rects = Explorer.rectangles(state(
+            point(31.002, 121.002, 0L),
+            point(31.002, 121.007, 1L),
+            point(31.002, 121.012, 2L),
+        ), limit = 500)
+        assertEquals(1, rects.size)
+        assertEquals(3, rects.single().cells)
+    }
+
+    @Test fun aGapSplitsTheRowIntoTwoStrips() {
+        val rects = Explorer.rectangles(state(
+            point(31.002, 121.002, 0L),
+            point(31.002, 121.012, 1L),
+        ), limit = 500)
+        assertEquals(2, rects.size)
+        assertEquals(listOf(1, 1), rects.map { it.cells })
+    }
+
+    @Test fun eachRowIsItsOwnStrip() {
+        val rects = Explorer.rectangles(state(
+            point(31.002, 121.002, 0L),
+            point(31.007, 121.002, 1L),
+        ), limit = 500)
+        assertEquals(2, rects.size)
+        assertEquals(2, rects.map { it.row }.distinct().size)
+    }
+
+    @Test fun overlappingVisitsDoNotMakeDuplicateStrips() {
+        val rects = Explorer.rectangles(state(
+            point(31.002, 121.002, 0L),
+            point(31.002, 121.007, 1L),
+            point(31.002, 121.002, 2L),
+        ), limit = 500)
+        assertEquals(1, rects.size)
+        assertEquals(2, rects.single().cells)
+    }
+
+    @Test fun theLimitKeepsTheLargestStripsSoTheCostStaysBounded() {
+        // One long strip and four single cells: with a limit of two, the long one must survive.
+        val points = mutableListOf(
+            point(31.002, 121.002, 0L),
+            point(31.002, 121.007, 1L),
+            point(31.002, 121.012, 2L),
+        )
+        listOf(121.1, 121.2, 121.3, 121.4).forEachIndexed { index, lon ->
+            points += point(31.502, lon, 10L + index)
+        }
+        val rects = Explorer.rectangles(state(*points.toTypedArray()), limit = 2)
+        assertEquals(2, rects.size)
+        assertEquals(3, rects.first().cells)
+    }
+
+    @Test fun aStripCoversTheWholeCellItRepresents() {
+        val rect = Explorer.rectangles(state(point(31.002, 121.002, 0L)), limit = 500).single()
+        assertEquals(Explorer.CELL_DEGREES, rect.latRange().endInclusive - rect.latRange().start, 1e-9)
+        assertEquals(Explorer.CELL_DEGREES, rect.lonRange().endInclusive - rect.lonRange().start, 1e-9)
+    }
+
+    @Test fun anEmptyTrackHasNoStrips() {
+        assertEquals(0, Explorer.rectangles(TrackState(emptyList()), limit = 500).size)
+    }
 }

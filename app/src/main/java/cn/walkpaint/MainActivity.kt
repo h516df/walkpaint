@@ -129,6 +129,8 @@ class MainActivity : ComponentActivity() {
     private var onlineMap by mutableStateOf(false)
     private var showOnlineConsent by mutableStateOf(false)
     private var paintedJson = RoadState().geoJson(true)
+    /** Lit ground as merged strips, so the map never has to carry one shape per cell. */
+    private var exploredJson = Explorer.stripsGeoJson(TrackState())
     private var roadJson = RoadState().geoJson(false)
     private var realGeoJson = geoJson(emptyList())
     private var demoGeoJson = geoJson(emptyList())
@@ -577,6 +579,9 @@ class MainActivity : ComponentActivity() {
                     val painted = geoJson(displayedTrack.realTracks)
                     val real = geoJson(displayedTrack.realTracks)
                     val demo = geoJson(next.tracks.filter { it.demo })
+                    // Explored ground is cumulative, so it reads the whole history rather than the
+                    // selected day: the point is to see everything you have ever lit up at once.
+                    val explored = Explorer.stripsGeoJson(next)
                     runOnUiThread {
                         if(selectedDay!=day) return@runOnUiThread
                         snapshot = next; lastRevision = revision
@@ -584,6 +589,7 @@ class MainActivity : ComponentActivity() {
                         mapTrackState=displayedTrack; mapRoadState=displayedRoad
                         realGeoJson = real; demoGeoJson = demo
                         roadState = road; roadJson = roadBase; paintedJson = painted
+                        exploredJson = explored
                         updateMapLayers()
                     }
                 } finally { refreshing.set(false) }
@@ -926,6 +932,11 @@ class MainActivity : ComponentActivity() {
                 style.addSource(GeoJsonSource("wp-user", userJson(userFix)))
                 style.addSource(GeoJsonSource("wp-roads", roadJson))
                 style.addSource(GeoJsonSource("wp-painted", paintedJson))
+                style.addSource(GeoJsonSource("wp-explored", exploredJson))
+                style.addLayer(org.maplibre.android.style.layers.FillLayer("wp-explored-fill","wp-explored")
+                    .withProperties(
+                        PropertyFactory.fillColor(ExploredRoadArgb),
+                        PropertyFactory.fillOpacity(Explorer.EXPLORED_FILL_ALPHA)))
                 style.addLayer(LineLayer("wp-road-base","wp-roads").withProperties(
                     PropertyFactory.lineColor(UnexploredRoadArgb),
                     PropertyFactory.lineWidth(3f),PropertyFactory.lineOpacity(0.85f)))
@@ -990,6 +1001,7 @@ class MainActivity : ComponentActivity() {
         val style = mapInstance?.style ?: return
         style.getSourceAs<GeoJsonSource>("wp-roads")?.setGeoJson(roadJson)
         style.getSourceAs<GeoJsonSource>("wp-painted")?.setGeoJson(paintedJson)
+        style.getSourceAs<GeoJsonSource>("wp-explored")?.setGeoJson(exploredJson)
     }
 
     private fun updateLocationLayer() {
