@@ -51,11 +51,6 @@ internal class AmapMapController(private val context: Context, private val onGes
     private var pendingState: TrackState? = null
     private var pendingRoads: RoadState? = null
     private val exploredShapes = mutableListOf<com.amap.api.maps.model.Polygon>()
-    /** All tracks painted into one image, so a second pass over a street repaints it. */
-    private val painter = TrailPainter()
-    private var paintOverlay: com.amap.api.maps.model.GroundOverlay? = null
-    private var lastState: TrackState? = null
-    private var lastRoads: RoadState? = null
 
     /** The explored ground wears the same colour as the trail, just faint enough to read through. */
     private fun exploredTint(color:Int)=Color.argb(
@@ -122,8 +117,6 @@ internal class AmapMapController(private val context: Context, private val onGes
     private fun renderNow(state: TrackState, roads: RoadState) {
         val a = map ?: return
         a.clear()
-        paintOverlay = null
-        lastState = state; lastRoads = roads
         paintedLines.clear()
         paintedSeeds.clear()
         exploredShapes.clear()
@@ -145,8 +138,7 @@ internal class AmapMapController(private val context: Context, private val onGes
                 .strokeWidth(0f))
         }
         val paths = RecordedTrail.paths(state.realTracks)
-        // The painted-image path did not prove it renders, so the trail is drawn as lines again.
-        // Losing the trail entirely would be worse than the braid this was meant to remove.
+        // Every casing first, then every core: a later line's casing must not cover an earlier core.
         paths.filter { it.size > 1 }.forEach { line ->
             a.addPolyline(PolylineOptions().addAll(line.map { toAmap(it.lat, it.lon) })
                 .width(9f * density).color(TrailOutlineArgb))
@@ -156,10 +148,11 @@ internal class AmapMapController(private val context: Context, private val onGes
                 val p=line.single()
                 paintedSeeds+=a.addCircle(CircleOptions().center(toAmap(p.lat,p.lon)).radius(2.5)
                     .fillColor(exploredColor).strokeColor(TrailOutlineArgb).strokeWidth(1.5f*density))
-            }            } else {
+            } else {
                 paintedLines+=a.addPolyline(PolylineOptions().addAll(line.map { toAmap(it.lat,it.lon) })
                     .width(6f * density).color(exploredColor))
-            }        }
+            }
+        }
         updateUser(latestPosition)
         if(initialFocusPending) {
             val current=latestPosition?.let { TrackPoint(it.latitude,it.longitude,it.time,it.accuracy) }
@@ -175,10 +168,6 @@ internal class AmapMapController(private val context: Context, private val onGes
         paintedLines.forEach { it.color=color }
         paintedSeeds.forEach { it.fillColor=color }
         exploredShapes.forEach { it.fillColor=exploredTint(color) }
-        // The colour is baked into the painted image, so it has to be drawn again.
-        painter.clear()
-        val s = lastState; val r = lastRoads
-        if (s != null && r != null) renderNow(s, r)
     }
 
     fun updateUser(location: Location?) {
@@ -246,5 +235,3 @@ internal class AmapMapController(private val context: Context, private val onGes
             .convert() ?: point
     }
 }
-
-
