@@ -169,8 +169,7 @@ private fun TripsPage(state:TrackState,onTrip:(Track)->Unit,place:String,share:P
     val today=DailyFootprints.key(System.currentTimeMillis())
     val todayDay=days.firstOrNull { it.key==today }
     val byMonth=remember(days) { days.groupBy { it.key.take(7) } }
-    val busiestDay=remember(days) { days.maxOfOrNull { it.meters } ?: 0.0 }
-    val exploration=remember(state) {
+   val exploration=remember(state) {
         Explorer.of(state,java.time.LocalDate.now().atStartOfDay(java.time.ZoneId.systemDefault())
             .toInstant().toEpochMilli())
     }
@@ -188,18 +187,13 @@ private fun TripsPage(state:TrackState,onTrip:(Track)->Unit,place:String,share:P
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
                     // Short labels: the three chips used to wrap onto a second line on a phone.
                     StatChip("今天 ${exploredDistance(todayDay?.meters ?: 0.0)}")
-                    StatChip("${FootprintInsights.exploredCells(state)} 个区域")
-                    StatChip("${days.size} 天")
+                   StatChip("${days.size} 天")
                 }
             }
         }
-        item { PlaceCard(place,share,exploration,streak) }
+        item { PlaceCard(place,share,streak) }
         item { FootprintCalendar(days,today,onTrip) }
-        if(days.isNotEmpty()) item {
-            Text("满格 = 你的最好一天 ${exploredDistance(busiestDay)}",
-                color=Muted,fontSize=MicroSize,modifier=Modifier.padding(top=6.dp))
-        }
-        if(days.isEmpty()) {
+       if(days.isEmpty()) {
             item { Text("开启自动记录后，走过的地方会在地图上留下颜色。",color=Muted,fontSize=BodySize) }
         } else {
             byMonth.forEach { (month,tracks) ->
@@ -207,7 +201,7 @@ private fun TripsPage(state:TrackState,onTrip:(Track)->Unit,place:String,share:P
                     Text(monthLabel(month),color=Ink,fontSize=SectionSize,fontWeight=FontWeight.SemiBold,
                         modifier=Modifier.padding(top=6.dp))
                 }
-                items(tracks,key={it.key}) { day -> DayRow(day,today,busiestDay,onTrip) }
+                items(tracks,key={it.key}) { day -> DayRow(day,today,onTrip) }
             }
         }
     }
@@ -225,8 +219,7 @@ private fun monthLabel(month:String):String = "${month.take(4)} 年 ${month.subs
  * percentage was dropped rather than shipped.
  */
 @Composable
-private fun PlaceCard(place:String,share:PlaceShare,exploration:Exploration,streak:Int) {
-    val lit by animateIntAsState(targetValue=exploration.newToday,label="newCells")
+private fun PlaceCard(place:String,share:PlaceShare,streak:Int) {
     Section("探索") {
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.Bottom) {
             Column(Modifier.weight(1f)) {
@@ -243,10 +236,6 @@ private fun PlaceCard(place:String,share:PlaceShare,exploration:Exploration,stre
                 }
             }
             Column(horizontalAlignment=Alignment.End) {
-                if(exploration.newToday>0) Surface(color=PigmentSoft,shape=ChipShape) {
-                    Text("今天新点亮 $lit 块",color=Pigment,fontSize=CaptionSize,fontWeight=FontWeight.Medium,
-                        modifier=Modifier.padding(horizontal=12.dp,vertical=8.dp))
-                }
                 // A run of one is not a run; today's chip already covers that case.
                 if(streak>=2) {
                     Spacer(Modifier.height(6.dp))
@@ -275,21 +264,16 @@ private fun StatChip(text:String) {
     }
 }
 
-/** The bar carries the information: how the day compares with this person's busiest day. */
+/** One line per day. The bar that used to sit here compared every day with the single best day,
+ * so most rows stayed near empty forever, and it repeated a number printed right beside it. */
 @Composable
-private fun DayRow(day:DailyFootprint,today:String,busiest:Double,onTrip:(Track)->Unit) {
-    val fraction=if(busiest<=0.0) 0f else (day.meters/busiest).coerceIn(0.0,1.0).toFloat()
-    Column(Modifier.fillMaxWidth().clickable { onTrip(day.focusTrack()) }.padding(vertical=12.dp)) {
-        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-            Text(if(day.key==today) "今天" else day.key.replace('-','/'),color=Ink,
-                fontSize=BodySize,fontWeight=FontWeight.Medium,modifier=Modifier.weight(1f))
-            Text(exploredDistance(day.meters),color=Ink,fontSize=BodySize,style=TabularFigures)
-            Text("›",color=Faint,fontSize=18.sp,modifier=Modifier.padding(start=8.dp))
-        }
-        Spacer(Modifier.height(8.dp))
-        Box(Modifier.fillMaxWidth().height(5.dp).background(Line,CircleShape)) {
-            if(fraction>0f) Box(Modifier.fillMaxWidth(fraction).height(5.dp).background(Pigment,CircleShape))
-        }
+private fun DayRow(day:DailyFootprint,today:String,onTrip:(Track)->Unit) {
+    Row(Modifier.fillMaxWidth().clickable { onTrip(day.focusTrack()) }.padding(vertical=14.dp),
+        verticalAlignment=Alignment.CenterVertically) {
+        Text(if(day.key==today) "今天" else day.key.replace('-','/'),color=Ink,
+            fontSize=BodySize,fontWeight=FontWeight.Medium,modifier=Modifier.weight(1f))
+        Text(exploredDistance(day.meters),color=Ink,fontSize=BodySize,style=TabularFigures)
+        Text("›",color=Faint,fontSize=18.sp,modifier=Modifier.padding(start=8.dp))
     }
 }
 
@@ -561,3 +545,5 @@ private fun ProfilePage(automatic:Boolean,notice:String?,onResolve:()->Unit,
         confirmButton={TextButton(onClick={revokeConfirm=false;onRevoke()}) {Text("撤回授权")}},
         dismissButton={TextButton(onClick={revokeConfirm=false}) {Text("取消")}})
 }
+
+
