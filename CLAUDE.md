@@ -1,3 +1,12 @@
+# 当前接手规则（v0.32 迷雾候选）
+
+- 最新事实看 HANDOFF 首节和 docs/evidence/V032_FOG.md，优先于下方历史版本。基线v0.31，单写手agent/codex/fog-of-war；不得改DSH/canonical工作区或合并旧PR。
+- 本轮显示层已替换为共享FogOverlay，旧TrailPaint格子实现已不在生产调用链。揭雾半径45米/软边18米仅为视觉，不宣称实际走遍面积。沿RecordedTrail保留断档/分段；不改GPS过滤、DB、账号或网络目的地。
+- 285JVM/7守卫/native像素/Google只读副本离线实际渲染、手势、320dp及原表保持通过。OpenFreeMap联网授权被auto-review拦截并待用户明确答复；未执行、不绕过。高德ARM/vivo/户外后台未验收；不得将离线人工路线截图写成真实联网或行走证据。
+- 未发布/合并。保持原签名/schema2/code34，回退仅同签名code>=34兼容覆盖。仅专用Google AVD emulator-5556；禁止MuMu和手机测试。原有更新机制继承；正式发布按android-update-kit标准资产同时兼容旧客户端debug名称，不单因视觉改版更换授权体系。
+
+---
+
 # 项目规则
 
 - v0.16已获本chat本次明确发布同意并私有分发；标签固定b84f132，3服务器资产/实际手机包下载SHA通过。以HANDOFF首节和docs/evidence/v016/publication.json为准，历史待发布仅候选时点，不重复请求已有授权。code18/schema2/原签名，PR #23保持草稿，手机安装/新ARM高德及vivo户外长期后台未测。

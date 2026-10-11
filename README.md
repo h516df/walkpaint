@@ -1,3 +1,5 @@
+> 当前接手：v0.32 迷雾首版**本地候选**，基于已发布v0.31；最新状态看 [HANDOFF](HANDOFF.md) 与 [实际验收](docs/evidence/V032_FOG.md)。MapLibre离线真实渲染与数据保持通过；联网授权、高德ARM/vivo未验收，尚未发布。下面历史版本内容不代表最新发布状态。
+
 # 当前版本：v0.16 高德联网直接轨迹涂色
 
 无需准备地图；已保存GPS直接涂色，步行、骑行和正常驾车共用记录。186 JVM/7 guard及Google真实直接轨迹、历史、换色、联网备用底图、重开、320dp和旧数据保留通过；code18/schema2/原签名手机候选已生成。[证据与手机验收限制](docs/evidence/V016_DIRECT_TRAILS.md)。**私有预览已发布，手机是否安装未核实，新ARM高德/真实驾车和长期后台仍未验收。** [发布页](https://github.com/h516df/walkpaint/releases/tag/v0.16) · [手机APK（约70MB）](https://github.com/h516df/walkpaint/releases/download/v0.16/WalkPaint-v0.16-arm64-debug.apk)。服务器与实际下载SHA一致，覆盖安装保留旧数据；已有版本从“我的→更多设置→检查更新”进入。旧v0.15下载保留。
