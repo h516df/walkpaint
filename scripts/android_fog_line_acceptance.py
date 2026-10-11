@@ -553,7 +553,8 @@ try:
     shot('map-tab-return')
 
     # The selected day draws that day's route; it is the only line left, so its shape matters.
-    tap('足迹', wait=1.5)
+    # The tab needs a moment to settle before its screenshot, or the picture is still the map.
+    tap('足迹', wait=3.0)
     shot('trips')
     day_row = day_entry()
     if day_row is None:
