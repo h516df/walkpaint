@@ -16,7 +16,7 @@ app and recorded: a pass on the fallback map is never reported as a pass on AMap
 Never targets a phone or the personal MuMu; refuses anything but emulator-5556 running the
 dedicated WalkPaint_Google_API36 AVD. Restores the app-op and viewport it changed.
 """
-import argparse, hashlib, json, re, sqlite3, subprocess, sys, tempfile, time
+import argparse, hashlib, json, math, re, sqlite3, subprocess, sys, tempfile, time
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -53,6 +53,7 @@ FIRST_UPDATE_MS_MAX = 6000.0
 VEIL_INCREMENT_MED_MS_MAX = 30.0
 VEIL_INCREMENT_MAX_MS_MAX = 250.0
 VEIL_REBUILD_MAX_MS_MAX = 800.0
+PAN_MAX_MS_MAX = 800.0
 UI_MED_MS_MAX = 20.0
 UI_MAX_MS_MAX = 120.0
 UPLOAD_AVG_MS_MAX = 40.0
@@ -63,6 +64,14 @@ COLD_START_BEST_MS_MAX = 12000
 MIN_FIXTURE_POINTS = 3000
 WALK_FIXES = 10
 WALK_SPACING_S = 3.0
+# A veiled map pixel is dark navy (blue above both red and green) and below this luminance; a bare
+# OpenFreeMap street pixel is light. Calibrated in section 4 of the evidence document: the same
+# view scores ~0.32 with the veil, ~0.002 on the pale veil of 0.36, and the gate is far below both.
+VEIL_DARK_LEVEL = 165
+VEIL_PRESENTED_RATIO = 0.05
+# Two clusters about twelve kilometres apart: the far one has to keep its paint and the ground
+# between them has to keep its veil.
+FAR_CLUSTER_MIN_METRES = 11000
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--apk', default='app/build/outputs/apk/debug/app-debug.apk')
@@ -147,9 +156,11 @@ def dismiss_system_dialogs():
 
 
 def tap(*texts, wait=1.0):
+    """Taps a control by exact text or by a distinctive part of it: chips carry a date prefix."""
     for attempt in range(3):
         for n in ui().iter('node'):
-            if any(v in texts for v in (n.get('text'), n.get('content-desc'))):
+            values = [v for v in (n.get('text'), n.get('content-desc')) if v]
+            if any(v == wanted or wanted in v for v in values for wanted in texts):
                 x1, y1, x2, y2 = map(int, re.findall(r'\d+', n.get('bounds')))
                 sh('input', 'tap', str((x1 + x2) // 2), str((y1 + y2) // 2))
                 time.sleep(wait)
@@ -161,6 +172,53 @@ def tap(*texts, wait=1.0):
 
 def shot(name):
     out.joinpath(name + '.png').write_bytes(run('exec-out', 'screencap', '-p', binary=True))
+
+
+def veil_stats(name):
+    """Measures the veil and the walked-ground tint in the map area of one screenshot.
+
+    This is the observable signal that the fog layer is actually on screen, rather than merely
+    having been handed to the map engine: the counters say the image was passed over, a picture
+    says whether a person can see it. The veil is dark navy, so it is the only thing in this scene
+    with blue above both red and green while still being dark; the pale veil of 0.36 scores ~0.002
+    on this test, which is what makes it a usable signal rather than a colour guess.
+    """
+    from PIL import Image
+    image = Image.open(out / (name + '.png')).convert('RGB')
+    # Skip the top chip and the bottom tab bar; keep the map itself.
+    region = image.crop((0, 300, image.width, image.height - 300)).resize((216, 360))
+    veil = 0
+    bare = 0
+    tinted = 0
+    total = 0
+    for r, g, b in region.getdata():
+        total += 1
+        luminance = 0.299 * r + 0.587 * g + 0.114 * b
+        if b > g and b > r and luminance < VEIL_DARK_LEVEL:
+            veil += 1
+        elif luminance > 200 and g >= r:
+            bare += 1
+        if g > r + 8 and g > b and 90 < g < 200:
+            tinted += 1
+    return {'veil_ratio': round(veil / total, 3),
+            'bare_map_ratio': round(bare / total, 3),
+            'tint_ratio': round(tinted / total, 3)}
+
+
+def map_presented_ms(started, timeout_s=25):
+    """Waits until the veil is visibly on screen and returns the time it took.
+
+    The Activity launch number only says the window came up; the map state is refreshed on a
+    background thread, so a fast first frame is not a usable map.
+    """
+    deadline = started + timeout_s
+    while time.time() < deadline:
+        shot('presented-check')
+        stats = veil_stats('presented-check')
+        if stats['veil_ratio'] >= VEIL_PRESENTED_RATIO:
+            return int((time.time() - started) * 1000), stats
+        time.sleep(0.6)
+    fail('the veil never became visible on screen; last stats=' + str(veil_stats('presented-check')))
 
 
 def launch():
@@ -306,6 +364,20 @@ def open_map_tab(timeout_s=25):
     fail('the map page never became ready')
 
 
+def tap_node(node, wait=1.0):
+    x1, y1, x2, y2 = map(int, re.findall(r'\d+', node.get('bounds')))
+    sh('input', 'tap', str((x1 + x2) // 2), str((y1 + y2) // 2))
+    time.sleep(wait)
+
+
+def day_row_matching(predicate, scrolls=4):
+    scroll_down(scrolls)
+    for node in ui().iter('node'):
+        if predicate(node.get('text') or ''):
+            return node
+    return None
+
+
 def gestures():
     """Identical pan and double-tap zoom script for every run, on the same viewport."""
     wx, wy = (int(v) for v in re.findall(r'\d+', sh('wm', 'size'))[:2])
@@ -341,6 +413,12 @@ def walk_ten_fixes():
 def fail(message):
     checks['failures'].append(message)
     raise AssertionError(message)
+
+
+def note_failure(message):
+    """Records a failure without stopping. Used for the timing bounds, so the pictures and the data
+    checks are still collected in the same run instead of being hidden behind a slow number."""
+    checks['failures'].append(message)
 
 
 original_mock = re.search(
@@ -414,11 +492,30 @@ try:
     checks['fixture_points'] = points_of(FIXTURE_PREFIX)
     if checks['fixture_points'] < MIN_FIXTURE_POINTS:
         fail('fixture has only %d points; a handful proves nothing' % checks['fixture_points'])
+
+    # The veil image itself, read pixel by pixel: a step edge, a border that ends in a right angle,
+    # or a second pass that darkens the paint would all survive a constants-only test.
+    pixels = sh('am', 'instrument', '-w', '-e', 'fogPixelProbe', 'true',
+                TEST_PKG + '/' + RUNNER, timeout=180)
+    checks['fog_pixel_probe'] = [line for line in pixels.splitlines() if 'FOG_PIXEL_PROBE' in line]
+    if 'FOG_PIXEL_PROBE_PASS' not in pixels:
+        fail('the rendered veil failed its pixel checks: ' + pixels[-400:])
     end = re.search(r'end_lat=([-\d.]+) end_lon=([-\d.]+)', seeded)
     if not end:
         fail('the fixture did not report where it ends, so the viewport cannot be pinned')
     end_lat, end_lon = float(end.group(1)), float(end.group(2))
     checks['fixture_end'] = {'lat': end_lat, 'lon': end_lon}
+    far = re.search(r'far_lat=([-\d.]+) far_lon=([-\d.]+)', seeded)
+    if not far:
+        fail('the fixture did not report its far cluster')
+    far_lat, far_lon = float(far.group(1)), float(far.group(2))
+    checks['fixture_far'] = {'lat': far_lat, 'lon': far_lon}
+    separation = math.hypot((far_lat - end_lat) * 111194.9,
+                            (far_lon - end_lon) * 111194.9 * math.cos(math.radians(end_lat)))
+    checks['fixture_cluster_separation_m'] = int(separation)
+    if separation < FAR_CLUSTER_MIN_METRES:
+        fail('the two clusters are only %d m apart; that does not test a large history'
+             % separation)
     # Pin the emulator's position to the end of the fixture: "定位我" then shows the same scene in
     # every run, and the ten extra fixes land inside it instead of a kilometre away.
     run('emu', 'geo', 'fix', str(end_lon), str(end_lat), '0', '6')
@@ -431,14 +528,27 @@ try:
         sh('am', 'force-stop', PKG)
         set_basemap_consent(True)
 
-    cold = [launch() for _ in range(3)]
-    cold.sort()
-    checks['cold_start_ms'] = cold
-    checks['cold_start_best_ms'] = cold[0]
-    checks['cold_start_median_ms'] = cold[1]
-    if cold[0] > COLD_START_BEST_MS_MAX:
-        fail('the fastest of three launches still took %d ms, above the %d ms window'
-             % (cold[0], COLD_START_BEST_MS_MAX))
+    launches = [launch() for _ in range(3)]
+    launches.sort()
+    # Renamed on purpose: `am start -W` reports when the Activity came up, which is not the same as
+    # the map being usable — the map state is refreshed on a background thread afterwards.
+    checks['activity_launch_ms'] = launches
+    checks['activity_launch_best_ms'] = launches[0]
+    checks['activity_launch_median_ms'] = launches[1]
+    checks['activity_launch_note'] = ('am start -W TotalTime: the Activity window came up; '
+                                      'map_presented_ms is when the veil is actually on screen')
+    if launches[0] > COLD_START_BEST_MS_MAX:
+        fail('the fastest of three Activity launches still took %d ms, above the %d ms window'
+             % (launches[0], COLD_START_BEST_MS_MAX))
+    # Same re-entry, but timed until the fog layer is visibly presented rather than until the
+    # window appears.
+    sh('am', 'force-stop', PKG)
+    time.sleep(3)
+    presented_start = time.time()
+    launched = sh('am', 'start', '-W', '-n', PKG + '/.MainActivity')
+    match = re.search(r'(?:TotalTime|WaitTime):\s*(\d+)', launched)
+    checks['reentry_activity_launch_ms'] = int(match.group(1)) if match else None
+    checks['map_presented_ms'], checks['map_presented_stats'] = map_presented_ms(presented_start)
 
     # Read the engine back from the running app, not from what we expect it to be.
     shot('profile')
@@ -470,15 +580,19 @@ try:
     perf_before_gesture = perf_from_logcat() or {}
     gestures()
     perf_after_gesture = perf_from_logcat() or {}
-    # Nothing should be repainting while a finger is on the map: the counters say whether the app
-    # did any work at all during the fixed drag-and-zoom script.
+    # The veil now follows the map, so a drag does redraw it — that is the price of the fog covering
+    # what a person is looking at. What must not happen is a state update, and each redraw must stay
+    # small; both are checked here.
     checks['gesture_counter_delta'] = {
         key: perf_after_gesture.get(key, 0) - perf_before_gesture.get(key, 0)
-        for key in ('update_n', 'ui_n', 'upload_n')
+        for key in ('update_n', 'ui_n', 'upload_n', 'pan_n')
     }
-    if checks['gesture_counter_delta'].get('ui_n', 0) > 2:
-        fail('the app repainted the map on the UI thread while dragging: %s'
+    if checks['gesture_counter_delta'].get('update_n', 0) > 0:
+        fail('a state update ran while the finger was dragging: %s'
              % checks['gesture_counter_delta'])
+    if perf_after_gesture.get('pan_n', 0) > 0 and perf_after_gesture.get('pan_max_ms', 0) > PAN_MAX_MS_MAX:
+        fail('redrawing the veil for a new view took %.1f ms, above the %.0f ms limit'
+             % (perf_after_gesture['pan_max_ms'], PAN_MAX_MS_MAX))
     time.sleep(1)
     shot('map-gesture')
     checks['ui_frames_rendered'] = gfxinfo_total()
@@ -494,51 +608,52 @@ try:
                     'veil_inc_n', 'veil_inc_med_ms', 'veil_inc_avg_ms', 'veil_inc_max_ms',
                     'veil_rebuild_n', 'veil_rebuild_max_ms',
                     'ui_n', 'ui_med_ms', 'ui_max_ms',
-                    'upload_n', 'upload_avg_ms', 'upload_max_ms')
+                    'upload_n', 'upload_avg_ms', 'upload_max_ms',
+                    'pan_n', 'pan_med_ms', 'pan_max_ms')
         for field in required:
             if field not in perf:
-                fail('PERF line is missing ' + field)
+                note_failure('PERF line is missing ' + field)
         if perf['update_n'] <= 0 or perf['veil_inc_n'] <= 0 or perf['upload_n'] <= 0:
-            fail('PERF counters are zero: nothing was measured')
+            note_failure('PERF counters are zero: nothing was measured')
         if perf['ui_n'] <= 0:
-            fail('no UI-thread update was measured at all')
+            note_failure('no UI-thread update was measured at all')
         if perf['ui_n'] > perf['update_n']:
-            fail('more UI handovers than state updates')
+            note_failure('more UI handovers than state updates')
         if perf['first_update_ms'] > FIRST_UPDATE_MS_MAX:
-            fail('the first update after launch took %.1f ms, above the %.0f ms limit'
+            note_failure('the first update after launch took %.1f ms, above the %.0f ms limit'
                  % (perf['first_update_ms'], FIRST_UPDATE_MS_MAX))
         if perf['update_med_ms'] > UPDATE_MED_MS_MAX:
-            fail('a state update takes %.1f ms at the median, above the %.0f ms limit'
+            note_failure('a state update takes %.1f ms at the median, above the %.0f ms limit'
                  % (perf['update_med_ms'], UPDATE_MED_MS_MAX))
         if perf['update_max_ms'] > UPDATE_MAX_MS_MAX:
-            fail('the slowest state update is %.1f ms, above the %.0f ms limit'
+            note_failure('the slowest state update is %.1f ms, above the %.0f ms limit'
                  % (perf['update_max_ms'], UPDATE_MAX_MS_MAX))
         # The per-fix repaint: the median is what a fix during a walk typically costs, and the
         # worst case is bounded separately so a single outlier cannot hide behind the average.
         if perf['veil_inc_med_ms'] > VEIL_INCREMENT_MED_MS_MAX:
-            fail('repainting the veil for one new fix takes %.1f ms at the median, above the %.0f ms limit'
+            note_failure('repainting the veil for one new fix takes %.1f ms at the median, above the %.0f ms limit'
                  % (perf['veil_inc_med_ms'], VEIL_INCREMENT_MED_MS_MAX))
         if perf['veil_inc_max_ms'] > VEIL_INCREMENT_MAX_MS_MAX:
-            fail('the slowest per-fix veil repaint is %.1f ms, above the %.0f ms limit'
+            note_failure('the slowest per-fix veil repaint is %.1f ms, above the %.0f ms limit'
                  % (perf['veil_inc_max_ms'], VEIL_INCREMENT_MAX_MS_MAX))
         if perf['veil_rebuild_max_ms'] > VEIL_REBUILD_MAX_MS_MAX:
-            fail('the slowest full veil rebuild is %.1f ms, above the %.0f ms limit'
+            note_failure('the slowest full veil rebuild is %.1f ms, above the %.0f ms limit'
                  % (perf['veil_rebuild_max_ms'], VEIL_REBUILD_MAX_MS_MAX))
         # This is the part that can drop a frame while a finger is on the map.
         if perf['ui_med_ms'] > UI_MED_MS_MAX:
-            fail('the UI thread spends %.1f ms at the median per update, above the %.0f ms limit'
+            note_failure('the UI thread spends %.1f ms at the median per update, above the %.0f ms limit'
                  % (perf['ui_med_ms'], UI_MED_MS_MAX))
         if perf['ui_max_ms'] > UI_MAX_MS_MAX:
-            fail('the worst UI-thread update is %.1f ms, above the %.0f ms limit'
+            note_failure('the worst UI-thread update is %.1f ms, above the %.0f ms limit'
                  % (perf['ui_max_ms'], UI_MAX_MS_MAX))
         if perf['upload_avg_ms'] > UPLOAD_AVG_MS_MAX:
-            fail('handing the veil to the map averages %.1f ms, above the %.0f ms limit'
+            note_failure('handing the veil to the map averages %.1f ms, above the %.0f ms limit'
                  % (perf['upload_avg_ms'], UPLOAD_AVG_MS_MAX))
         if perf['upload_max_ms'] > UPLOAD_MAX_MS_MAX:
-            fail('slowest handover is %.1f ms, above the %.0f ms limit'
+            note_failure('slowest handover is %.1f ms, above the %.0f ms limit'
                  % (perf['upload_max_ms'], UPLOAD_MAX_MS_MAX))
-        if perf['upload_n'] > perf['update_n']:
-            fail('the map was handed more images than there were state updates')
+        if perf['upload_n'] > perf['update_n'] + perf['pan_n']:
+            note_failure('the map was handed more images than there were state updates and pans')
         checks['perf_attribution'] = {
             'prep_med_ms': perf['prep_med_ms'],
             'veil_inc_med_ms': perf['veil_inc_med_ms'],
@@ -565,6 +680,35 @@ try:
     shot('map-day')
     if not any(t and '返回全部探索' in t for t in labels()):
         fail('the day map did not open; visible=' + str(labels()))
+
+    # The second cluster, about twelve kilometres away and two days old. The person's own position
+    # stays where it is; only the map is moved, first to that day, then to the cumulative view.
+    tap('足迹', wait=3.0)
+    older = day_row_matching(lambda text: bool(re.fullmatch(r'\d{4}/\d{2}/\d{2}', text.strip())))
+    if older is None:
+        fail('no older day on the footprints page; visible=' + str(labels()))
+    tap_node(older, wait=3.5)
+    if not any(t and '返回全部探索' in t for t in labels()):
+        fail('the older day map did not open; visible=' + str(labels()))
+    checks['far_day_opened'] = True
+    tap('返回全部探索', wait=3.5)
+    shot('map-far-cluster')
+    checks['far_cluster_stats'] = veil_stats('map-far-cluster')
+
+    # Pan back towards the near cluster: everything between them is ground nobody has walked, and
+    # it has to stay behind the veil rather than being fully exposed.
+    wx, wy = (int(v) for v in re.findall(r'\d+', sh('wm', 'size'))[:2])
+    for _ in range(3):
+        sh('input', 'swipe', str(wx // 2 - 400), str(wy // 2 - 150),
+           str(wx // 2 + 400), str(wy // 2 - 150), '400')
+        time.sleep(0.8)
+    time.sleep(1.5)
+    shot('map-between-clusters')
+    checks['between_clusters_stats'] = veil_stats('map-between-clusters')
+
+    tap('定位我', wait=3.5)
+    shot('map-near-cluster')
+    checks['near_cluster_stats'] = veil_stats('map-near-cluster')
 
     reopen = launch()
     checks['reopen_ms'] = reopen

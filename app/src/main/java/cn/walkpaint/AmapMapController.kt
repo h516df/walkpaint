@@ -28,7 +28,8 @@ import com.amap.api.maps.model.PolylineOptions
  * Do not call create() until the user has explicitly accepted the AMap SDK privacy notice.
  */
 internal class AmapMapController(private val context: Context, private val onGesture:()->Unit,
-                                 private val onReady:()->Unit) {
+                                 private val onReady:()->Unit, private val onCamera:()->Unit,
+                                 private val onCameraSettled:()->Unit) {
     private var currentView: MapView? = null
     private var map: AMap? = null
     private var currentMarker: Marker? = null
@@ -102,6 +103,11 @@ internal class AmapMapController(private val context: Context, private val onGes
             }
         }
         map?.setOnMapLoadedListener { onReady() }
+        // The veil follows the map: a pan or a zoom asks for a redraw for the new view.
+        map?.setOnCameraChangeListener(object : AMap.OnCameraChangeListener {
+            override fun onCameraChange(position: CameraPosition?) { onCamera() }
+            override fun onCameraChangeFinish(position: CameraPosition?) { onCameraSettled() }
+        })
         map?.uiSettings?.isTiltGesturesEnabled = false
         latestPosition = location
         initialFocusPending = true
@@ -245,6 +251,12 @@ internal class AmapMapController(private val context: Context, private val onGes
 
     fun view(): MapView? = currentView
 
+    /** What the AMap view is showing, so the veil can follow it. */
+    fun viewport(): ViewBounds? {
+        val bounds = map?.projection?.visibleRegion?.latLngBounds ?: return null
+        return ViewBounds(bounds.southwest.latitude, bounds.southwest.longitude,
+            bounds.northeast.latitude, bounds.northeast.longitude)
+    }
     fun release(view: MapView) {
         if (view !== currentView) return
         retainedCamera=map?.cameraPosition

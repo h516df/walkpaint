@@ -76,4 +76,32 @@ class TrailPaintTest {
         assertTrue(frame.contains(frame.latMax, frame.lonMax))
         assertTrue(!frame.contains(north(frame.latMax, 500.0), frame.lonMax))
     }
+
+    @Test fun theFrameCoversWhatTheMapIsShowing() {
+        val view = ViewBounds(31.0, 121.0, 31.01, 121.02)
+        val frame = TrailPaint.frameFor(view, listOf(point(31.0, 121.0)))!!
+        assertTrue(frame.contains(view.latMin, view.lonMin))
+        assertTrue(frame.contains(view.latMax, view.lonMax))
+        // With room to spare, so a pan does not outrun the veil immediately.
+        assertTrue("frame is only ${frame.latSpan} against a view of ${view.latSpan}",
+            frame.latSpan > view.latSpan)
+    }
+
+    @Test fun groundTwelveKilometresAwayIsInsideAFrameCentredOnThatGround() {
+        // The regression this exists for: with the frame pinned to where the person is, old ground
+        // far away fell outside the image and simply was not painted at all.
+        val near = point(48.8566, 2.3522)
+        val far = point(48.8566, 2.5162)
+        val separation = Geo.meters(near, far)
+        assertTrue("clusters are only $separation m apart", separation > 11_000.0)
+        val atFar = ViewBounds(48.85, 2.50, 48.86, 2.53)
+        val frame = TrailPaint.frameFor(atFar, listOf(near, far))!!
+        assertTrue("the far ground fell outside the frame", frame.contains(far.lat, far.lon))
+    }
+
+    @Test fun theVeilThinsOutOverAFixedDistanceWhateverTheFrameSize() {
+        // A share of the frame would fade a twenty kilometre frame over kilometres of map; a fixed
+        // distance keeps the edge soft without eating the veil.
+        assertTrue(TrailPaint.FADE_METRES in 100.0..2000.0)
+    }
 }

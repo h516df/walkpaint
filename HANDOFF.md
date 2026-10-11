@@ -1,27 +1,29 @@
 # 当前分发：v0.37 候选（DSH 分支，2026-10-12）**未发布**
 
-> 本节取代下方 v0.26 段落作为当前状态。用户反复反馈的三项——地图拖动 / 进入地图页卡顿、迷雾是一块块方形色块、轨迹线上的串珠与麻花——已在同一场景复现、修掉并复测。**高德 ARM 真机路径在本机无法运行，未验收**；候选包与证据已就绪但**未上传、未建 Release、未合并 PR**，发布与真机验收都还差用户一句话。
+> 本节取代下方 v0.26 段落作为当前状态。三项用户反复反馈的问题——地图拖动 / 进入地图页卡顿、迷雾是一块块方形色块、轨迹线上的串珠与麻花——已在同一场景复现、修掉并复测；复核后追加的「迷雾像素自证」与「阈值/指标措辞纠正」两项已完成。**复核第 1 条「大范围历史」已实现但真机渲染尺度不对，已退回并如实记为未完成。** **高德 ARM 真机路径本机无法运行，未验收**；候选包与证据就绪但**未发布**。
 
-- **工作目录 / 分支**：`D:\Worktrees\WalkPaint\dsh-lasterror`，`fix/dsh-lasterror-recovery`，业务改动 `9672f2f`（其后提交只改文档与验收脚本，最新为 `3ad1914`）。与 `D:\Projects\WalkPaint` 完全隔离，主副本未改。
-- **版本**：`versionCode 39` / `versionName 0.37`；包名 `cn.walkpaint`、schema2、原 debug 签名不变，可覆盖安装、不丢足迹。
+- **工作目录 / 分支**：`D:\Worktrees\WalkPaint\dsh-lasterror`，`fix/dsh-lasterror-recovery`，业务改动 `9672f2f` 起（复核后的改动见后续提交）。与 `D:\Projects\WalkPaint` 完全隔离，主副本未改。
+- **版本**：`versionCode 39` / `versionName 0.37`；包名 `cn.walkpaint`、schema2、原 debug 签名（SHA-256 `21b74e3e…`、SHA-1 `fae3df35…`）不变，可覆盖安装。
 - **候选包（未发布）**：
-  - 手机 arm64：`release-out/WalkPaint-v0.37-arm64-debug.apk`，70,387,084 字节，SHA256 `4a2f1bf8efa14cec54e5d3c8887eb0dd6a769e3557a2e6250bc2fecd437ff06e`
-  - 模拟器通用（本轮全部实测用它）：`verification/fog-line/candidate-v0.37-universal.apk`，SHA256 `b1cfd2f80cc4685bef6964faaf547261f575ea52d7f71b1e338706b27c99cd8b`
-  - 两包 `classes*.dex` 与 `assets/release-notes.json` 逐字节相同（已核对），arm64 包只多 `lib/arm64-v8a/*`；都由原 debug 证书签名（SHA-256 `21b74e3e…`、SHA-1 `fae3df35…`）。**arm64 包本机装不了（AVD 是 x86_64），它没有被实际运行过**，运行证据对应通用包。
+  - 手机 arm64：`release-out/WalkPaint-v0.37-arm64-debug.apk`，70,387,176 字节，SHA256 `eafb92f3c403a19921dcc6729a40aab95322a781846f9d82bf13ef9c3e32e77d`
+  - 模拟器通用（本轮实测）：`verification/fog-line/candidate-v0.37i-universal.apk`，SHA256 `b06212216e61b93350ea21b8f037343a83eb67952f24db111161715ad8c40ef0`
+  - 两包 `classes*.dex` **逐字节相同**（已核对），arm64 包只多 `lib/arm64-v8a/*`；**arm64 包本机装不了（AVD 是 x86_64），它没有被实际运行过**，运行证据对应通用包。
   - 被替换的基线：`verification/fog-line/baseline-v0.36-universal.apk`，SHA256 `98d020197ccfb50daaad63db5794be86eac51d2afb9a8168c9bc14a3014e3a6`
-- **实际测试引擎**：专用 Google AVD `emulator-5556`（`WalkPaint_Google_API36`，x86_64，SDK 36）。`AmapPlatform.supported` 只接受 ARM 进程，所以本机只能跑**备用地图（OpenFreeMap）引擎**；引擎是从运行中的 App"我的 → 更多设置 → 隐私与权限"读回的，不是硬编码。**备用地图通过不等于高德通过。**
-- **同一场景复现**（`verification/fog-line/before/map-follow.png`）：同一条街走 4 趟的匿名夹具上，基线画出**四条并排深绿线**（麻花）+ 线端圆点（串珠），整屏被 550 米网格染色铺满（方块），底图被洗掉。修复后同一视角（`after/map-follow.png`）是连续柔和的雾 + 一条约 30–40 米的柔边走廊，能看清底图街道与 POI；`after/map-day.png` 的当天路线只有一条；`after/map-tab-return.png` 切页回来雾仍在。
-- **实测数值**（每次运行前重启 AVD，同一夹具/视角/手势）：
-  - **强停后重新进入**（全新 AVD，3 次采样）：0.36 → 10084 / 15184 / 4627 ms（中位 **10084 ms**）；0.37 → 8084 / 3348 / 2542 ms（中位 **3348 ms**）
-  - 冷启动最好值（3 次）：0.36 → 2773 ms；0.37 → 3907 ms —— **与模拟器噪声分不开**（同一候选包在更早会话量到 2720 ms），不当作改进
-  - UI 线程每次更新：中位 **5.2 ms** / 最大 **16.6 ms**（约一帧）；**拖动期间计数器增量全为 0**
-  - 迷雾增量重绘中位 12.6 ms；全量重建最大 100.7 ms；交给地图平均 6.0 ms（改前实现是 remove/add 图层，实测 52.7 / 118 ms）
-  - 整次更新稳态中位 164.6 ms，其中 154.8 ms 是**既有**的数据库快照与历史分组，跑在后台线程，不阻塞 UI，本轮未改也不归功于本轮
+- **实际测试引擎**：专用 Google AVD `emulator-5556`（`WalkPaint_Google_API36`，x86_64，SDK 36）。`AmapPlatform.supported` 只接受 ARM 进程，所以本机只能跑**备用地图（OpenFreeMap）引擎**；引擎从运行中的 App「我的 → 更多设置 → 隐私与权限」读回。**备用地图通过不等于高德通过。**
+- **同一场景复现**（`verification/fog-line/before/map-follow.png`）：同一条街走 4 趟的匿名夹具上，基线画出**四条并排深绿线**（麻花）+ 线端圆点（串珠），整屏被 550 米网格染色铺满（方块）。修复后同一视角（`after/map-follow.png`，单簇夹具）是连续柔和的雾 + 约 20 米柔边涂色带。
+- **实测数值**（每次运行前重启 AVD）：
+  - 强停后重新进入 Activity：0.36 中位 **10084 ms**（3 次采样）；0.37 中位 **3348 ms**
+  - UI 线程每次更新：中位 **2.1–5.2 ms** / 最大 **7–33 ms**；迷雾增量重绘中位 **2.1–4.2 ms**；全量重建最大 **27 ms**；交给地图最大 **69 ms**
+  - 整次更新稳态中位 164–313 ms，其中绝大部分是**既有**的数据库快照与历史分组（后台线程，不阻塞 UI）
   - 早期失败报告保留在 `verification/fog-line/after/history/`
-- **数据**：安装前后逐行按主键比对一致；跑完只增不改不丢（3505 → 3512 点、`road_matches` 0 → 7）。JVM 单测 282 项全过。
-- **未验收 / 待办**：① 高德 ARM 真机（迷雾观感、拖动帧率、涂色深浅）；② 户外长时间后台记录；③ 帧上限 8 km 时大范围历史的迷雾分辨率会变粗（夹具约 700 米未覆盖）；④ `map_tab_ready_ms` 被测试工具的 dump 延迟污染，不可比，只用于确认页面起来了。
+- **像素自证**：`FOG_PIXEL_PROBE_PASS`（走廊只带染色、雾从涂层外缘渐变回升、帧边界真渐隐、**重复经过逐像素不变**、12 公里外的视口帧包含该地面）。这套断言当场抓到三个常量测试漏掉的渲染缺陷（CLEAR 是二进制清除、边框渐隐用了 STROKE 画笔、DST_OUT 会让重复经过越擦越薄），都已修。
+- **未验收 / 开放**：
+  1. **高德 ARM 真机**：迷雾观感、拖动帧率、涂色深浅需用户真机确认。
+  2. **大范围历史（复核第 1 条，开放）**：雾帧仍按已走范围取，跨度 12 公里时涂色糊掉、远簇不显示；视口跟随已写好并单测通过，但真机渲染尺度不对，故未上线。诊断见 `docs/evidence/V037_FOG_LINE.md` 第 3 节末。
+  3. 户外长时间后台记录。
+  4. `map_tab_ready_ms` 被测试工具的 dump 延迟污染，不可比。
 - **发布**：候选与证据就绪，**未上传、未建 Release、未合并 PR**；沿用同一私有渠道发布需要用户明确一句确认。
-- **证据**：`docs/evidence/V037_FOG_LINE.md`、`verification/fog-line/{before,after}/`（acceptance.json + 截图 + history）、`verification/fog-line/reopen-{candidate,before}-reopen/probe.json`、脚本 `scripts/android_fog_line_acceptance.py`（fail-closed）、`scripts/android_reopen_probe.py`、`scripts/run_fog_acceptance_fresh.py`。
+- **证据**：`docs/evidence/V037_FOG_LINE.md`、`verification/fog-line/{before,after,fixed}/`（acceptance.json + 截图 + history）、脚本 `scripts/android_fog_line_acceptance.py`（fail-closed）、`scripts/android_reopen_probe.py`、`scripts/run_fog_acceptance_fresh.py`。
 
 ---
 

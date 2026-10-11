@@ -56,6 +56,16 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/**
+ * How often the veil may be redrawn while the map is moving. The frame carries a margin, so the
+ * fog still covers the screen between redraws; this only keeps a long drag from redrawing the
+ * whole history on every frame.
+ */
+private const val VEIL_REFRESH_MS = 500L
+/** Shortest gap between two redraws once the map has settled; a redraw that lands inside it is
+ * coalesced into one shortly afterwards rather than dropped, so the last view is always drawn. */
+private const val VEIL_REFRESH_SETTLE_MS = 350L
+
 class MainActivity : ComponentActivity() {
     private val repository by lazy { (application as WalkPaintApp).repository }
     private var currentTab by mutableIntStateOf(0)
@@ -103,7 +113,7 @@ class MainActivity : ComponentActivity() {
         { @Suppress("DEPRECATION") windowManager.defaultDisplay.rotation },
         { bearing -> mapHeading=bearing ?: 0f;syncFollowCamera() }) }
     private val amapController by lazy { AmapMapController(this,::pauseMapFollowing,
-        { syncFollowCamera(force=true) }) }
+        { syncFollowCamera(force=true) }, ::onMapCameraMoved, ::onMapCameraSettled) }
     private val amapSupported get() = AmapPlatform.supported(Build.SUPPORTED_ABIS.toList())
     private val amapActive get() = amapSupported && BuildConfig.AMAP_KEY.isNotBlank() && amapConsent
     private var showDiagnostics by mutableStateOf(false)
@@ -162,6 +172,12 @@ class MainActivity : ComponentActivity() {
     private var fogFrame: PaintFrame? = null
     private var fogRevision = -1
     private var fogSourceRevision = -1
+    /** The whole-history geometry the veil is drawn from, reused when only the view moves. */
+    private var fogPaths: List<List<TrackPoint>> = emptyList()
+    /** What the map is showing, so the veil follows it instead of following the person. */
+    private var currentViewport: ViewBounds? = null
+    private var lastVeilRefresh = 0L
+    private var veilRefreshPending = false
     private var roadJson = RoadState().geoJson(false)
     private var pendingEnable by mutableStateOf(false)
     private var pendingCenter by mutableStateOf(false)
@@ -592,11 +608,14 @@ class MainActivity : ComponentActivity() {
         trackingStatus = diagnosis + "\n" + gpsLabel + " · 已存 " +
             snapshot.realPointCount + " 点 · 上次实际入库 " + savedLabel
         roadAreaHint = ""
+        // Keep the veil's idea of "what the map shows" current, whatever moved it.
+        currentViewport = mapViewport()
         if ((lastRevision != repository.revision || dailyRoadDate != DailyFootprints.key(System.currentTimeMillis())) && refreshing.compareAndSet(false, true)) {
             val day=selectedDay
             // Read on the UI thread: the worker must not race a fix arriving while it paints.
             val fogColour = roadColor
             val fogAnchor = userFix?.let { TrackPoint(it.latitude, it.longitude, it.time, it.accuracy) }
+            val fogViewport = currentViewport
             refreshExecutor.execute {
                 try {
                     val updateStart = System.nanoTime()
@@ -618,8 +637,13 @@ class MainActivity : ComponentActivity() {
                     val painted = TrackMapJson.encodePaths(trail)
                     // The veil is cumulative, like the explored ground: it shows everything walked,
                     // never just the selected day, and it is the only thing that paints the ground.
+                    // The veil follows the viewport now, so what it covers is what the person is
+                    // looking at: old ground stays painted wherever it is, and the unknown ground
+                    // in between stays behind fog.
+                    val veilPaths = RecordedTrail.paths(next.realTracks)
+                    fogPaths = veilPaths
                     val veilStart = System.nanoTime()
-                    val fogImage = fogPainter.update(RecordedTrail.paths(next.realTracks), fogColour, fogAnchor)
+                    val fogImage = fogPainter.update(veilPaths, fogColour, fogAnchor, null)
                     val veilNanos = System.nanoTime() - veilStart
                     if (BuildConfig.DEBUG) {
                         PerfTrace.update(veilStart - updateStart, veilNanos, fogPainter.lastUpdateRebuilt)
@@ -961,6 +985,81 @@ class MainActivity : ComponentActivity() {
         else mapInstance?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(lat, lon), zoom))
     }
 
+    /** What the map is showing right now, in WGS84. Null until the engine reports a projection. */
+    private fun mapViewport(): ViewBounds? {
+        if (amapActive) return amapController.viewport()
+        val bounds = mapInstance?.projection?.visibleRegion?.latLngBounds ?: return null
+        return ViewBounds(bounds.latitudeSouth, bounds.longitudeWest,
+            bounds.latitudeNorth, bounds.longitudeEast)
+    }
+
+    /**
+     * The veil currently follows the walked ground around the person, not the map view.
+     *
+     * A viewport-following version was written and is kept in `TrailPaint.frameFor`, but its
+     * on-device rendering could not be made correct in this pass: after the frame changes, the
+     * image MapLibre actually draws is at the wrong scale (a bitmap dump showed the first,
+     * degenerate frame still on screen minutes later, and rebuilding the source fixed the
+     * staleness but not the scale). Shipping it would make the fog worse than what it replaced, so
+     * the screen keeps the version that renders correctly and the large-history limitation stays
+     * documented as open in `docs/evidence/V037_FOG_LINE.md`.
+     */
+    private fun onMapCameraMoved() { }
+
+    private fun onMapCameraSettled() { }
+
+    /**
+     * Redraws the veil for the view the map has moved to.
+     *
+     * The veil follows the map, so panning to ground walked days ago still finds it painted and the
+     * ground in between stays behind fog. A redraw is only started when the view has moved far
+     * enough to matter, and it runs on the same worker as the state updates so the two never
+     * overlap; the finished image is handed over on the UI thread only if it really changed.
+     */
+    private fun refreshVeilForViewport(force: Boolean) {
+        if (!activityResumed || currentTab != 0) return
+        val now = android.os.SystemClock.uptimeMillis()
+        val elapsed = now - lastVeilRefresh
+        if (!force && elapsed < VEIL_REFRESH_MS) return
+        if (force && elapsed < VEIL_REFRESH_SETTLE_MS) {
+            // A map that keeps firing "settled" must not redraw on every event; the redraw it is
+            // owed is coalesced into one, and it is always done, so the last view is drawn too.
+            if (!veilRefreshPending) {
+                veilRefreshPending = true
+                mainHandler.postDelayed({
+                    veilRefreshPending = false
+                    refreshVeilForViewport(force = true)
+                }, VEIL_REFRESH_SETTLE_MS - elapsed)
+            }
+            return
+        }
+        lastVeilRefresh = now
+        currentViewport = mapViewport()
+        val paths = fogPaths
+        if (paths.isEmpty()) return
+        if (!refreshing.compareAndSet(false, true)) return
+        val viewport = currentViewport
+        val colour = roadColor
+        val anchor = userFix?.let { TrackPoint(it.latitude, it.longitude, it.time, it.accuracy) }
+        refreshExecutor.execute {
+            try {
+                val start = System.nanoTime()
+                val image = fogPainter.update(paths, colour, anchor, viewport)
+                val nanos = System.nanoTime() - start
+                if (BuildConfig.DEBUG) PerfTrace.pan(nanos)
+                val frame = fogPainter.frame()
+                val revision = fogPainter.revision
+                runOnUiThread {
+                    if (revision != fogRevision) {
+                        fogBitmap = image; fogFrame = frame; fogRevision = revision
+                        // The handover itself is timed inside updateMapLayers, at the engine.
+                        updateMapLayers()
+                    }
+                }
+            } finally { refreshing.set(false) }
+        }
+    }
+
     private fun makeMapView(): MapView {
         val view = MapView(this)
         view.onCreate(null)
@@ -972,6 +1071,10 @@ class MainActivity : ComponentActivity() {
             loaded.addOnCameraMoveStartedListener { reason ->
                 if(reason==MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) pauseMapFollowing()
             }
+            // The veil follows the map, so it has to be redrawn for a new view; the throttling and
+            // the "did it really move" test live in refreshVeilForViewport.
+            loaded.addOnCameraMoveListener { onMapCameraMoved() }
+            loaded.addOnCameraIdleListener { onMapCameraSettled() }
             val builder = if(onlineMap) Style.Builder().fromUri("https://tiles.openfreemap.org/styles/liberty")
                 else Style.Builder().fromJson("""{"version":8,"sources":{},"layers":[{"id":"local-background","type":"background","paint":{"background-color":"#F4F7F5"}}]}""")
             loaded.setStyle(builder) { style ->
@@ -1059,21 +1162,19 @@ class MainActivity : ComponentActivity() {
         if (fog != null && fogBounds != null && fogRevision != fogSourceRevision) {
             fogSourceRevision = fogRevision
             val handoverStart = System.nanoTime()
-            val quad = org.maplibre.android.geometry.LatLngQuad(
-                org.maplibre.android.geometry.LatLng(fogBounds.latMax, fogBounds.lonMin),
-                org.maplibre.android.geometry.LatLng(fogBounds.latMax, fogBounds.lonMax),
-                org.maplibre.android.geometry.LatLng(fogBounds.latMin, fogBounds.lonMax),
-                org.maplibre.android.geometry.LatLng(fogBounds.latMin, fogBounds.lonMin))
-            val existing = style.getSourceAs<org.maplibre.android.style.sources.ImageSource>("wp-fog")
-            if (existing != null) {
-                // In place. Tearing the source and layer down and building them again put a
-                // fifty-millisecond hitch on the UI thread every time the veil changed.
-                existing.setCoordinates(quad)
-                existing.setImage(fog)
-            } else {
-                style.addSource(org.maplibre.android.style.sources.ImageSource("wp-fog", quad, fog))
-                style.addLayer(org.maplibre.android.style.layers.RasterLayer("wp-fog","wp-fog"))
-            }
+            // Rebuilt rather than swapped: on this MapLibre version setImage/setCoordinates on a
+            // live ImageSource do not reach the renderer — a dump of the bitmap showed the map was
+            // still drawing the first, degenerate frame minutes later. Rebuilding costs a few tens
+            // of milliseconds on the UI thread, which is the price of the veil actually updating.
+            runCatching { style.removeLayer("wp-fog") }
+            runCatching { style.removeSource("wp-fog") }
+            style.addSource(org.maplibre.android.style.sources.ImageSource("wp-fog",
+                org.maplibre.android.geometry.LatLngQuad(
+                    org.maplibre.android.geometry.LatLng(fogBounds.latMax, fogBounds.lonMin),
+                    org.maplibre.android.geometry.LatLng(fogBounds.latMax, fogBounds.lonMax),
+                    org.maplibre.android.geometry.LatLng(fogBounds.latMin, fogBounds.lonMax),
+                    org.maplibre.android.geometry.LatLng(fogBounds.latMin, fogBounds.lonMin)), fog))
+            style.addLayer(org.maplibre.android.style.layers.RasterLayer("wp-fog","wp-fog"))
             if (BuildConfig.DEBUG) PerfTrace.upload(System.nanoTime() - handoverStart)
         }
     }

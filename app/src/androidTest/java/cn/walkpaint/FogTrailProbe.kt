@@ -19,6 +19,10 @@ internal object FogTrailProbe {
     const val TRIP_PREFIX = "fogperf-fixture-v2"
     const val BASE_LAT = 48.8566
     const val BASE_LON = 2.3522
+    /** About twelve kilometres east of the first cluster: far outside any single eight kilometre frame. */
+    const val FAR_LAT = 48.8566
+    const val FAR_LON = 2.5162
+    private const val DAY = 24 * 60 * 60 * 1000L
     private const val STEP_M = 1.4
     private const val ACCURACY = 6.0
 
@@ -59,10 +63,14 @@ internal object FogTrailProbe {
             val kept = stored(writable)
             check(written == kept) { "fixture rows missing: wrote $written, stored $kept" }
             check(kept >= 3000) { "fixture is too small to prove anything: $kept points" }
-            val end = trips.last().points.last()
+            // The anchor is the end of the near cluster: "定位我" must stay there while the map is
+            // panned to the far cluster, which is what the large-history check needs.
+            val near = trips.first { it.id.endsWith("-e") }.points.last()
+            val far = trips.first { it.id.endsWith("-f") }.points.last()
             return String.format(Locale.ROOT,
-                "FOG_TRAIL_PROBE_PASS seeded points=%d trips=%d end_lat=%.7f end_lon=%.7f",
-                kept, trips.size, end[0], end[1])
+                "FOG_TRAIL_PROBE_PASS seeded points=%d trips=%d end_lat=%.7f end_lon=%.7f " +
+                    "far_lat=%.7f far_lon=%.7f",
+                kept, trips.size, near[0], near[1], far[0], far[1])
         }
     }
 
@@ -104,11 +112,25 @@ internal object FogTrailProbe {
                 add()
                 leg(north = 300.0, east = 0.0, lateralM = 9.0)
             }.points),
+            // A second cluster about twelve kilometres east, two days old. It is the ground the map
+            // has to keep painting when the person pans back to it, and the unknown ground between
+            // the two clusters is what the veil has to keep covering.
+            FixtureTrip(TRIP_PREFIX + "-f", now - 2 * DAY - 30 * minute, Walk(now - 2 * DAY - 30 * minute, FAR_LAT, FAR_LON).apply {
+                add()
+                leg(north = 600.0, east = 0.0, lateralM = 0.0)
+                leg(north = -600.0, east = 0.0, lateralM = 8.0)
+            }.points),
+            FixtureTrip(TRIP_PREFIX + "-g", now - 2 * DAY - 10 * minute, Walk(now - 2 * DAY - 10 * minute, FAR_LAT, FAR_LON).apply {
+                add()
+                leg(north = 0.0, east = 400.0)
+                leg(north = 300.0, east = 0.0)
+            }.points),
         )
     }
 
     /** Walks a leg at a walking pace, one fix per second, in metres from the start point. */
-    private class Walk(private var time: Long) {
+    private class Walk(private var time: Long, private val originLat: Double = BASE_LAT,
+                       private val originLon: Double = BASE_LON) {
         private var x = 0.0
         private var y = 0.0
         private var lateral = 0.0
@@ -130,9 +152,9 @@ internal object FogTrailProbe {
         }
 
         private fun at(x: Double, y: Double): DoubleArray {
-            val lat = BASE_LAT + y / 111194.9
-            val lon = BASE_LON + (x + lateral) /
-                (111194.9 * kotlin.math.cos(Math.toRadians(BASE_LAT)))
+            val lat = originLat + y / 111194.9
+            val lon = originLon + (x + lateral) /
+                (111194.9 * kotlin.math.cos(Math.toRadians(originLat)))
             return doubleArrayOf(lat, lon, time.toDouble())
         }
     }

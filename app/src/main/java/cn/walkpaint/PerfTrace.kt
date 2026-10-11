@@ -55,6 +55,14 @@ internal object PerfTrace {
     private val uploadCount = AtomicInteger()
     private val uploadNanos = AtomicLong()
     private val uploadMaxNanos = AtomicLong()
+    /**
+     * Panning redraws the veil for the new view, which is separate from a state update and is
+     * measured separately: it is the cost of the fog following the map.
+     */
+    private val panCount = AtomicInteger()
+    private val panMaxNanos = AtomicLong()
+    private val panSamples = LongArray(SAMPLES)
+    private val panSlot = AtomicInteger()
 
     fun update(prepNanos: Long, veilNanos: Long, rebuilt: Boolean) {
         updateCount.incrementAndGet()
@@ -94,6 +102,14 @@ internal object PerfTrace {
         report()
     }
 
+    /** One veil redraw for a new viewport (a pan or a zoom), with the time it took. */
+    fun pan(nanos: Long) {
+        panCount.incrementAndGet()
+        panMaxNanos.updateAndGet { maxOf(it, nanos) }
+        store(panSamples, panSlot, nanos)
+        report()
+    }
+
     private fun store(samples: LongArray, slot: AtomicInteger, nanos: Long) {
         val index = slot.getAndIncrement()
         if (index < samples.size) samples[index] = nanos
@@ -116,7 +132,8 @@ internal object PerfTrace {
                 "veil_inc_n=%d veil_inc_med_ms=%.1f veil_inc_avg_ms=%.1f veil_inc_max_ms=%.1f " +
                 "veil_rebuild_n=%d veil_rebuild_max_ms=%.1f " +
                 "ui_n=%d ui_med_ms=%.1f ui_max_ms=%.1f " +
-                "upload_n=%d upload_avg_ms=%.1f upload_max_ms=%.1f",
+                "upload_n=%d upload_avg_ms=%.1f upload_max_ms=%.1f " +
+                "pan_n=%d pan_med_ms=%.1f pan_max_ms=%.1f",
             updateCount.get(), median(updateSamples) / 1e6, updateNanos.get() / 1e6 / steady,
             updateMaxNanos.get() / 1e6,
             first / 1e6, median(prepSamples) / 1e6,
@@ -124,6 +141,7 @@ internal object PerfTrace {
             incrementNanos.get() / 1e6 / increments, incrementMaxNanos.get() / 1e6,
             rebuildCount.get(), rebuildMaxNanos.get() / 1e6,
             uiCount.get(), median(uiSamples) / 1e6, uiMaxNanos.get() / 1e6,
-            uploadCount.get(), uploadNanos.get() / 1e6 / uploads, uploadMaxNanos.get() / 1e6))
+            uploadCount.get(), uploadNanos.get() / 1e6 / uploads, uploadMaxNanos.get() / 1e6,
+            panCount.get(), median(panSamples) / 1e6, panMaxNanos.get() / 1e6))
     }
 }
