@@ -22,8 +22,8 @@ internal object FogUiProbe {
         Thread.sleep(8000)
         fun shot(name:String) {
             val image=i.uiAutomation.takeScreenshot() ?: error("no real screenshot")
-            java.io.File(i.context.cacheDir,"fog-$name.png").outputStream().use {
-                image.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)
+            java.io.File(i.targetContext.cacheDir,"fog-$name.jpg").outputStream().use {
+                image.compress(android.graphics.Bitmap.CompressFormat.JPEG,90,it)
             };image.recycle()
         }
         shot("map-public")

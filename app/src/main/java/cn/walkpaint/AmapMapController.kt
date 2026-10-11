@@ -82,7 +82,7 @@ internal class AmapMapController(private val context: Context, private val onGes
                 android.view.MotionEvent.ACTION_CANCEL -> endGesture()
             }
         }
-        map?.setOnMapLoadedListener { onReady() }
+        map?.setOnMapLoadedListener { fogOverlay?.cameraChanged(); onReady() }
         map?.uiSettings?.isTiltGesturesEnabled = false
         latestPosition = location
         initialFocusPending = true
