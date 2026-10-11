@@ -49,6 +49,15 @@ android {
             }
         }
     }
+    buildTypes {
+        getByName("release") {
+            // Existing users must upgrade with the original certificate, never a new identity.
+            require(rootProject.file("${System.getProperty("user.home")}/.android/debug.keystore").isFile) {
+                "Original WalkPaint signing certificate is missing; refusing an incompatible update"
+            }
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
     buildFeatures { compose = true; buildConfig = true }
     testOptions { unitTests.isReturnDefaultValues = true }
 }
