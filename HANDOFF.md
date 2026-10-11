@@ -1,3 +1,13 @@
+# 当前分发 — v0.32 私有探索迷雾更新（2026-10-11）
+
+用户已明确同意联网验收并要求完成后去更新，本节优先于历史候选/拦截。**状态：正式签名包已私有预览发布，服务器4资产和重新下载SHA通过；模拟器联网真实UI及数据保持通过，用户手机未更新/ARM高德未验收。** [发布](https://github.com/h516df/walkpaint/releases/tag/v0.32) / [手机包](https://github.com/h516df/walkpaint/releases/download/v0.32/WalkPaint-v0.32-arm64.apk)。
+
+业务固定 `465c13668da37e1d0c3a1b5c80c2c3743be5c5d2`；0.32/code34/schema2/原证书/arm64，65904183字节，SHA `eecdc275b1183252fb28eb2837bef32c1145c65c9ad9adf05f06ed8750dc5889`。原五表5/130/0/125/0摘要升级及联网UI前后相同，285JVM/7守卫/native像素和签名release真实联网手势通过。详见 [V032_PRIVATE_RELEASE](docs/evidence/V032_PRIVATE_RELEASE.md)。手机本人GitHub授权/下载/系统安装及长期户外仍待实际使用，不声称已经更新。
+
+标准资产按android-update-kit发布脚本适配生成，保留等字节debug命名alias以兼容v0.31现有检查更新。用户可在“我的→检查更新”取得0.32。PR#33草稿未合并，main和DSH目录未改；回退仅同签名/schema2/code>=34覆盖包。旧v0.31保留。先前网络审批拦截已通过用户明确授权解除，无改审批配置。测试只在专用Google只读副本。
+
+---
+
 # 当前接手 — v0.32 迷雾首版候选（2026-10-11）
 
 用户明确要求 Codex 接手 v0.31 并改善为英雄联盟战争迷雾气质。本节优先于历史 v0.16 交接。唯一写手 `D:\Worktrees\WalkPaint\codex-fog-of-war` / `agent/codex/fog-of-war`，基线 `3d453aa`，业务 `beacf97`。

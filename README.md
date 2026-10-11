@@ -1,4 +1,4 @@
-> 当前接手：v0.32 迷雾首版**本地候选**，基于已发布v0.31；最新状态看 [HANDOFF](HANDOFF.md) 与 [实际验收](docs/evidence/V032_FOG.md)。MapLibre离线真实渲染与数据保持通过；联网授权、高德ARM/vivo未验收，尚未发布。下面历史版本内容不代表最新发布状态。
+> 当前发布：[v0.32 私有探索迷雾预览](https://github.com/h516df/walkpaint/releases/tag/v0.32)。在“我的→检查更新”下载并由系统覆盖安装；原签名/code34/schema2。联网模拟器实际UI及旧表保持通过，用户vivo/ARM高德尚待验收，详见 [最新交接](HANDOFF.md) 与 [发布验收](docs/evidence/V032_PRIVATE_RELEASE.md)。
 
 # 当前版本：v0.16 高德联网直接轨迹涂色
 

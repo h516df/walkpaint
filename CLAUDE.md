@@ -1,3 +1,10 @@
+# 当前分发规则（v0.32）
+
+- 当前v0.32已经用户明确同意后私有预览分发；HANDOFF首节和V032_PRIVATE_RELEASE.md优先于下方历史“待授权/未发布”。code34/schema2/原签名，旧版debug文件名alias与标准arm64.apk同字节，不动认证体系。正式release未开启debuggable；不得因自动化读取失败开放调试或降级签名。
+- 285JVM/7守卫/native像素、签名release专用Google联网真实UI/手势及五表摘要保持通过。高德ARM/vivo安装、本人账户下载与长期户外未验收，不能把Google截图或私有发布说成手机已使用。PR#33草稿未合并，回退仅同签名code>=34/schema2兼容覆盖，不卸载/清库。测试副本结束后关闭。
+
+---
+
 # 当前接手规则（v0.32 迷雾候选）
 
 - 最新事实看 HANDOFF 首节和 docs/evidence/V032_FOG.md，优先于下方历史版本。基线v0.31，单写手agent/codex/fog-of-war；不得改DSH/canonical工作区或合并旧PR。
