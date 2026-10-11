@@ -10,3 +10,5 @@ verification/
 .gradle-user-home/
 __pycache__/
 *.pyc
+
+dist/

@@ -50,13 +50,8 @@ internal class AmapMapController(private val context: Context, private val onGes
     private var gestureActive = false
     private var pendingState: TrackState? = null
     private var pendingRoads: RoadState? = null
-    private val exploredShapes = mutableListOf<com.amap.api.maps.model.Polygon>()
-    private val painter = TrailPainter()
-
-    /** The explored ground wears the same colour as the trail, just faint enough to read through. */
-    private fun exploredTint(color:Int)=Color.argb(
-        (Explorer.EXPLORED_FILL_ALPHA*255f).toInt(),
-        Color.red(color),Color.green(color),Color.blue(color))
+    private var fogOverlay: FogOverlay? = null
+    private var fogState = TrackState()
 
     fun create(state: TrackState, location: Location?, roads: RoadState, color:Int=ExploredRoadArgb): MapView {
         exploredColor=color
@@ -87,7 +82,7 @@ internal class AmapMapController(private val context: Context, private val onGes
                 android.view.MotionEvent.ACTION_CANCEL -> endGesture()
             }
         }
-        map?.setOnMapLoadedListener { onReady() }
+        map?.setOnMapLoadedListener { fogOverlay?.cameraChanged(); onReady() }
         map?.uiSettings?.isTiltGesturesEnabled = false
         latestPosition = location
         initialFocusPending = true
@@ -120,24 +115,11 @@ internal class AmapMapController(private val context: Context, private val onGes
         a.clear()
         paintedLines.clear()
         paintedSeeds.clear()
-        exploredShapes.clear()
         currentMarker = null
-        // Explored ground is drawn first so it sits under the trail. Neighbouring cells were merged
-        // into strips, so this is a few dozen shapes rather than one per cell: the map must not go
-        // back to stuttering every time a fix arrives.
-        Explorer.rectangles(state, Explorer.MAX_STRIPS).forEach { rect ->
-            val lat = rect.latRange()
-            val lon = rect.lonRange()
-            exploredShapes += a.addPolygon(com.amap.api.maps.model.PolygonOptions()
-                .addAll(listOf(
-                    toAmap(lat.start, lon.start),
-                    toAmap(lat.start, lon.endInclusive),
-                    toAmap(lat.endInclusive, lon.endInclusive),
-                    toAmap(lat.endInclusive, lon.start),
-                ))
-                .fillColor(exploredTint(exploredColor))
-                .strokeWidth(0f))
-        }
+        fogState=state
+        fogOverlay?.setPaths(ExplorationFog.paths(state).map { line -> line.map { p ->
+            val converted=toAmap(p.lat,p.lon); p.copy(lat=converted.latitude,lon=converted.longitude)
+        } })
         val paths = RecordedTrail.paths(state.realTracks)
         // Every casing first, then every core: a later line's casing must not cover an earlier core.
         paths.filter { it.size > 1 }.forEach { line ->
@@ -154,19 +136,6 @@ internal class AmapMapController(private val context: Context, private val onGes
                     .width(2.5f * density).color((exploredColor and 0x00FFFFFF) or (0xB0 shl 24)))
             }
         }
-        // Painted ground laid over the lines. A second pass over a street repaints the same
-        // pixels, so it covers the braid instead of adding to it. The lines stay underneath as a
-        // safety net: if this image ever fails to draw, the trail is still on the map.
-        val painted = painter.update(paths.flatten(), exploredColor,
-            latestPosition?.let { TrackPoint(it.latitude, it.longitude, it.time, it.accuracy) })
-        val frame = painter.frame()
-        if (painted != null && frame != null) {
-            a.addGroundOverlay(com.amap.api.maps.model.GroundOverlayOptions()
-                .image(com.amap.api.maps.model.BitmapDescriptorFactory.fromBitmap(painted))
-                .positionFromBounds(com.amap.api.maps.model.LatLngBounds(
-                    toAmap(frame.latMin, frame.lonMin), toAmap(frame.latMax, frame.lonMax)))
-                .zIndex(9f))
-        }
         updateUser(latestPosition)
         if(initialFocusPending) {
             val current=latestPosition?.let { TrackPoint(it.latitude,it.longitude,it.time,it.accuracy) }
@@ -177,18 +146,34 @@ internal class AmapMapController(private val context: Context, private val onGes
         }
     }
 
+    fun bindFog(fog: FogOverlay) {
+        fogOverlay=fog
+        fog.project={ p -> map?.projection?.toScreenLocation(LatLng(p.lat,p.lon))?.let {
+            android.graphics.PointF(it.x.toFloat(),it.y.toFloat())
+        } }
+        fog.metersPerPixel={ map?.scalePerPixel?.toDouble() ?: 100000.0 }
+        map?.setOnCameraChangeListener(object: AMap.OnCameraChangeListener {
+            override fun onCameraChange(position:com.amap.api.maps.model.CameraPosition) { fog.cameraChanged() }
+            override fun onCameraChangeFinish(position:com.amap.api.maps.model.CameraPosition) { fog.cameraChanged() }
+        })
+        fog.setPaths(ExplorationFog.paths(fogState).map { line -> line.map { p ->
+            val converted=toAmap(p.lat,p.lon); p.copy(lat=converted.latitude,lon=converted.longitude)
+        } })
+        updateUser(latestPosition)
+    }
+
     fun setExploredColor(color:Int) {
         exploredColor=color
         paintedLines.forEach { it.color=color }
         paintedSeeds.forEach { it.fillColor=color }
-        exploredShapes.forEach { it.fillColor=exploredTint(color) }
     }
 
     fun updateUser(location: Location?) {
         latestPosition = location
         val a = map ?: return
-        val fix = location ?: run { currentMarker?.remove(); currentMarker = null; return }
+        val fix = location ?: run { currentMarker?.remove(); currentMarker = null; fogOverlay?.setLocation(null); return }
         val coordinate = toAmap(fix.latitude, fix.longitude)
+        fogOverlay?.setLocation(TrackPoint(coordinate.latitude,coordinate.longitude,fix.time,fix.accuracy))
         val marker = currentMarker
         if (marker == null) {
             currentMarker = a.addMarker(
@@ -234,6 +219,7 @@ internal class AmapMapController(private val context: Context, private val onGes
         paintedLines.clear()
         paintedSeeds.clear()
         currentMarker = null
+        fogOverlay=null
         map = null
         currentView = null
         view.onPause()

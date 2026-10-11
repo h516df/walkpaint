@@ -56,7 +56,7 @@ internal fun AppShell(
             .toInstant().toEpochMilli())
     }
     Scaffold(containerColor=PageBackground, bottomBar={
-        Surface(color=PageBackground.copy(alpha=0.98f)) {
+        Surface(color=if(selectedTab==0) androidx.compose.ui.graphics.Color(0xFF101E2B) else PageBackground.copy(alpha=0.98f)) {
             Row(Modifier.fillMaxWidth().navigationBarsPadding().height(58.dp)) {
                 listOf("地图","足迹","我的").forEachIndexed { index,label ->
                     val chosen=index==selectedTab
@@ -64,9 +64,9 @@ internal fun AppShell(
                         horizontalAlignment=Alignment.CenterHorizontally,
                         verticalArrangement=Arrangement.Center) {
                         Icon(painterResource(when(index) { 0->R.drawable.ic_map;1->R.drawable.ic_route;else->R.drawable.ic_person }),
-                            contentDescription=label,tint=if(chosen) Accent else Muted,modifier=Modifier.size(22.dp))
+                            contentDescription=label,tint=if(selectedTab==0) { if(chosen) androidx.compose.ui.graphics.Color(0xFF74DBCF) else androidx.compose.ui.graphics.Color(0xFFA9BBC7) } else if(chosen) Accent else Muted,modifier=Modifier.size(22.dp))
                         Spacer(Modifier.height(3.dp))
-                        Text(label,color=if(chosen) Accent else Muted,fontSize=11.sp,
+                        Text(label,color=if(selectedTab==0) { if(chosen) androidx.compose.ui.graphics.Color(0xFF74DBCF) else androidx.compose.ui.graphics.Color(0xFFA9BBC7) } else if(chosen) Accent else Muted,fontSize=12.sp,
                             fontWeight=if(chosen) FontWeight.SemiBold else FontWeight.Normal)
                     }
                 }
@@ -99,22 +99,22 @@ private fun MapPage(notice: String?,day: String?,onShowAll: ()->Unit,onLocate: (
             // One line only: a problem when there is one, otherwise the progress. Stacking both was
             // half of what made the map look like a mess. An opaque pill, because a ten percent tint
             // over a basemap full of labels is not a background at all.
-            if(notice!=null) Surface(onClick=onSettings,color=Canvas,shape=ChipShape,
-                border=BorderStroke(1.dp,Line),shadowElevation=1.dp) {
-                Text("$notice  ›",color=Ink,fontSize=CaptionSize,modifier=Modifier.padding(horizontal=12.dp,vertical=10.dp))
-            } else Surface(color=Canvas,shape=ChipShape,border=BorderStroke(1.dp,Line),shadowElevation=1.dp) {
-                Text("$place · 解锁 ${share.percent}%",color=Ink,fontSize=CaptionSize,
+            if(notice!=null) Surface(onClick=onSettings,color=androidx.compose.ui.graphics.Color(0xFF172B3B),shape=ChipShape,
+                border=BorderStroke(1.dp,androidx.compose.ui.graphics.Color(0xFF355060)),shadowElevation=1.dp) {
+                Text("$notice  ›",color=androidx.compose.ui.graphics.Color(0xFFE5EEF3),fontSize=CaptionSize,modifier=Modifier.padding(horizontal=12.dp,vertical=10.dp))
+            } else Surface(color=androidx.compose.ui.graphics.Color(0xFF172B3B),shape=ChipShape,border=BorderStroke(1.dp,androidx.compose.ui.graphics.Color(0xFF355060)),shadowElevation=1.dp) {
+                Text("$place · 解锁 ${share.percent}%",color=androidx.compose.ui.graphics.Color(0xFFE5EEF3),fontSize=CaptionSize,
                     fontWeight=FontWeight.Medium,modifier=Modifier.padding(horizontal=12.dp,vertical=10.dp))
             }
-            if(day!=null) Surface(onClick=onShowAll,color=Canvas,shape=ChipShape,border=BorderStroke(1.dp,Line)) {
-                Text("$day · 返回全部探索  ›",color=Accent,fontSize=CaptionSize,
+            if(day!=null) Surface(onClick=onShowAll,color=androidx.compose.ui.graphics.Color(0xFF172B3B),shape=ChipShape,border=BorderStroke(1.dp,androidx.compose.ui.graphics.Color(0xFF355060))) {
+                Text("$day · 返回全部探索  ›",color=androidx.compose.ui.graphics.Color(0xFF74DBCF),fontSize=CaptionSize,
                     modifier=Modifier.padding(horizontal=12.dp,vertical=10.dp))
             }
         }
-        Surface(onClick=onLocate,shape=CircleShape,color=PageBackground.copy(alpha=0.96f),
+        Surface(onClick=onLocate,shape=CircleShape,color=androidx.compose.ui.graphics.Color(0xFF172B3B),
             shadowElevation=1.dp,modifier=Modifier.align(Alignment.BottomEnd).padding(end=16.dp,bottom=36.dp).size(48.dp)) {
             Box(contentAlignment=Alignment.Center) {
-                Icon(painterResource(R.drawable.ic_location),"定位我",tint=Accent,modifier=Modifier.size(23.dp))
+                Icon(painterResource(R.drawable.ic_location),"定位我",tint=androidx.compose.ui.graphics.Color(0xFF74DBCF),modifier=Modifier.size(23.dp))
             }
         }
         // Only when OSM tiles are actually on screen: crediting OSM over an AMap basemap is

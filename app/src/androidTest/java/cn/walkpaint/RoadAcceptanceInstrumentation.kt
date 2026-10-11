@@ -17,11 +17,41 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
     private var cameraProbe=false
     private var roadColorProbe=false
     private var privateUpdateProbe=false
+    private var fogImage:String?=null
+    private var fogDataProbe=false
+    private var fogUiProbe=false
+    private var fogProbe=false
     private var directTrailProbe=false
     private var updateLogoutProbe=false
     private var candidateSha:String?=null
     override fun onStart() {
         val result = Bundle()
+        fogImage?.let { name ->
+            try {
+                check(name in setOf("map-public","pan-public","zoom-public","rotate-public"))
+                val bytes=File(targetContext.cacheDir,"fog-$name.jpg").readBytes()
+                check(bytes.size<400000) { "public screenshot exceeds bundle budget" }
+                result.putString("image_payload",android.util.Base64.encodeToString(bytes,android.util.Base64.NO_WRAP))
+                result.putString("stream","FOG_PUBLIC_IMAGE_PASS")
+                finish(Activity.RESULT_OK,result)
+            } catch(e:Throwable) { result.putString("stream","FOG_PUBLIC_IMAGE_FAIL: ${e.javaClass.simpleName}");finish(Activity.RESULT_CANCELED,result) }
+            return
+        }
+        if(fogDataProbe) {
+            try { result.putString("stream",FogDataProbe.run(this));finish(Activity.RESULT_OK,result) }
+            catch(e:Throwable) { result.putString("stream","FOG_DATA_PROBE_FAIL: ${e.javaClass.simpleName}");finish(Activity.RESULT_CANCELED,result) }
+            return
+        }
+        if(fogUiProbe) {
+            try { result.putString("stream",FogUiProbe.run(this));finish(Activity.RESULT_OK,result) }
+            catch(e:Throwable) { result.putString("stream","FOG_UI_FIXTURE_FAIL: ${e.javaClass.simpleName}: ${e.message}");finish(Activity.RESULT_CANCELED,result) }
+            return
+        }
+        if(fogProbe) {
+            try { result.putString("stream",FogProbe.run(this));finish(Activity.RESULT_OK,result) }
+            catch(e:Throwable) { result.putString("stream","FOG_PROBE_FAIL: ${e.javaClass.simpleName}: ${e.message}");finish(Activity.RESULT_CANCELED,result) }
+            return
+        }
         if(directTrailProbe) {
             try { result.putString("stream",DirectTrailProbe.run(this));finish(Activity.RESULT_OK,result) }
             catch(e:Throwable) { result.putString("stream","DIRECT_TRAIL_DB_FAIL: ${e.javaClass.simpleName}: ${e.message}");finish(Activity.RESULT_CANCELED,result) }
@@ -300,5 +330,5 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
         // finish() can terminate the instrumented process immediately; cleanup must precede it.
         finish(resultCode,result)
     }
-    override fun onCreate(arguments:Bundle?) { directTrailProbe=arguments?.getString("directTrailProbe")=="true"; updateLogoutProbe=arguments?.getString("updateLogoutProbe")=="true";candidateSha=arguments?.getString("candidateSha");privateUpdateProbe=arguments?.getString("privateUpdateProbe")=="true";roadColorProbe=arguments?.getString("roadColorProbe")=="true"; cameraProbe=arguments?.getString("cameraProbe")=="true"; fixtureProbe=arguments?.getString("fixtureProbe")=="true"; catalogProbe=arguments?.getString("catalogProbe")=="true"; networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments); start() }
+    override fun onCreate(arguments:Bundle?) { fogImage=arguments?.getString("fogImage"); fogDataProbe=arguments?.getString("fogDataProbe")=="true"; fogUiProbe=arguments?.getString("fogUiProbe")=="true"; fogProbe=arguments?.getString("fogProbe")=="true"; directTrailProbe=arguments?.getString("directTrailProbe")=="true"; updateLogoutProbe=arguments?.getString("updateLogoutProbe")=="true";candidateSha=arguments?.getString("candidateSha");privateUpdateProbe=arguments?.getString("privateUpdateProbe")=="true";roadColorProbe=arguments?.getString("roadColorProbe")=="true"; cameraProbe=arguments?.getString("cameraProbe")=="true"; fixtureProbe=arguments?.getString("fixtureProbe")=="true"; catalogProbe=arguments?.getString("catalogProbe")=="true"; networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments); start() }
 }

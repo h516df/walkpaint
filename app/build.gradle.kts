@@ -22,8 +22,8 @@ android {
         minSdk = 26
         targetSdk = 36
         // A distinct upgrade from the distributed code 30 preview (v0.28).
-        versionCode = 33
-        versionName = "0.31"
+        versionCode = 34
+        versionName = "0.32"
         testInstrumentationRunner = "cn.walkpaint.RoadAcceptanceInstrumentation"
         // Optional phone-sized APK; the default universal debug APK remains emulator-compatible.
         if (providers.gradleProperty("walkpaintArm64Only").orNull == "true") {
@@ -47,6 +47,15 @@ android {
                 keyAlias = "androiddebugkey"
                 keyPassword = "android"
             }
+        }
+    }
+    buildTypes {
+        getByName("release") {
+            // Existing users must upgrade with the original certificate, never a new identity.
+            require(rootProject.file("${System.getProperty("user.home")}/.android/debug.keystore").isFile) {
+                "Original WalkPaint signing certificate is missing; refusing an incompatible update"
+            }
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     buildFeatures { compose = true; buildConfig = true }
