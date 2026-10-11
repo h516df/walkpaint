@@ -22,8 +22,8 @@ android {
         minSdk = 26
         targetSdk = 36
         // A distinct upgrade from the distributed code 30 preview (v0.28).
-        versionCode = 32
-        versionName = "0.30"
+        versionCode = 33
+        versionName = "0.31"
         testInstrumentationRunner = "cn.walkpaint.RoadAcceptanceInstrumentation"
         // Optional phone-sized APK; the default universal debug APK remains emulator-compatible.
         if (providers.gradleProperty("walkpaintArm64Only").orNull == "true") {
@@ -66,5 +66,6 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20250517")
 }
+
 
 

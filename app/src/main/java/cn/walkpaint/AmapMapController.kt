@@ -142,7 +142,7 @@ internal class AmapMapController(private val context: Context, private val onGes
         // Every casing first, then every core: a later line's casing must not cover an earlier core.
         paths.filter { it.size > 1 }.forEach { line ->
             a.addPolyline(PolylineOptions().addAll(line.map { toAmap(it.lat, it.lon) })
-                .width(9f * density).color(TrailOutlineArgb))
+                .width(4f * density).color(TrailOutlineArgb))
         }
         paths.forEach { line ->
             if(line.size==1) {
@@ -151,13 +151,13 @@ internal class AmapMapController(private val context: Context, private val onGes
                     .fillColor(exploredColor).strokeColor(TrailOutlineArgb).strokeWidth(1.5f*density))
             } else {
                 paintedLines+=a.addPolyline(PolylineOptions().addAll(line.map { toAmap(it.lat,it.lon) })
-                    .width(6f * density).color(exploredColor))
+                    .width(2.5f * density).color((exploredColor and 0x00FFFFFF) or (0xB0 shl 24)))
             }
         }
         // Painted ground laid over the lines. A second pass over a street repaints the same
         // pixels, so it covers the braid instead of adding to it. The lines stay underneath as a
         // safety net: if this image ever fails to draw, the trail is still on the map.
-        val painted = painter.update(paths.flatten(), paths, exploredColor,
+        val painted = painter.update(paths.flatten(), exploredColor,
             latestPosition?.let { TrackPoint(it.latitude, it.longitude, it.time, it.accuracy) })
         val frame = painter.frame()
         if (painted != null && frame != null) {
@@ -249,5 +249,6 @@ internal class AmapMapController(private val context: Context, private val onGes
             .convert() ?: point
     }
 }
+
 
 

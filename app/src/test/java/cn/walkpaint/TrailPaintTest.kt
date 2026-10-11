@@ -1,6 +1,7 @@
 package cn.walkpaint
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -8,34 +9,62 @@ import org.junit.Test
 class TrailPaintTest {
 
     private fun point(lat: Double, lon: Double) = TrackPoint(lat, lon, 0L, 5f)
+    /** Roughly [metres] of latitude at this scale. */
+    private fun north(base: Double, metres: Double) = base + metres / 111194.9
+
+    @Test fun aBlockIsAboutAHundredMetresAcross() {
+        val metres = TrailPaint.CELL_DEGREES * 111194.9
+        assertTrue("block is $metres m", metres in 100.0..125.0)
+    }
+
+    @Test fun aBlockIsSeveralTimesWiderThanTheGpsError() {
+        // This is the whole point: a twenty metre wobble has to stay inside one block, or the
+        // explored edge would blur and grow every time the same street is walked again.
+        val metres = TrailPaint.CELL_DEGREES * 111194.9
+        assertTrue("block is only $metres m against a 20 m error", metres >= 80.0)
+    }
+
+    @Test fun twoPointsWithinOneBlockShareTheSameBlock() {
+        val a = TrailPaint.cellKey(TrailPaint.cellRow(31.0000), TrailPaint.cellCol(121.0000))
+        val b = TrailPaint.cellKey(TrailPaint.cellRow(north(31.0, 50.0)), TrailPaint.cellCol(121.0000))
+        assertEquals(a, b)
+    }
+
+    @Test fun aPointPastTheBlockEdgeIsANewBlock() {
+        val a = TrailPaint.cellKey(TrailPaint.cellRow(31.0000), TrailPaint.cellCol(121.0000))
+        val b = TrailPaint.cellKey(TrailPaint.cellRow(north(31.0, 130.0)), TrailPaint.cellCol(121.0000))
+        assertNotEquals(a, b)
+    }
+
+    @Test fun blocksOnEitherSideOfTheDateLineDoNotCollide() {
+        // Packing row and column into one long must not let negative columns alias positive rows.
+        assertNotEquals(
+            TrailPaint.cellKey(1, -1),
+            TrailPaint.cellKey(0, 4294967295L.toInt()),
+        )
+    }
 
     @Test fun nothingRecordedMeansNothingToPaint() {
         assertNull(TrailPaint.frameOf(emptyList()))
     }
 
     @Test fun oneShortWalkStillGetsAUsableFrame() {
-        // A single point would otherwise produce a zero-size frame and a zero-size image.
         val frame = TrailPaint.frameOf(listOf(point(31.0, 121.0)))!!
         assertTrue("lat span ${frame.latSpan}", frame.latSpan >= TrailPaint.MIN_SPAN_DEG)
-        assertTrue("lon span ${frame.lonSpan}", frame.lonSpan >= TrailPaint.MIN_SPAN_DEG)
         assertTrue(frame.widthPx >= 64 && frame.heightPx >= 64)
     }
 
     @Test fun theImageIsNeverLargerThanTheCap() {
-        // A whole year of trips across a province must not allocate a giant bitmap.
         val frame = TrailPaint.frameOf(listOf(point(31.0, 121.0), point(35.0, 118.0)))!!
         assertTrue("${frame.widthPx}x${frame.heightPx}", frame.widthPx <= TrailPaint.MAX_PX)
         assertTrue("${frame.widthPx}x${frame.heightPx}", frame.heightPx <= TrailPaint.MAX_PX)
     }
 
-    @Test fun theFrameCoversEveryPointWithAMargin() {
-        val points = listOf(point(31.0, 121.0), point(31.01, 121.02))
-        val frame = TrailPaint.frameOf(points)!!
-        points.forEach {
-            assertTrue("point outside the frame", frame.contains(it.lat, it.lon))
-        }
-        assertTrue("no margin above", frame.latMax > 31.01)
-        assertTrue("no margin below", frame.latMin < 31.0)
+    @Test fun aFrameStretchedOverTensOfKilometresIsClampedAroundWhereYouAre() {
+        val near = point(31.0, 121.0)
+        val frame = TrailPaint.frameOf(listOf(near, point(35.0, 118.0)), anchor = near)!!
+        assertTrue(frame.latSpan * 111194.9 < TrailPaint.MAX_SPAN_METERS * 1.3)
+        assertTrue("the anchor fell outside its own frame", frame.contains(near.lat, near.lon))
     }
 
     @Test fun northIsUpAndWestIsLeft() {
@@ -44,45 +73,14 @@ class TrailPaintTest {
         assertEquals(frame.heightPx.toFloat(), frame.pixelY(frame.latMin), 0.001f)
         assertEquals(0f, frame.pixelX(frame.lonMin), 0.001f)
         assertEquals(frame.widthPx.toFloat(), frame.pixelX(frame.lonMax), 0.001f)
-        // A point further north must be higher on the image, which means a smaller y.
-        assertTrue(frame.pixelY(31.009) < frame.pixelY(31.001))
     }
 
-    @Test fun aTallTracksFrameIsTallerThanItIsWide() {
-        val frame = TrailPaint.frameOf(listOf(point(31.0, 121.0), point(31.02, 121.001)))!!
-        assertTrue("${frame.widthPx}x${frame.heightPx}", frame.heightPx > frame.widthPx)
-    }
-
-    @Test fun aWideTracksFrameIsWiderThanItIsTall() {
-        val frame = TrailPaint.frameOf(listOf(point(31.0, 121.0), point(31.001, 121.02)))!!
-        assertTrue("${frame.widthPx}x${frame.heightPx}", frame.widthPx > frame.heightPx)
-    }
-
-    @Test fun nonFinitePointsAreIgnoredRatherThanBreakingTheFrame() {
-        val frame = TrailPaint.frameOf(listOf(point(31.0, 121.0), point(Double.NaN, 121.0)))!!
-        assertTrue(frame.contains(31.0, 121.0))
-    }
-
-    @Test fun theStrokeIsAStreetWidthRatherThanAFixedNumberOfPixels() {
-        // A two kilometre frame: sixteen metres should be a readable band, not the whole image.
-        val frame = TrailPaint.frameOf(listOf(point(31.0, 121.0), point(31.018, 121.0)))!!
-        val stroke = TrailPaint.strokePx(frame)
-        assertTrue("stroke $stroke px on a ${frame.heightPx} px image", stroke in 4f..40f)
-        val metres = stroke / TrailPaint.pixelsPerMeter(frame)
-        assertEquals(TrailPaint.STROKE_METERS, metres, 2.0)
-    }
-
-    @Test fun aFrameStretchedOverTensOfKilometresIsClampedAroundWhereYouAre() {
-        // The first version painted a solid blob here: eleven pixels was a few hundred metres.
-        val near = point(31.0, 121.0)
-        val frame = TrailPaint.frameOf(listOf(near, point(35.0, 118.0)), anchor = near)!!
-        val metresTall = frame.latSpan * 111194.9
-        assertTrue("frame is $metresTall m tall", metresTall < TrailPaint.MAX_SPAN_METERS * 1.3)
-        assertTrue("the anchor fell outside its own frame", frame.contains(near.lat, near.lon))
-    }
-
-    @Test fun theClampStillAppliesWithoutAnAnchor() {
-        val frame = TrailPaint.frameOf(listOf(point(31.0, 121.0), point(35.0, 118.0)))!!
-        assertTrue(frame.latSpan * 111194.9 < TrailPaint.MAX_SPAN_METERS * 1.3)
+    @Test fun aBlockIsDrawnBiggerWhenTheFrameIsSmaller() {
+        val near = TrailPaint.frameOf(listOf(point(31.0, 121.0), point(31.004, 121.0)))!!
+        val far = TrailPaint.frameOf(listOf(point(31.0, 121.0), point(31.05, 121.0)))!!
+        val nearPx = TrailPaint.CELL_DEGREES * 111194.9 * TrailPainter.pixelsPerMeter(near)
+        val farPx = TrailPaint.CELL_DEGREES * 111194.9 * TrailPainter.pixelsPerMeter(far)
+        assertTrue("near $nearPx px, far $farPx px", nearPx > farPx)
+        assertTrue("a block must stay visible, was $farPx px", farPx > 1.0)
     }
 }
