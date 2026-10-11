@@ -2,7 +2,7 @@
 
 **先说结论**：用户反复反馈的三项——地图拖动与进入地图页卡顿、迷雾是一块块方形色块、轨迹线上有串珠与麻花——在同一套夹具、视角与手势下复现、修掉并复测。**高德 ARM 真机路径在本机无法运行（第 6 节），因此"手机上的观感与帧率"仍未验收**，不能据此宣称用户的手机已经修好。
 
-工作目录 `D:\Worktrees\WalkPaint\dsh-lasterror`，分支 `fix/dsh-lasterror-recovery`。改动逐条见 `CHANGELOG.md` 顶部 0.37 段；本轮提交与指纹见第 7 节。
+工作目录 `D:\Worktrees\WalkPaint\dsh-lasterror`，分支 `fix/dsh-lasterror-recovery`，HEAD `6565e7c802e61ac2c78fa1b4352d026cf27a0487`（业务改动 `9672f2f`）。改动逐条见 `CHANGELOG.md` 顶部 0.37 段；本轮提交与指纹见第 7 节。
 
 ## 1. 场景（修复前与修复后完全相同）
 
