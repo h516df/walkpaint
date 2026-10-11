@@ -193,6 +193,7 @@ private fun TripsPage(state:TrackState,onTrip:(Track)->Unit,place:String,share:P
             }
         }
         item { PlaceCard(place,share,streak) }
+        item { RecapCard(RecapMaker.of(days,today.take(7)),RecapMaker.of(days,today.take(4))) }
         item { FootprintCalendar(days,today,onTrip) }
        if(days.isEmpty()) {
             item { Text("开启自动记录后，走过的地方会在地图上留下颜色。",color=Muted,fontSize=BodySize) }
@@ -219,6 +220,41 @@ private fun monthLabel(month:String):String = "${month.take(4)} 年 ${month.subs
  * percentage without its denominator is not a fact, which is why the earlier attempt at a
  * percentage was dropped rather than shipped.
  */
+/**
+ * The month and the year in the person's own terms, not a chart.
+ *
+ * Numbers people actually say out loud: how far, how many days, the longest run, and the one day
+ * they went furthest. Everything comes from the stored days, so it needs no server and cannot drift
+ * from the calendar below it.
+ */
+@Composable
+private fun RecapCard(month:Recap?,year:Recap?) {
+    if(month==null && year==null) return
+    Section("回顾") {
+        month?.let { RecapRow("本月", it) }
+        if(year!=null && year.period!=month?.period) {
+            Spacer(Modifier.height(14.dp))
+            RecapRow("今年", year)
+        }
+    }
+}
+
+@Composable
+private fun RecapRow(label:String,recap:Recap) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.Bottom) {
+            Text(label,color=Muted,fontSize=CaptionSize,modifier=Modifier.padding(bottom=3.dp))
+            Spacer(Modifier.weight(1f))
+            Text(exploredDistance(recap.meters),color=Ink,fontSize=TitleSize,
+                fontWeight=FontWeight.Bold,style=TabularFigures)
+        }
+        Spacer(Modifier.height(6.dp))
+        Text("${recap.days} 天有足迹 · 连续最多 ${recap.longestStreak} 天 · 最远的一天 " +
+            "${recap.bestDay.replace('-','/')} 走了 ${exploredDistance(recap.bestDayMeters)}",
+            color=Muted,fontSize=MicroSize,lineHeight=17.sp)
+    }
+}
+
 @Composable
 private fun PlaceCard(place:String,share:PlaceShare,streak:Int) {
     Section("探索") {
@@ -546,6 +582,7 @@ private fun ProfilePage(automatic:Boolean,notice:String?,onResolve:()->Unit,
         confirmButton={TextButton(onClick={revokeConfirm=false;onRevoke()}) {Text("撤回授权")}},
         dismissButton={TextButton(onClick={revokeConfirm=false}) {Text("取消")}})
 }
+
 
 
 
