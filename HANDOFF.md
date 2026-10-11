@@ -2,7 +2,7 @@
 
 > 本节取代下方 v0.26 段落作为当前状态。用户反复反馈的三项——地图拖动 / 进入地图页卡顿、迷雾是一块块方形色块、轨迹线上的串珠与麻花——已在同一场景复现、修掉并复测。**高德 ARM 真机路径在本机无法运行，未验收**；候选包与证据已就绪但**未上传、未建 Release、未合并 PR**，发布与真机验收都还差用户一句话。
 
-- **工作目录 / 分支**：`D:\Worktrees\WalkPaint\dsh-lasterror`，`fix/dsh-lasterror-recovery`，HEAD `6565e7c802e61ac2c78fa1b4352d026cf27a0487`（业务改动在 `9672f2f`）。与 `D:\Projects\WalkPaint` 完全隔离，主副本未改。
+- **工作目录 / 分支**：`D:\Worktrees\WalkPaint\dsh-lasterror`，`fix/dsh-lasterror-recovery`，业务改动 `9672f2f`（其后提交只改文档与验收脚本，最新为 `3ad1914`）。与 `D:\Projects\WalkPaint` 完全隔离，主副本未改。
 - **版本**：`versionCode 39` / `versionName 0.37`；包名 `cn.walkpaint`、schema2、原 debug 签名不变，可覆盖安装、不丢足迹。
 - **候选包（未发布）**：
   - 手机 arm64：`release-out/WalkPaint-v0.37-arm64-debug.apk`，70,387,084 字节，SHA256 `4a2f1bf8efa14cec54e5d3c8887eb0dd6a769e3557a2e6250bc2fecd437ff06e`
