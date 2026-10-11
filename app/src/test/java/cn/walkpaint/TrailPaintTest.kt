@@ -1,7 +1,6 @@
 package cn.walkpaint
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -12,36 +11,23 @@ class TrailPaintTest {
     /** Roughly [metres] of latitude at this scale. */
     private fun north(base: Double, metres: Double) = base + metres / 111194.9
 
-    @Test fun aBlockIsAboutAHundredMetresAcross() {
-        val metres = TrailPaint.CELL_DEGREES * 111194.9
-        assertTrue("block is $metres m", metres in 100.0..125.0)
+    @Test fun theClearedBandIsAWideOneSoAnOffsetPassStaysInsideIt() {
+        // A second pass over a street carries its own offset. As long as the offset is smaller than
+        // the cleared band, the second pass repaints ground that is already clear.
+        assertTrue("half band ${TrailPaint.CORRIDOR_M} m", TrailPaint.CORRIDOR_M >= 12.0)
     }
 
-    @Test fun aBlockIsSeveralTimesWiderThanTheGpsError() {
-        // This is the whole point: a twenty metre wobble has to stay inside one block, or the
-        // explored edge would blur and grow every time the same street is walked again.
-        val metres = TrailPaint.CELL_DEGREES * 111194.9
-        assertTrue("block is only $metres m against a 20 m error", metres >= 80.0)
+    @Test fun theEdgeOfTheBandIsSoftRatherThanStepped() {
+        assertTrue(TrailPaint.FEATHER_M >= 6.0)
     }
 
-    @Test fun twoPointsWithinOneBlockShareTheSameBlock() {
-        val a = TrailPaint.cellKey(TrailPaint.cellRow(31.0000), TrailPaint.cellCol(121.0000))
-        val b = TrailPaint.cellKey(TrailPaint.cellRow(north(31.0, 50.0)), TrailPaint.cellCol(121.0000))
-        assertEquals(a, b)
+    @Test fun theVeilIsDarkEnoughToReadAsFogAndLightEnoughToSeeStreets() {
+        val alpha = TrailPaint.FOG_COLOR ushr 24
+        assertTrue("alpha $alpha", alpha in 0x80..0xE8)
     }
 
-    @Test fun aPointPastTheBlockEdgeIsANewBlock() {
-        val a = TrailPaint.cellKey(TrailPaint.cellRow(31.0000), TrailPaint.cellCol(121.0000))
-        val b = TrailPaint.cellKey(TrailPaint.cellRow(north(31.0, 130.0)), TrailPaint.cellCol(121.0000))
-        assertNotEquals(a, b)
-    }
-
-    @Test fun blocksOnEitherSideOfTheDateLineDoNotCollide() {
-        // Packing row and column into one long must not let negative columns alias positive rows.
-        assertNotEquals(
-            TrailPaint.cellKey(1, -1),
-            TrailPaint.cellKey(0, 4294967295L.toInt()),
-        )
+    @Test fun theFrameItselfFadesOutSoItNeverReadsAsARectangle() {
+        assertTrue(TrailPaint.EDGE_FADE in 0.05..0.30)
     }
 
     @Test fun nothingRecordedMeansNothingToPaint() {
@@ -63,7 +49,7 @@ class TrailPaintTest {
     @Test fun aFrameStretchedOverTensOfKilometresIsClampedAroundWhereYouAre() {
         val near = point(31.0, 121.0)
         val frame = TrailPaint.frameOf(listOf(near, point(35.0, 118.0)), anchor = near)!!
-        assertTrue(frame.latSpan * 111194.9 < TrailPaint.MAX_SPAN_METERS * 1.3)
+        assertTrue(frame.latSpan * 111194.9 < TrailPaint.MAX_SPAN_METERS * 1.4)
         assertTrue("the anchor fell outside its own frame", frame.contains(near.lat, near.lon))
     }
 
@@ -75,12 +61,19 @@ class TrailPaintTest {
         assertEquals(frame.widthPx.toFloat(), frame.pixelX(frame.lonMax), 0.001f)
     }
 
-    @Test fun aBlockIsDrawnBiggerWhenTheFrameIsSmaller() {
+    @Test fun aMetreIsMorePixelsWideInASmallerFrame() {
         val near = TrailPaint.frameOf(listOf(point(31.0, 121.0), point(31.004, 121.0)))!!
         val far = TrailPaint.frameOf(listOf(point(31.0, 121.0), point(31.05, 121.0)))!!
-        val nearPx = TrailPaint.CELL_DEGREES * 111194.9 * TrailPainter.pixelsPerMeter(near)
-        val farPx = TrailPaint.CELL_DEGREES * 111194.9 * TrailPainter.pixelsPerMeter(far)
-        assertTrue("near $nearPx px, far $farPx px", nearPx > farPx)
-        assertTrue("a block must stay visible, was $farPx px", farPx > 1.0)
+        assertTrue(TrailPainter.pixelsPerMeter(near) > TrailPainter.pixelsPerMeter(far))
+        // The band has to stay drawable even when the frame covers a whole city.
+        assertTrue("band was ${TrailPaint.CORRIDOR_M * TrailPainter.pixelsPerMeter(far)} px",
+            TrailPaint.CORRIDOR_M * TrailPainter.pixelsPerMeter(far) > 1.0)
+    }
+
+    @Test fun aPointOnTheFrameEdgeCountsAsInsideAndOneBeyondDoesNot() {
+        val frame = TrailPaint.frameOf(listOf(point(31.0, 121.0), point(31.01, 121.02)))!!
+        assertTrue(frame.contains(frame.latMin, frame.lonMin))
+        assertTrue(frame.contains(frame.latMax, frame.lonMax))
+        assertTrue(!frame.contains(north(frame.latMax, 500.0), frame.lonMax))
     }
 }

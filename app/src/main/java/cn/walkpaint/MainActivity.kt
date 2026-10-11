@@ -130,6 +130,12 @@ class MainActivity : ComponentActivity() {
     private var roadState by mutableStateOf(RoadState())
     private var mapRoadState by mutableStateOf(RoadState())
     private var mapTrackState by mutableStateOf(TrackState())
+    /**
+     * The line drawn for one selected day, and nothing at all for the default view: there the veil
+     * paints the ground, which is both the point of the app and the only way a long history cannot
+     * pile up as a braid of overlapping passes.
+     */
+    private var mapTrailPaths: List<List<TrackPoint>> = emptyList()
     private var selectedDay by mutableStateOf<String?>(null)
     private var roadAreaHint by mutableStateOf("")
     private var boundaryCatalog: RoadCatalog?=null
@@ -146,15 +152,17 @@ class MainActivity : ComponentActivity() {
     private var onlineMap by mutableStateOf(false)
     private var showOnlineConsent by mutableStateOf(false)
     private var paintedJson = RoadState().geoJson(true)
-    /** Lit ground as merged strips, so the map never has to carry one shape per cell. */
-    private var exploredJson = Explorer.stripsGeoJson(TrackState())
-    /** The same fog the AMap path shows, so a device without AMap is not missing the feature. */
+    /**
+     * The veil, one image shared by both renderers. Painting it is real work over the whole
+     * history, so it happens away from the UI thread and only reports a new [TrailPainter.revision]
+     * when the ground under the person actually changed.
+     */
     private val fogPainter = TrailPainter()
     private var fogBitmap: android.graphics.Bitmap? = null
     private var fogFrame: PaintFrame? = null
+    private var fogRevision = -1
+    private var fogSourceRevision = -1
     private var roadJson = RoadState().geoJson(false)
-    private var realGeoJson = geoJson(emptyList())
-    private var demoGeoJson = geoJson(emptyList())
     private var pendingEnable by mutableStateOf(false)
     private var pendingCenter by mutableStateOf(false)
     private var lastRevision = -1L
@@ -586,8 +594,12 @@ class MainActivity : ComponentActivity() {
         roadAreaHint = ""
         if ((lastRevision != repository.revision || dailyRoadDate != DailyFootprints.key(System.currentTimeMillis())) && refreshing.compareAndSet(false, true)) {
             val day=selectedDay
+            // Read on the UI thread: the worker must not race a fix arriving while it paints.
+            val fogColour = roadColor
+            val fogAnchor = userFix?.let { TrackPoint(it.latitude, it.longitude, it.time, it.accuracy) }
             refreshExecutor.execute {
                 try {
+                    val updateStart = System.nanoTime()
                     val revision = repository.revision
                     val next = repository.snapshot()
                     // Compute expensive history/geometry work away from the UI thread.
@@ -598,25 +610,33 @@ class MainActivity : ComponentActivity() {
                     val daily = emptyMap<String,RoadState>()
                     val displayedRoad = RoadState()
                     val displayedTrack = DailyFootprints.select(next,day)
-                    val painted = geoJson(displayedTrack.realTracks)
-                    val real = geoJson(displayedTrack.realTracks)
-                    val demo = geoJson(next.tracks.filter { it.demo })
-                    // Explored ground is cumulative, so it reads the whole history rather than the
-                    // selected day: the point is to see everything you have ever lit up at once.
-                    val explored = Explorer.stripsGeoJson(next)
-                    val fogPoints = next.realTracks.filterNot { it.demo }.flatMap { it.points }
-                    val fogImage = fogPainter.update(fogPoints, roadColor,
-                        userFix?.let { TrackPoint(it.latitude, it.longitude, it.time, it.accuracy) })
+                    // The default view draws no line: the veil below is the paint, so a long
+                    // history cannot pile up as overlapping passes. A chosen day does draw its
+                    // route, with repeated ground collapsed, because that is what was asked for.
+                    val trail = if (day == null) emptyList()
+                    else TrailShape.dedupe(RecordedTrail.paths(displayedTrack.realTracks))
+                    val painted = TrackMapJson.encodePaths(trail)
+                    // The veil is cumulative, like the explored ground: it shows everything walked,
+                    // never just the selected day, and it is the only thing that paints the ground.
+                    val veilStart = System.nanoTime()
+                    val fogImage = fogPainter.update(RecordedTrail.paths(next.realTracks), fogColour, fogAnchor)
+                    val veilNanos = System.nanoTime() - veilStart
+                    if (BuildConfig.DEBUG) {
+                        PerfTrace.update(veilStart - updateStart, veilNanos, fogPainter.lastUpdateRebuilt)
+                    }
                     val fogBounds = fogPainter.frame()
+                    val fogStamp = fogPainter.revision
                     runOnUiThread {
                         if(selectedDay!=day) return@runOnUiThread
+                        val uiStart = System.nanoTime()
                         snapshot = next; lastRevision = revision
                         dailyRoads=daily; dailyRoadDate=today
                         mapTrackState=displayedTrack; mapRoadState=displayedRoad
-                        realGeoJson = real; demoGeoJson = demo
+                        mapTrailPaths = trail
                         roadState = road; roadJson = roadBase; paintedJson = painted
-                        exploredJson = explored; fogBitmap = fogImage; fogFrame = fogBounds
+                        fogBitmap = fogImage; fogFrame = fogBounds; fogRevision = fogStamp
                         updateMapLayers()
+                        if (BuildConfig.DEBUG) PerfTrace.ui(System.nanoTime() - uiStart)
                     }
                 } finally { refreshing.set(false) }
             }
@@ -959,13 +979,8 @@ class MainActivity : ComponentActivity() {
                 style.addSource(GeoJsonSource("wp-user", userJson(userFix)))
                 style.addSource(GeoJsonSource("wp-roads", roadJson))
                 style.addSource(GeoJsonSource("wp-painted", paintedJson))
-                style.addSource(GeoJsonSource("wp-explored", exploredJson))
-                // Same colour as the trail line below, so the ground and the line are one mark on
-                // both renderers; the AMap path already follows the chosen colour.
-                style.addLayer(org.maplibre.android.style.layers.FillLayer("wp-explored-fill","wp-explored")
-                    .withProperties(
-                        PropertyFactory.fillColor(roadColor),
-                        PropertyFactory.fillOpacity(Explorer.EXPLORED_FILL_ALPHA)))
+                // No explored-ground fill and no seed circles: the veil below paints the walked
+                // ground, and a circle per point drew the string of beads the person reported.
                 style.addLayer(LineLayer("wp-road-base","wp-roads").withProperties(
                     PropertyFactory.lineColor(UnexploredRoadArgb),
                     PropertyFactory.lineWidth(3f),PropertyFactory.lineOpacity(0.85f)))
@@ -975,15 +990,14 @@ class MainActivity : ComponentActivity() {
                 style.addLayer(LineLayer("wp-painted-line","wp-painted").withProperties(
                     PropertyFactory.lineColor(roadColor),PropertyFactory.lineWidth(6f),
                     PropertyFactory.lineCap(Property.LINE_CAP_ROUND),PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)))
-                style.addLayer(CircleLayer("wp-trail-seed","wp-painted").withProperties(
-                    PropertyFactory.circleColor(roadColor),PropertyFactory.circleRadius(4f),
-                    PropertyFactory.circleStrokeColor(TrailOutlineArgb),PropertyFactory.circleStrokeWidth(1.5f)))
                 style.addLayer(CircleLayer("wp-user-halo", "wp-user").withProperties(
                     PropertyFactory.circleColor(android.graphics.Color.rgb(29, 132, 211)),
                     PropertyFactory.circleRadius(16f),
                     PropertyFactory.circleOpacity(0.18f)
                 ))
-                // The style is brand new, so push what was already loaded.
+                // The style is brand new, so push what was already loaded. The fog source went with
+                // the old style, so its remembered revision has to be forgotten as well.
+                fogSourceRevision = -1
                 updateMapLayers()
                 style.addLayer(CircleLayer("wp-user-dot", "wp-user").withProperties(
                     PropertyFactory.circleColor(android.graphics.Color.rgb(23, 119, 205)),
@@ -1020,33 +1034,47 @@ class MainActivity : ComponentActivity() {
         amapController.setExploredColor(color)
         mapInstance?.style?.getLayerAs<LineLayer>("wp-painted-line")
             ?.setProperties(PropertyFactory.lineColor(color))
-        mapInstance?.style?.getLayerAs<CircleLayer>("wp-trail-seed")
-            ?.setProperties(PropertyFactory.circleColor(color))
+        // The veil carries the pigment as well, so it has to be repainted in the new colour. Same
+        // single-threaded worker as the refresh, so the two can never overlap.
+        refreshExecutor.execute { fogPainter.clear() }
+        fogSourceRevision = -1
+        // Nothing else changed, so the refresh would not run; ask for it explicitly.
+        lastRevision = -1
+        updateUi()
     }
 
     private fun updateMapLayers() {
         if (amapActive) {
-            amapController.render(mapTrackState,mapRoadState)
+            amapController.render(mapTrackState,mapRoadState,mapTrailPaths,fogBitmap,fogFrame,fogRevision)
             return
         }
         val style = mapInstance?.style ?: return
         style.getSourceAs<GeoJsonSource>("wp-roads")?.setGeoJson(roadJson)
         style.getSourceAs<GeoJsonSource>("wp-painted")?.setGeoJson(paintedJson)
-        style.getSourceAs<GeoJsonSource>("wp-explored")?.setGeoJson(exploredJson)
         val fog = fogBitmap
         val fogBounds = fogFrame
-        if (fog != null && fogBounds != null) {
-            // Rebuilt rather than swapped: an image source holds the image it was made with, so
-            // setting an image on a source built from a placeholder leaves nothing on the map.
-            runCatching { style.removeLayer("wp-fog") }
-            runCatching { style.removeSource("wp-fog") }
-            style.addSource(org.maplibre.android.style.sources.ImageSource("wp-fog",
-                org.maplibre.android.geometry.LatLngQuad(
-                    org.maplibre.android.geometry.LatLng(fogBounds.latMax, fogBounds.lonMin),
-                    org.maplibre.android.geometry.LatLng(fogBounds.latMax, fogBounds.lonMax),
-                    org.maplibre.android.geometry.LatLng(fogBounds.latMin, fogBounds.lonMax),
-                    org.maplibre.android.geometry.LatLng(fogBounds.latMin, fogBounds.lonMin)), fog))
-            style.addLayer(org.maplibre.android.style.layers.RasterLayer("wp-fog","wp-fog"))
+        // Rebuilt rather than swapped: an image source holds the image it was made with, so setting
+        // an image on a source built from a placeholder leaves nothing on the map. Rebuilding it on
+        // every update was a hitch every two seconds, so it only happens when the veil changed.
+        if (fog != null && fogBounds != null && fogRevision != fogSourceRevision) {
+            fogSourceRevision = fogRevision
+            val handoverStart = System.nanoTime()
+            val quad = org.maplibre.android.geometry.LatLngQuad(
+                org.maplibre.android.geometry.LatLng(fogBounds.latMax, fogBounds.lonMin),
+                org.maplibre.android.geometry.LatLng(fogBounds.latMax, fogBounds.lonMax),
+                org.maplibre.android.geometry.LatLng(fogBounds.latMin, fogBounds.lonMax),
+                org.maplibre.android.geometry.LatLng(fogBounds.latMin, fogBounds.lonMin))
+            val existing = style.getSourceAs<org.maplibre.android.style.sources.ImageSource>("wp-fog")
+            if (existing != null) {
+                // In place. Tearing the source and layer down and building them again put a
+                // fifty-millisecond hitch on the UI thread every time the veil changed.
+                existing.setCoordinates(quad)
+                existing.setImage(fog)
+            } else {
+                style.addSource(org.maplibre.android.style.sources.ImageSource("wp-fog", quad, fog))
+                style.addLayer(org.maplibre.android.style.layers.RasterLayer("wp-fog","wp-fog"))
+            }
+            if (BuildConfig.DEBUG) PerfTrace.upload(System.nanoTime() - handoverStart)
         }
     }
 

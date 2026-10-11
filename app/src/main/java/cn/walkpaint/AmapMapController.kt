@@ -1,22 +1,25 @@
 package cn.walkpaint
 
 import android.content.Context
-import android.location.Location
-import android.os.Bundle
-import android.graphics.Color
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Paint
+import android.location.Location
 import com.amap.api.maps.AMap
 import com.amap.api.maps.CameraUpdateFactory
 import com.amap.api.maps.CoordinateConverter
-import com.amap.api.maps.MapsInitializer
 import com.amap.api.maps.MapView
+import com.amap.api.maps.MapsInitializer
 import com.amap.api.maps.model.BitmapDescriptorFactory
-import com.amap.api.maps.model.CircleOptions
+import com.amap.api.maps.model.CameraPosition
+import com.amap.api.maps.model.GroundOverlay
+import com.amap.api.maps.model.GroundOverlayOptions
 import com.amap.api.maps.model.LatLng
+import com.amap.api.maps.model.LatLngBounds
 import com.amap.api.maps.model.Marker
 import com.amap.api.maps.model.MarkerOptions
+import com.amap.api.maps.model.Polyline
 import com.amap.api.maps.model.PolylineOptions
 
 /**
@@ -31,10 +34,19 @@ internal class AmapMapController(private val context: Context, private val onGes
     private var currentMarker: Marker? = null
     private var latestPosition: Location? = null
     private var initialFocusPending = true
-    private var exploredColor=ExploredRoadArgb
-    private val paintedLines=mutableListOf<com.amap.api.maps.model.Polyline>()
-    private val paintedSeeds=mutableListOf<com.amap.api.maps.model.Circle>()
-    private var retainedCamera:com.amap.api.maps.model.CameraPosition?=null
+    private var exploredColor = ExploredRoadArgb
+    /**
+     * Overlays are kept and their geometry replaced, never cleared and rebuilt. A full rebuild on
+     * every fix recreated every line the person had ever walked; on the phone that is what the
+     * dragging and zooming stutter was.
+     */
+    private val casings = mutableListOf<Polyline>()
+    private val cores = mutableListOf<Polyline>()
+    private var ground: GroundOverlay? = null
+    private var paintedRevision = -1
+    /** Display coordinates are converted once per point, not once per point per redraw. */
+    private val converted = HashMap<Long, LatLng>()
+    private var retainedCamera: CameraPosition?=null
     private val density = context.resources.displayMetrics.density
     private val blueDot by lazy {
         val bitmap = Bitmap.createBitmap((32*density).toInt(),(32*density).toInt(),Bitmap.Config.ARGB_8888)
@@ -50,14 +62,10 @@ internal class AmapMapController(private val context: Context, private val onGes
     private var gestureActive = false
     private var pendingState: TrackState? = null
     private var pendingRoads: RoadState? = null
-    private val exploredShapes = mutableListOf<com.amap.api.maps.model.Polygon>()
-    private val painter = TrailPainter()
-    private var paintedRevision = -1
-
-    /** The explored ground wears the same colour as the trail, just faint enough to read through. */
-    private fun exploredTint(color:Int)=Color.argb(
-        (Explorer.EXPLORED_FILL_ALPHA*255f).toInt(),
-        Color.red(color),Color.green(color),Color.blue(color))
+    private var pendingPaths: List<List<TrackPoint>> = emptyList()
+    private var pendingFog: Bitmap? = null
+    private var pendingFrame: PaintFrame? = null
+    private var pendingRevision = -1
 
     fun create(state: TrackState, location: Location?, roads: RoadState, color:Int=ExploredRoadArgb): MapView {
         exploredColor=color
@@ -69,6 +77,11 @@ internal class AmapMapController(private val context: Context, private val onGes
         view.onCreate(null)
         currentView = view
         map = view.map
+        casings.clear()
+        cores.clear()
+        ground = null
+        paintedRevision = -1
+        converted.clear()
         map?.uiSettings?.isZoomControlsEnabled = false
         map?.uiSettings?.isCompassEnabled = false
         map?.uiSettings?.isRotateGesturesEnabled = true
@@ -92,68 +105,51 @@ internal class AmapMapController(private val context: Context, private val onGes
         map?.uiSettings?.isTiltGesturesEnabled = false
         latestPosition = location
         initialFocusPending = true
-        render(state,roads)
+        render(state,roads,emptyList(),null,null,-1)
         retainedCamera?.let { map?.moveCamera(CameraUpdateFactory.newCameraPosition(it));initialFocusPending=false }
         return view
     }
 
     /**
-     * A full rebuild clears the map and re-adds every overlay, so if one lands in the middle of a
-     * pinch or a drag the gesture visibly hitches. A request raised during a gesture is held and
-     * applied once the finger lifts.
+     * A replace of every overlay lands in the middle of a pinch or a drag as a visible hitch, so a
+     * request raised during a gesture is held and applied once the finger lifts.
      */
-    fun render(state: TrackState, roads: RoadState) {
-        if (gestureActive) { pendingState = state; pendingRoads = roads; return }
-        renderNow(state, roads)
+    fun render(state: TrackState, roads: RoadState, paths: List<List<TrackPoint>>,
+               fog: Bitmap?, fogFrame: PaintFrame?, fogRevision: Int) {
+        if (gestureActive) {
+            pendingState = state; pendingRoads = roads; pendingPaths = paths
+            pendingFog = fog; pendingFrame = fogFrame; pendingRevision = fogRevision
+            return
+        }
+        renderNow(state, roads, paths, fog, fogFrame, fogRevision)
     }
 
     private fun endGesture() {
         gestureActive = false
         val state = pendingState
         val roads = pendingRoads
+        val paths = pendingPaths
+        val fog = pendingFog
+        val frame = pendingFrame
+        val revision = pendingRevision
         pendingState = null
         pendingRoads = null
-        if (state != null && roads != null) renderNow(state, roads)
+        pendingPaths = emptyList()
+        pendingFog = null
+        pendingFrame = null
+        pendingRevision = -1
+        if (state != null && roads != null) renderNow(state, roads, paths, fog, frame, revision)
     }
 
-    private fun renderNow(state: TrackState, roads: RoadState) {
+    private fun renderNow(state: TrackState, roads: RoadState, paths: List<List<TrackPoint>>,
+                          fog: Bitmap?, fogFrame: PaintFrame?, fogRevision: Int) {
         val a = map ?: return
-        a.clear()
-        paintedLines.clear()
-        paintedSeeds.clear()
-        currentMarker = null
-        // Explored ground is the fog layer now; the 550 m tint that used to sit here duplicated it.
-        val paths = RecordedTrail.paths(state.realTracks)
-        // Every casing first, then every core: a later line's casing must not cover an earlier core.
-        paths.filter { it.size > 1 }.forEach { line ->
-            a.addPolyline(PolylineOptions().addAll(line.map { toAmap(it.lat, it.lon) })
-                .width(4f * density).color(TrailOutlineArgb))
-        }
-        paths.forEach { line ->
-            if(line.size==1) {
-                val p=line.single()
-                paintedSeeds+=a.addCircle(CircleOptions().center(toAmap(p.lat,p.lon)).radius(2.5)
-                    .fillColor(exploredColor).strokeColor(TrailOutlineArgb).strokeWidth(1.5f*density))
-            } else {
-                paintedLines+=a.addPolyline(PolylineOptions().addAll(line.map { toAmap(it.lat,it.lon) })
-                    .width(2.5f * density).color((exploredColor and 0x00FFFFFF) or (0xB0 shl 24)))
-            }
-        }
-        // Painted ground laid over the lines. A second pass over a street repaints the same
-        // pixels, so it covers the braid instead of adding to it. The lines stay underneath as a
-        // safety net: if this image ever fails to draw, the trail is still on the map.
-        val painted = painter.update(paths.flatten(), exploredColor,
-            latestPosition?.let { TrackPoint(it.latitude, it.longitude, it.time, it.accuracy) })
-        val frame = painter.frame()
-        // Handing the map a fresh five megabyte bitmap on every fix is what made it stutter.
-        if (painted != null && frame != null && painter.revision != paintedRevision) {
-            paintedRevision = painter.revision
-            a.addGroundOverlay(com.amap.api.maps.model.GroundOverlayOptions()
-                .image(com.amap.api.maps.model.BitmapDescriptorFactory.fromBitmap(painted))
-                .positionFromBounds(com.amap.api.maps.model.LatLngBounds(
-                    toAmap(frame.latMin, frame.lonMin), toAmap(frame.latMax, frame.lonMax)))
-                .zIndex(9f))
-        }
+        // Explored ground is the veil layer now; a second tint on top of it was duplication, and a
+        // line over it was what braided. Only a day the person asked to look at is drawn as a line.
+        syncLines(a, casings, paths, 4f * density, TrailOutlineArgb, 1f)
+        syncLines(a, cores, paths, 2.5f * density,
+            (exploredColor and 0x00FFFFFF) or (0xB0 shl 24), 2f)
+        syncGround(a, fog, fogFrame, fogRevision)
         updateUser(latestPosition)
         if(initialFocusPending) {
             val current=latestPosition?.let { TrackPoint(it.latitude,it.longitude,it.time,it.accuracy) }
@@ -164,10 +160,45 @@ internal class AmapMapController(private val context: Context, private val onGes
         }
     }
 
+    /** Grows or shrinks the overlay list to match, then replaces points in place. */
+    private fun syncLines(a: AMap, target: MutableList<Polyline>, paths: List<List<TrackPoint>>,
+                          width: Float, color: Int, zIndex: Float) {
+        while (target.size > paths.size) target.removeAt(target.size - 1).remove()
+        while (target.size < paths.size) {
+            target.add(a.addPolyline(PolylineOptions().width(width).color(color).zIndex(zIndex)))
+        }
+        paths.forEachIndexed { index, path ->
+            val line = target[index]
+            line.points = path.map { toAmap(it.lat, it.lon) }
+            line.width = width
+            line.color = color
+        }
+    }
+
+    /**
+     * The veil is one overlay for as long as it lives: handing AMap a new five megabyte image on
+     * every fix is what made the map stutter, so it is only replaced when the veil really changed.
+     */
+    private fun syncGround(a: AMap, fog: Bitmap?, frame: PaintFrame?, revision: Int) {
+        if (fog == null || frame == null || revision < 0 || revision == paintedRevision) return
+        paintedRevision = revision
+        val handoverStart = System.nanoTime()
+        val descriptor = BitmapDescriptorFactory.fromBitmap(fog)
+        val bounds = LatLngBounds(toAmap(frame.latMin, frame.lonMin), toAmap(frame.latMax, frame.lonMax))
+        val existing = ground
+        if (existing == null) {
+            ground = a.addGroundOverlay(GroundOverlayOptions().image(descriptor)
+                .positionFromBounds(bounds).zIndex(9f))
+        } else {
+            existing.setImage(descriptor)
+            existing.setPositionFromBounds(bounds)
+        }
+        if (BuildConfig.DEBUG) PerfTrace.upload(System.nanoTime() - handoverStart)
+    }
+
     fun setExploredColor(color:Int) {
         exploredColor=color
-        paintedLines.forEach { it.color=color }
-        paintedSeeds.forEach { it.fillColor=color }
+        cores.forEach { it.color = (color and 0x00FFFFFF) or (0xB0 shl 24) }
     }
 
     fun updateUser(location: Location?) {
@@ -204,7 +235,7 @@ internal class AmapMapController(private val context: Context, private val onGes
             current.zoom<5f -> 18f
             else -> current.zoom
         }
-        val target=com.amap.api.maps.model.CameraPosition.builder(current)
+        val target=CameraPosition.builder(current)
             .target(toAmap(fix.latitude,fix.longitude)).bearing(bearing)
             .zoom(zoom).build()
         val update=CameraUpdateFactory.newCameraPosition(target)
@@ -217,8 +248,10 @@ internal class AmapMapController(private val context: Context, private val onGes
     fun release(view: MapView) {
         if (view !== currentView) return
         retainedCamera=map?.cameraPosition
-        paintedLines.clear()
-        paintedSeeds.clear()
+        casings.clear()
+        cores.clear()
+        ground = null
+        paintedRevision = -1
         currentMarker = null
         map = null
         currentView = null
@@ -226,16 +259,22 @@ internal class AmapMapController(private val context: Context, private val onGes
         view.onDestroy()
     }
 
+    /**
+     * WGS84 to the display datum, remembered per point. The conversion used to run twice for every
+     * point of every trip on every redraw, which is a large share of the dragging stutter.
+     */
     private fun toAmap(lat: Double, lon: Double): LatLng {
+        val key = (Math.round(lat * 1_000_000.0) shl 32) xor
+            (Math.round(lon * 1_000_000.0) and 0xFFFFFFFFL)
+        converted[key]?.let { return it }
         val point = LatLng(lat, lon)
-        if (!CoordinateConverter.isAMapDataAvailable(lat, lon)) return point
-        return CoordinateConverter(context)
+        val result = if (!CoordinateConverter.isAMapDataAvailable(lat, lon)) point
+        else CoordinateConverter(context)
             .from(CoordinateConverter.CoordType.GPS)
             .coord(point)
             .convert() ?: point
+        if (converted.size > 20_000) converted.clear()
+        converted[key] = result
+        return result
     }
 }
-
-
-
-

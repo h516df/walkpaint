@@ -6,10 +6,11 @@ import org.junit.Test
 
 class TrailShapeTest {
 
-    private fun point(lat: Double, lon: Double) = TrackPoint(lat, lon, 0L, 5f)
+    private fun point(lat: Double, lon: Double, time: Long = 0L) = TrackPoint(lat, lon, time, 5f)
 
     /** Roughly [metres] of latitude at this scale. */
     private fun north(base: Double, metres: Double) = base + metres / 111194.9
+    private fun east(base: Double, metres: Double) = base + metres / 95000.0
 
     @Test fun aStraightLineIsLeftAloneApartFromItsEnds() {
         val line = (0..20).map { point(north(31.0, it * 10.0), 121.0) }
@@ -56,62 +57,71 @@ class TrailShapeTest {
     }
 }
 
-class RecapTest {
+class TrailDedupeTest {
 
-    /**
-     * DailyFootprint derives its metres from the tracks, and the app refuses teleporting points, so
-     * the fixture walks the distance properly: five metres every two seconds, like a person.
-     */
-    private fun day(key: String, meters: Double): DailyFootprint {
-        val step = 5.0
-        val count = maxOf(2, Math.round(meters / step).toInt() + 1)
-        val points = (0 until count).map { index ->
-            TrackPoint(31.0 + (index * step) / 111194.9, 121.0, index * 2000L, 5f)
-        }
-        return DailyFootprint(key, listOf(Track("t-$key", 0L, false, points)))
+    private fun point(lat: Double, lon: Double, time: Long = 0L) = TrackPoint(lat, lon, time, 5f)
+    private fun north(base: Double, metres: Double) = base + metres / 111194.9
+    private fun east(base: Double, metres: Double) = base + metres / 95000.0
+
+    @Test fun aStreetWalkedTwiceKeepsOneLine() {
+        // Each pass carries its own offset, so drawn faithfully the pair braids. The second pass
+        // has to land on ground already drawn and add nothing at all.
+        val out = listOf(point(north(31.0, 0.0), 121.0), point(north(31.0, 40.0), 121.0),
+            point(north(31.0, 80.0), 121.0))
+        val back = listOf(point(north(31.0, 80.0), east(121.0, 6.0)),
+            point(north(31.0, 40.0), east(121.0, 6.0)),
+            point(north(31.0, 0.0), east(121.0, 6.0)))
+        val runs = TrailShape.dedupe(listOf(out, back))
+        assertEquals(1, runs.size)
+        assertEquals(out, runs[0])
     }
 
-    @Test fun aMonthWithNothingInItHasNoRecap() {
-        assertEquals(null, RecapMaker.of(listOf(day("2026-09-01", 100.0)), "2026-10"))
+    @Test fun walkingBackDownTheStreetAddsNothingEither() {
+        val there = listOf(point(north(31.0, 0.0), 121.0, 0L), point(north(31.0, 60.0), 121.0, 30_000L))
+        val back = listOf(point(north(31.0, 60.0), 121.0, 40_000L), point(north(31.0, 0.0), 121.0, 70_000L))
+        val runs = TrailShape.dedupe(listOf(there, back))
+        assertEquals(1, runs.size)
+        assertEquals(2, runs[0].size)
     }
 
-    @Test fun theSummaryAddsUpThePeriodOnly() {
-        val recap = RecapMaker.of(listOf(
-            day("2026-10-01", 1000.0),
-            day("2026-10-02", 3000.0),
-            day("2026-09-30", 9999.0),
-        ), "2026-10")!!
-        assertEquals(4000.0, recap.meters, 20.0)
-        assertEquals(2, recap.days)
-        assertEquals("2026-10-02", recap.bestDay)
-        assertEquals(3000.0, recap.bestDayMeters, 20.0)
-        assertEquals("2026-10-01", recap.firstDay)
+    @Test fun aShortWalkKeepsItsWholeShape() {
+        // A walk shorter than the de-duplication radius is all new ground and must not be trimmed.
+        val short = listOf(point(31.0, 121.0), point(north(31.0, 9.0), 121.0),
+            point(north(31.0, 18.0), 121.0))
+        val runs = TrailShape.dedupe(listOf(short))
+        assertEquals(1, runs.size)
+        assertEquals(3, runs[0].size)
     }
 
-    @Test fun theLongestRunIsFoundAnywhereNotJustAtTheEnd() {
-        assertEquals(3, RecapMaker.longestStreak(listOf(
-            "2026-10-01", "2026-10-02", "2026-10-03", "2026-10-09", "2026-10-10",
-        )))
+    @Test fun forwardWalkingIsNotMistakenForAGap() {
+        // Points a few metres apart are the walk itself. The line may thin out to one vertex every
+        // few metres, but it must stay one run: closing the run on every skip is how a radius rule
+        // turns a walk into a dotted line, and the ends have to survive either way.
+        val line = (0..12).map { point(north(31.0, it * 5.61), 121.0, it * 2_000L) }
+        val runs = TrailShape.dedupe(listOf(line))
+        assertEquals(1, runs.size)
+        assertEquals(line.first(), runs[0].first())
+        assertEquals(line.last(), runs[0].last())
+        assertTrue("kept only ${runs[0].size} of ${line.size}", runs[0].size >= line.size / 2)
     }
 
-    @Test fun aSingleDayIsARunOfOneAndNothingIsARunOfZero() {
-        assertEquals(1, RecapMaker.longestStreak(listOf("2026-10-05")))
-        assertEquals(0, RecapMaker.longestStreak(emptyList()))
+    @Test fun aStreetTwoHundredMetresAwayIsStillNewGround() {
+        val here = listOf(point(north(31.0, 0.0), 121.0), point(north(31.0, 80.0), 121.0))
+        val away = listOf(point(north(31.0, 0.0), east(121.0, 200.0)),
+            point(north(31.0, 80.0), east(121.0, 200.0)))
+        val runs = TrailShape.dedupe(listOf(here, away))
+        assertEquals(2, runs.size)
+        assertEquals(2, runs[1].size)
     }
 
-    @Test fun unsortedAndRepeatedDaysStillCountAsOneRun() {
-        assertEquals(3, RecapMaker.longestStreak(listOf(
-            "2026-10-03", "2026-10-01", "2026-10-02", "2026-10-02",
-        )))
+    @Test fun aStretchFarAwayStartsANewRun() {
+        val first = listOf(point(north(31.0, 0.0), 121.0), point(north(31.0, 80.0), 121.0))
+        val far = listOf(point(north(31.0, 400.0), 121.0), point(north(31.0, 480.0), 121.0))
+        val runs = TrailShape.dedupe(listOf(first, far))
+        assertEquals(2, runs.size)
     }
 
-    @Test fun aYearSummarySpansEveryMonth() {
-        val recap = RecapMaker.of(listOf(
-            day("2026-01-04", 500.0),
-            day("2026-07-20", 2500.0),
-        ), "2026")!!
-        assertEquals(2, recap.days)
-        assertEquals(3000.0, recap.meters, 20.0)
-        assertEquals("2026", recap.period)
+    @Test fun aLoneFixIsGroundButNotALine() {
+        assertEquals(0, TrailShape.dedupe(listOf(listOf(point(31.0, 121.0)))).size)
     }
 }

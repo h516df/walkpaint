@@ -1,0 +1,1 @@
+b16b992985fb9667f6f4ed3b240316c813ad4ac810763eb78d9d40cb9af16ade  WalkPaint-v0.32-arm64-debug.apk
