@@ -36,7 +36,8 @@ class TrackingSetupTest {
     @Test fun failuresTakePriorityOverPermissionTipsAndUsePlainLanguage() {
         assertEquals("足迹暂时无法保存",TrackingSetup.notice("SAVE_FAILED",false,false))
         assertEquals("需要允许精确定位",TrackingSetup.notice("PERMISSION",false,false))
-        assertEquals("暂未收到新的定位",TrackingSetup.notice("CALLBACK_INTERRUPTED",true,true))
+        assertEquals("很久没收到定位了",TrackingSetup.notice("CALLBACK_INTERRUPTED",true,true))
         assertEquals("正在等待可靠定位",TrackingSetup.notice("STARTING",true,true))
     }
 }
+

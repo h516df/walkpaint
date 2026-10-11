@@ -30,5 +30,8 @@ internal object RecordedTrail {
             }
             if(path.isNotEmpty()) add(path.toList())
         }
-    }
+    // Drift is drawn away here, once, so both renderers get the same clean line. Stored points
+    // are untouched: this is only what the map is handed.
+    }.map { TrailShape.simplify(it) }
 }
+

@@ -20,9 +20,10 @@ internal object TrackingSetup {
         else -> when {
             !background -> "需要允许后台定位"
             !notifications -> "记录通知未开启"
-            code == "CALLBACK_INTERRUPTED" -> "暂未收到新的定位"
+            code == "CALLBACK_INTERRUPTED" -> "很久没收到定位了"
             code in setOf("STARTING", "INVALID_FIX") -> "正在等待可靠定位"
             else -> null
         }
     }
 }
+

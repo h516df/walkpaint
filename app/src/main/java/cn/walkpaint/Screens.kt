@@ -76,7 +76,7 @@ internal fun AppShell(
         Box(Modifier.fillMaxSize().padding(padding)) {
             when(selectedTab) {
                 0 -> MapPage(mapNotice,selectedDay,onShowAll,onLocate,{onTab(2)},
-                    placeName ?: PlaceProgress.UNKNOWN_PLACE,share,mapContent)
+                    placeName ?: PlaceProgress.UNKNOWN_PLACE,share,!mapProviderLabel.contains("高德"),mapContent)
                 1 -> TripsPage(state,onTrip,placeName ?: PlaceProgress.UNKNOWN_PLACE,share,
                     Explorer.streak(DailyFootprints.days(state).map { it.key },
                         DailyFootprints.key(System.currentTimeMillis())))
@@ -91,7 +91,7 @@ internal fun AppShell(
 
 @Composable
 private fun MapPage(notice: String?,day: String?,onShowAll: ()->Unit,onLocate: ()->Unit,
-    onSettings: ()->Unit,place:String,share:PlaceShare,mapContent: @Composable ()->Unit) {
+    onSettings: ()->Unit,place:String,share:PlaceShare,showOsmCredit:Boolean,mapContent: @Composable ()->Unit) {
     val uriHandler=LocalUriHandler.current
     Box(Modifier.fillMaxSize()) {
         mapContent()
@@ -117,8 +117,9 @@ private fun MapPage(notice: String?,day: String?,onShowAll: ()->Unit,onLocate: (
                 Icon(painterResource(R.drawable.ic_location),"定位我",tint=Accent,modifier=Modifier.size(23.dp))
             }
         }
-        // Keep the native SDK logo/copyright at the bottom unobscured.
-        Text("© OpenStreetMap contributors · ODbL 1.0",color=Ink.copy(alpha=0.8f),fontSize=10.sp,
+        // Only when OSM tiles are actually on screen: crediting OSM over an AMap basemap is
+        // noise, and the licence only asks for the credit where its data is shown.
+        if(showOsmCredit) Text("© OpenStreetMap contributors · ODbL 1.0",color=Ink.copy(alpha=0.8f),fontSize=10.sp,
             modifier=Modifier.align(Alignment.BottomStart).padding(start=8.dp,bottom=28.dp)
                 .background(PageBackground.copy(alpha=0.80f),RoundedCornerShape(3.dp))
                 .clickable { uriHandler.openUri("https://www.openstreetmap.org/copyright") }
@@ -545,5 +546,6 @@ private fun ProfilePage(automatic:Boolean,notice:String?,onResolve:()->Unit,
         confirmButton={TextButton(onClick={revokeConfirm=false;onRevoke()}) {Text("撤回授权")}},
         dismissButton={TextButton(onClick={revokeConfirm=false}) {Text("取消")}})
 }
+
 
 

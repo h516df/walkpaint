@@ -21,7 +21,7 @@ class TrackMapJsonTest {
     @Test fun shortPlausibleWalkPaintsLineAndSeed() {
         val track = Track("short", 1_000L, false, listOf(
             p(31.23040, 121.47370, 1),
-            p(31.23048, 121.47378, 5),
+            p(31.23048, 121.47392, 5),   // a real bend, not a mathematically straight line
             p(31.23056, 121.47386, 9)
         ))
         val result = JSONObject(TrackMapJson.encode(listOf(track)))
@@ -46,3 +46,4 @@ class TrackMapJsonTest {
         assertTrue(Geo.distance(track.points) < 30.0)
     }
 }
+
