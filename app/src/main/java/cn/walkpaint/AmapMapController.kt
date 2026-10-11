@@ -157,7 +157,8 @@ internal class AmapMapController(private val context: Context, private val onGes
         // Painted ground laid over the lines. A second pass over a street repaints the same
         // pixels, so it covers the braid instead of adding to it. The lines stay underneath as a
         // safety net: if this image ever fails to draw, the trail is still on the map.
-        val painted = painter.update(paths.flatten(), paths, exploredColor)
+        val painted = painter.update(paths.flatten(), paths, exploredColor,
+            latestPosition?.let { TrackPoint(it.latitude, it.longitude, it.time, it.accuracy) })
         val frame = painter.frame()
         if (painted != null && frame != null) {
             a.addGroundOverlay(com.amap.api.maps.model.GroundOverlayOptions()
@@ -248,4 +249,5 @@ internal class AmapMapController(private val context: Context, private val onGes
             .convert() ?: point
     }
 }
+
 

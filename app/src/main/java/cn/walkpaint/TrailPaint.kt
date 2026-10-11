@@ -3,8 +3,6 @@ package cn.walkpaint
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
-import android.graphics.PorterDuff
-import android.graphics.PorterDuffXfermode
 
 /** The patch of ground the paint covers, and how many pixels it is drawn into. */
 internal data class PaintFrame(
@@ -27,11 +25,12 @@ internal data class PaintFrame(
  * Walking the same streets again and again is normal, and drawing each pass separately lays dozens
  * of nearly parallel lines a few metres apart over each other: a braid, not a route. Painting into
  * a bitmap fixes that by construction, because a second pass over the same street repaints the same
- * pixels instead of adding a line beside them. It is the approach Strava's heatmap uses, and it
- * happens to be what this app is named after: the ground gets painted, not outlined.
+ * pixels instead of adding a line beside them.
  *
- * The frame is the whole recorded area, so one image covers every trip at once and the map only has
- * to hold a single overlay.
+ * The band is measured in metres, not pixels. The first version used a fixed pixel width, and a
+ * frame spanning tens of kilometres turned eleven pixels into a few hundred metres, so the trail
+ * came out as one solid blue blob. A street is about sixteen metres wide wherever it is, so the
+ * stroke is derived from the frame's scale, with a floor so a wide frame still paints something.
  */
 internal object TrailPaint {
     /** A 1200 px square is about 5.5 MB, and still finer than a metre per pixel over 1 km. */
@@ -39,9 +38,17 @@ internal object TrailPaint {
     /** Smallest frame, so one short walk still gets a usable image instead of a zero-size one. */
     const val MIN_SPAN_DEG = 0.002
     const val MARGIN = 0.06
-    const val STROKE_PX = 11f
+    /** Roughly a street: wide enough to read as the road being coloured. */
+    const val STROKE_METERS = 16.0
+    /** Never thinner than this, or a wide frame would paint an invisible hairline. */
+    const val MIN_STROKE_PX = 4f
+    /**
+     * Past this the image is too coarse to read anyway, so the frame follows where the person is
+     * instead of stretching over everything they have ever walked.
+     */
+    const val MAX_SPAN_METERS = 6000.0
 
-    fun frameOf(points: List<TrackPoint>, maxPx: Int = MAX_PX): PaintFrame? {
+    fun frameOf(points: List<TrackPoint>, maxPx: Int = MAX_PX, anchor: TrackPoint? = null): PaintFrame? {
         val usable = points.filter { it.lat.isFinite() && it.lon.isFinite() }
         if (usable.isEmpty()) return null
         var latMin = usable.minOf { it.lat }
@@ -58,6 +65,19 @@ internal object TrailPaint {
             lonMin = centre - MIN_SPAN_DEG / 2
             lonMax = centre + MIN_SPAN_DEG / 2
         }
+        val capLat = MAX_SPAN_METERS / 111194.9
+        val centreLat = anchor?.lat ?: (latMax + latMin) / 2
+        val centreLon = anchor?.lon ?: (lonMax + lonMin) / 2
+        val metresPerLon = 111194.9 * kotlin.math.cos(Math.toRadians(centreLat)).coerceAtLeast(0.05)
+        val capLon = MAX_SPAN_METERS / metresPerLon
+        if (latMax - latMin > capLat) {
+            latMin = centreLat - capLat / 2
+            latMax = centreLat + capLat / 2
+        }
+        if (lonMax - lonMin > capLon) {
+            lonMin = centreLon - capLon / 2
+            lonMax = centreLon + capLon / 2
+        }
         val latMargin = (latMax - latMin) * MARGIN
         val lonMargin = (lonMax - lonMin) * MARGIN
         latMin -= latMargin; latMax += latMargin
@@ -73,6 +93,17 @@ internal object TrailPaint {
         val widthPx = (metresWide * scale).toInt().coerceIn(64, maxPx)
         return PaintFrame(latMin, lonMin, latMax, lonMax, widthPx, heightPx)
     }
+
+    /** How many pixels one metre takes up in this frame. */
+    fun pixelsPerMeter(frame: PaintFrame): Double {
+        val metresTall = frame.latSpan * 111194.9
+        if (metresTall <= 0.0) return 0.0
+        return frame.heightPx / metresTall
+    }
+
+    /** A street's width, expressed in this frame's pixels. */
+    fun strokePx(frame: PaintFrame): Float =
+        maxOf(MIN_STROKE_PX, (STROKE_METERS * pixelsPerMeter(frame)).toFloat())
 }
 
 /**
@@ -89,10 +120,8 @@ internal class TrailPainter {
         style = Paint.Style.STROKE
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
-        strokeWidth = TrailPaint.STROKE_PX
     }
 
-    /** The current image, or null when there is nothing to paint. */
     fun image(): Bitmap? = bitmap
 
     fun frame(): PaintFrame? = frame
@@ -102,16 +131,21 @@ internal class TrailPainter {
      * A track that reaches outside the current frame forces a rebuild, because the frame is what
      * converts coordinates to pixels.
      */
-    fun update(points: List<TrackPoint>, paths: List<List<TrackPoint>>, color: Int): Bitmap? {
+    fun update(points: List<TrackPoint>, paths: List<List<TrackPoint>>, color: Int, anchor: TrackPoint? = null): Bitmap? {
         if (points.isEmpty() || paths.isEmpty()) return bitmap
         paint.color = color
         val current = frame
-        val fits = current != null && points.all { current.contains(it.lat, it.lon) }
+        // Only what is new decides whether the frame still fits. Testing every stored point would
+        // force a full repaint on each fix as soon as any old trip sits outside the clamped frame,
+        // which is exactly the cost this design exists to avoid.
+        val fresh = if (paintedPaths >= paths.size) emptyList() else paths.drop(paintedPaths).flatten()
+        val fits = current != null && fresh.all { current.contains(it.lat, it.lon) }
         if (!fits) {
-            val next = TrailPaint.frameOf(points) ?: return bitmap
+            val next = TrailPaint.frameOf(points, anchor = anchor) ?: return bitmap
             frame = next
             bitmap?.recycle()
             bitmap = Bitmap.createBitmap(next.widthPx, next.heightPx, Bitmap.Config.ARGB_8888)
+            paint.strokeWidth = TrailPaint.strokePx(next)
             paintedPaths = 0
         }
         val target = bitmap ?: return null
@@ -147,4 +181,3 @@ internal class TrailPainter {
         paintedPaths = 0
     }
 }
-
