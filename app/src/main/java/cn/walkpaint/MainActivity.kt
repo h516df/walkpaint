@@ -61,6 +61,23 @@ class MainActivity : ComponentActivity() {
     private var currentTab by mutableIntStateOf(0)
     private val roadAppearance by lazy { RoadAppearance(this) }
     private var roadColor by mutableIntStateOf(ExploredRoadArgb)
+    /** Name of the place the progress is measured around; null until resolved, never an error. */
+    private var placeName by mutableStateOf<String?>(null)
+    private var placeAnchor: TrackPoint? = null
+
+    /**
+     * Resolves the current place name, but only after moving far enough to matter. Geocoding on
+     * every fix would hammer the service for a name that has not changed.
+     */
+    private fun refreshPlaceName(fix: Location?) {
+        val last = snapshot.realTracks.lastOrNull()?.points?.lastOrNull()
+        val lat = fix?.latitude ?: last?.lat ?: return
+        val lon = fix?.longitude ?: last?.lon ?: return
+        val anchor = TrackPoint(lat, lon, 0L, 5f)
+        placeAnchor?.let { if (Geo.meters(it, anchor) < 500.0) return }
+        placeAnchor = anchor
+        PlaceName.resolve(this, lat, lon) { name -> runOnUiThread { if (name != null) placeName = name } }
+    }
     private var showRoadAppearance by mutableStateOf(false)
     private var retainedMapCamera:org.maplibre.android.camera.CameraPosition?=null
     private var snapshot by mutableStateOf(TrackState())
@@ -298,6 +315,7 @@ class MainActivity : ComponentActivity() {
                     },
                     state = snapshot,
                     fix = userFix,
+                    placeName = placeName,
                     automatic = trackingEnabled,
                     running = trackingRunning,
                     trackingStatus = trackingStatus,
@@ -759,6 +777,7 @@ class MainActivity : ComponentActivity() {
         userFix = chosen
         AmbientTracking.lastFix = chosen
         updateLocationLayer()
+        refreshPlaceName(chosen)
         syncFollowCamera(force=center || firstMapCenter, streetZoom=streetZoom)
     }
 

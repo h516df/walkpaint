@@ -29,7 +29,7 @@ internal fun exploredDistance(meters: Double): String = if(meters < 1000)
 
 @Composable
 internal fun AppShell(
-    selectedTab: Int, onTab: (Int) -> Unit, state: TrackState, fix: Location?,
+    selectedTab: Int, onTab: (Int) -> Unit, state: TrackState, fix: Location?, placeName: String? = null,
     automatic: Boolean, running: Boolean, trackingStatus: String, recordingTitle: String,
     recordingHealthy: Boolean, profileNotice: String?, onResolveTracking: () -> Unit, mapNotice: String?, selectedDay: String?, mapRoadState: RoadState,
     dailyRoads: Map<String,RoadState>, roadAreaHint: String, onShowAll: () -> Unit,
@@ -42,8 +42,15 @@ internal fun AppShell(
     feedbackContent: @Composable (onBack:()->Unit)->Unit,
     updatesContent: @Composable (onBack:()->Unit)->Unit, mapContent: @Composable () -> Unit
 ) {
-    // Progress belongs where the walking happens: you should be able to watch the number move
-    // without leaving the map and going back to the footprints page to check.
+    // The share is anchored to the last place the person was, so the number carries a name instead
+    // of being an abstract count of cells.
+    val lastPoint=state.realTracks.lastOrNull()?.points?.lastOrNull()
+    val anchorLat=fix?.latitude ?: lastPoint?.lat
+    val anchorLon=fix?.longitude ?: lastPoint?.lon
+    val share=remember(state,anchorLat,anchorLon) {
+        if(anchorLat==null||anchorLon==null) PlaceShare(0,0,0)
+        else PlaceProgress.of(state,anchorLat,anchorLon)
+    }
     val explored=remember(state) {
         Explorer.of(state,java.time.LocalDate.now().atStartOfDay(java.time.ZoneId.systemDefault())
             .toInstant().toEpochMilli())
@@ -69,8 +76,10 @@ internal fun AppShell(
         Box(Modifier.fillMaxSize().padding(padding)) {
             when(selectedTab) {
                 0 -> MapPage(mapNotice,selectedDay,onShowAll,onLocate,{onTab(2)},
-                    explored.cellsVisited,explored.newToday,mapContent)
-                1 -> TripsPage(state,onTrip)
+                    placeName ?: PlaceProgress.UNKNOWN_PLACE,share,mapContent)
+                1 -> TripsPage(state,onTrip,placeName ?: PlaceProgress.UNKNOWN_PLACE,share,
+                    Explorer.streak(DailyFootprints.days(state).map { it.key },
+                        DailyFootprints.key(System.currentTimeMillis())))
                 else -> ProfilePage(automatic,profileNotice,onResolveTracking,
                     onToggleTracking,onRevoke,onBackgroundSettings,onPowerSettings,onCopyDiagnostics,
                     roadState,roadAreaHint,onRoadPack,onExport,onImport,internalBackupCount,
@@ -82,23 +91,24 @@ internal fun AppShell(
 
 @Composable
 private fun MapPage(notice: String?,day: String?,onShowAll: ()->Unit,onLocate: ()->Unit,
-    onSettings: ()->Unit,exploredCells:Int,newToday:Int,mapContent: @Composable ()->Unit) {
+    onSettings: ()->Unit,place:String,share:PlaceShare,mapContent: @Composable ()->Unit) {
     val uriHandler=LocalUriHandler.current
     Box(Modifier.fillMaxSize()) {
         mapContent()
         Column(Modifier.align(Alignment.TopCenter).padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-            if(notice!=null) Surface(onClick=onSettings,color=Panel.copy(alpha=0.96f),shape=RoundedCornerShape(8.dp)) {
-                Text("$notice  ›",color=Ink,fontSize=12.sp,modifier=Modifier.padding(horizontal=12.dp,vertical=10.dp))
+            // One line only: a problem when there is one, otherwise the progress. Stacking both was
+            // half of what made the map look like a mess. An opaque pill, because a ten percent tint
+            // over a basemap full of labels is not a background at all.
+            if(notice!=null) Surface(onClick=onSettings,color=Canvas,shape=ChipShape,
+                border=BorderStroke(1.dp,Line),shadowElevation=1.dp) {
+                Text("$notice  ›",color=Ink,fontSize=CaptionSize,modifier=Modifier.padding(horizontal=12.dp,vertical=10.dp))
+            } else Surface(color=Canvas,shape=ChipShape,border=BorderStroke(1.dp,Line),shadowElevation=1.dp) {
+                Text("$place · 解锁 ${share.percent}%",color=Ink,fontSize=CaptionSize,
+                    fontWeight=FontWeight.Medium,modifier=Modifier.padding(horizontal=12.dp,vertical=10.dp))
             }
-            if(day!=null) Surface(onClick=onShowAll,color=PageBackground.copy(alpha=0.96f),shape=RoundedCornerShape(8.dp)) {
-                Text("$day · 返回全部探索  ›",color=Accent,fontSize=12.sp,
+            if(day!=null) Surface(onClick=onShowAll,color=Canvas,shape=ChipShape,border=BorderStroke(1.dp,Line)) {
+                Text("$day · 返回全部探索  ›",color=Accent,fontSize=CaptionSize,
                     modifier=Modifier.padding(horizontal=12.dp,vertical=10.dp))
-            }
-            // Only worth showing once something has actually been lit; "0 blocks" on day one is noise.
-            if(exploredCells>0) Surface(color=PigmentSoft,shape=ChipShape) {
-                Text(if(newToday>0) "已点亮 $exploredCells 块 · 今天 +$newToday" else "已点亮 $exploredCells 块",
-                    color=Pigment,fontSize=CaptionSize,fontWeight=FontWeight.Medium,
-                    modifier=Modifier.padding(horizontal=12.dp,vertical=8.dp))
             }
         }
         Surface(onClick=onLocate,shape=CircleShape,color=PageBackground.copy(alpha=0.96f),
@@ -154,7 +164,7 @@ private fun SettingRow(title:String,detail:String="",onClick:()->Unit) {
 }
 
 @Composable
-private fun TripsPage(state:TrackState,onTrip:(Track)->Unit) {
+private fun TripsPage(state:TrackState,onTrip:(Track)->Unit,place:String,share:PlaceShare,streak:Int) {
     val days=remember(state) { DailyFootprints.days(state) }
     val today=DailyFootprints.key(System.currentTimeMillis())
     val todayDay=days.firstOrNull { it.key==today }
@@ -176,14 +186,19 @@ private fun TripsPage(state:TrackState,onTrip:(Track)->Unit) {
                     fontWeight=FontWeight.Bold,style=TabularFigures)
                 Spacer(Modifier.height(16.dp))
                 Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                    // Short labels: the three chips used to wrap onto a second line on a phone.
                     StatChip("今天 ${exploredDistance(todayDay?.meters ?: 0.0)}")
-                    StatChip("走过 ${FootprintInsights.exploredCells(state)} 个区域")
-                    StatChip("${days.size} 天有足迹")
+                    StatChip("${FootprintInsights.exploredCells(state)} 个区域")
+                    StatChip("${days.size} 天")
                 }
             }
         }
-        item { ExplorationCard(exploration,Explorer.streak(days.map { it.key },today)) }
+        item { PlaceCard(place,share,exploration,streak) }
         item { FootprintCalendar(days,today,onTrip) }
+        if(days.isNotEmpty()) item {
+            Text("满格 = 你的最好一天 ${exploredDistance(busiestDay)}",
+                color=Muted,fontSize=MicroSize,modifier=Modifier.padding(top=6.dp))
+        }
         if(days.isEmpty()) {
             item { Text("开启自动记录后，走过的地方会在地图上留下颜色。",color=Muted,fontSize=BodySize) }
         } else {
@@ -201,25 +216,29 @@ private fun TripsPage(state:TrackState,onTrip:(Track)->Unit) {
 private fun monthLabel(month:String):String = "${month.take(4)} 年 ${month.substring(5).toInt()} 月"
 
 /**
- * The progress reading, plus the single moment of reward.
+ * The progress reading, anchored to a named place.
  *
- * There is no percentage, on purpose: an area ratio has no honest denominator, and a frame built
- * from the tracks collapses to zero as soon as someone travels far. What is left is the number the
- * app can actually stand behind, and the one that moves when you go somewhere new. New cells count
- * up rather than snapping, which is the whole loop.
+ * "已点亮 78 块" told the person nothing, because 78 of what, and where. A place name and a share of
+ * a stated radius says something: this is where you were, and this is how much of the two
+ * kilometres around it you have covered. The denominator is printed underneath, because a
+ * percentage without its denominator is not a fact, which is why the earlier attempt at a
+ * percentage was dropped rather than shipped.
  */
 @Composable
-private fun ExplorationCard(exploration:Exploration,streak:Int) {
+private fun PlaceCard(place:String,share:PlaceShare,exploration:Exploration,streak:Int) {
     val lit by animateIntAsState(targetValue=exploration.newToday,label="newCells")
     Section("探索") {
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.Bottom) {
             Column(Modifier.weight(1f)) {
-                Text("已点亮",color=Muted,fontSize=CaptionSize)
-                Spacer(Modifier.height(8.dp))
+                Text(place,color=Ink,fontSize=SectionSize,fontWeight=FontWeight.SemiBold)
+                Spacer(Modifier.height(4.dp))
+                Text("附近 ${PlaceProgress.RADIUS_KM} 公里",color=Muted,fontSize=CaptionSize)
+                Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment=Alignment.Bottom) {
-                    Text("${exploration.cellsVisited}",color=Pigment,fontSize=36.sp,
+                    Text("解锁 ",color=Muted,fontSize=CaptionSize,modifier=Modifier.padding(bottom=6.dp))
+                    Text("${share.percent}",color=Pigment,fontSize=36.sp,
                         fontWeight=FontWeight.Bold,style=TabularFigures)
-                    Text(" 块",color=Pigment,fontSize=17.sp,fontWeight=FontWeight.Bold,
+                    Text(" %",color=Pigment,fontSize=17.sp,fontWeight=FontWeight.Bold,
                         modifier=Modifier.padding(bottom=4.dp))
                 }
             }
@@ -238,8 +257,13 @@ private fun ExplorationCard(exploration:Exploration,streak:Int) {
                 }
             }
         }
+        Spacer(Modifier.height(12.dp))
+        Box(Modifier.fillMaxWidth().height(8.dp).background(Line,CircleShape)) {
+            if(share.percent>0) Box(Modifier.fillMaxWidth(share.percent/100f)
+                .height(8.dp).background(Pigment,CircleShape))
+        }
         Spacer(Modifier.height(10.dp))
-        Text("一块约 550 米见方。走过哪块就点亮哪块，同一条路再走一遍不会重复计数。",
+        Text("以你所在位置为圆心 ${PlaceProgress.RADIUS_KM} 公里的范围里，你走过了 ${share.litCells} / ${share.totalCells} 块（一块约 550 米见方）。",
             color=Muted,fontSize=MicroSize,lineHeight=17.sp)
     }
 }
@@ -490,7 +514,6 @@ private fun ProfilePage(automatic:Boolean,notice:String?,onResolve:()->Unit,
                 } }
                 item { Section("常用") {
                     SettingRow("备份与恢复","保存或找回你的足迹") { page="备份与恢复" }
-                    SettingRow("问题反馈","把遇到的问题发给开发者") { page="问题反馈" }
                     SettingRow("检查更新","当前版本 ${BuildConfig.VERSION_NAME}") { page="检查更新" }
                 } }
                 item { Section("偏好") {
@@ -502,9 +525,10 @@ private fun ProfilePage(automatic:Boolean,notice:String?,onResolve:()->Unit,
             "更多设置" -> item { Section("设置") {
                 SettingRow("备份与恢复","保存或找回你的足迹") { page="备份与恢复" }
                 SettingRow("隐私与权限","管理授权与后台运行") { page="隐私与权限" }
-                SettingRow("问题反馈","预览并分享本机故障线索") { page="问题反馈" }
                 SettingRow("检查更新","当前版本 ${BuildConfig.VERSION_NAME}") { page="检查更新" }
-                SettingRow("高级诊断","记录异常时查看原因",onDiagnostics)
+                // One entry, not two: the feedback page was only ever a wrapper around copying the
+                // same diagnosis the diagnostics page already shows.
+                SettingRow("诊断与反馈","查看原因、复制给开发者",onDiagnostics)
                 SettingRow("关于","版本与地图来源") { page="关于" }
             } }
             "备份与恢复" -> item { Section("保护足迹") {

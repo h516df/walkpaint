@@ -28,17 +28,33 @@ internal object Explorer {
     /** Soft tint for explored ground. Kept low so the trail stays the thing you read. */
     const val EXPLORED_FILL_ALPHA = 0.13f
 
-    fun of(state: TrackState, todayStartMs: Long): Exploration {
+    /** Every cell the person has ever lit. Shared so one place's share uses the same ground. */
+    internal fun visitedCells(state: TrackState): Set<Long> {
         val visited = HashSet<Long>()
-        val visitedBeforeToday = HashSet<Long>()
+        forEachCell(state) { row, col, _ -> visited.add(key(row, col)) }
+        return visited
+    }
+
+    internal fun cellKey(row: Int, col: Int): Long = key(row, col)
+
+    private inline fun forEachCell(state: TrackState, action: (Int, Int, TrackPoint) -> Unit) {
         state.realTracks.forEach { trip ->
             trip.points.forEach { point ->
                 if (!point.lat.isFinite() || !point.lon.isFinite()) return@forEach
-                val row = kotlin.math.floor(point.lat / CELL_DEGREES).toInt()
-                val col = kotlin.math.floor(point.lon / CELL_DEGREES).toInt()
-                visited.add(key(row, col))
-                if (point.time < todayStartMs) visitedBeforeToday.add(key(row, col))
+                action(
+                    kotlin.math.floor(point.lat / CELL_DEGREES).toInt(),
+                    kotlin.math.floor(point.lon / CELL_DEGREES).toInt(),
+                    point,
+                )
             }
+        }
+    }
+
+    fun of(state: TrackState, todayStartMs: Long): Exploration {
+        val visited = visitedCells(state)
+        val visitedBeforeToday = HashSet<Long>()
+        forEachCell(state) { row, col, point ->
+            if (point.time < todayStartMs) visitedBeforeToday.add(key(row, col))
         }
         if (visited.isEmpty()) return Exploration(0, 0)
         return Exploration(visited.size, visited.count { it !in visitedBeforeToday })

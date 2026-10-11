@@ -226,7 +226,10 @@ class RecordingService : Service(), LocationListener {
         else if (elapsed - lastCallbackElapsed > 45_000L)
             AmbientTracking.status = "GPS 回调已中断 · 正在监听/限频重试，尚未恢复记录"
         val status=RecordingStatus.assess(RecordingDiagnostics.signals(this@RecordingService,app.repository.lastError))
-        updateNotification(status.title + " · " + status.hint)
+        // Title only. The hint is a diagnostic sentence and belongs in the app, not in the shade:
+        // "收不到定位信号 · 监听还开着，但没有新的定位进来" is not something a person wants to read
+        // while walking.
+        updateNotification(status.title)
     }
 
     private fun ensureGps(replace: Boolean = false) {
@@ -316,7 +319,7 @@ class RecordingService : Service(), LocationListener {
                     mainHandler.post {
                         if (isClosing.get()) return@post
                         AmbientTracking.status = "刚刚保存 GPS 足迹 · 精度 ${reliableFix.accuracy.toInt()} 米"
-                        updateNotification("刚刚记录新足迹 · 持续 GPS 监听")
+                        updateNotification("刚刚记下新足迹")
                     }
                 } else if (app.repository.lastError != null) {
                     AmbientTracking.status = app.repository.lastError!!
@@ -344,7 +347,7 @@ class RecordingService : Service(), LocationListener {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         return Notification.Builder(this, "ambient-footprints")
             .setSmallIcon(R.drawable.ic_footprint)
-            .setContentTitle("足迹涂色 · 记录状态")
+            .setContentTitle("足迹涂色 · 记录中")
             .setContentText(text)
             .setContentIntent(open)
             .setOngoing(true)
