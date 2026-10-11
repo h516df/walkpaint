@@ -15,8 +15,11 @@ SERIAL = 'emulator-5556'
 EMULATOR = r'D:\Apps\Android\sdk\emulator\emulator.exe'
 
 label, apk, *extra = sys.argv[1:]
+probe = 'acceptance'
+if extra[:1] == ['--probe']:
+    probe, extra = extra[1], extra[2:]
 if not label or not apk:
-    raise SystemExit('usage: run_fog_acceptance_fresh.py <label> <apk> [args...]')
+    raise SystemExit('usage: run_fog_acceptance_fresh.py <label> <apk> [--probe acceptance|reopen] [args...]')
 
 subprocess.run([ADB, '-s', SERIAL, 'emu', 'kill'], capture_output=True)
 time.sleep(8)
@@ -44,6 +47,10 @@ if name != 'WalkPaint_Google_API36':
 # Let the freshly booted system finish its own startup work before anything is timed.
 time.sleep(45)
 
-command = [sys.executable, '-X', 'utf8', str(ROOT / 'scripts' / 'android_fog_line_acceptance.py'),
-           '--label', label, '--apk', apk, *extra]
+if probe == 'reopen':
+    command = [sys.executable, '-X', 'utf8', str(ROOT / 'scripts' / 'android_reopen_probe.py'),
+               label, apk, *extra]
+else:
+    command = [sys.executable, '-X', 'utf8', str(ROOT / 'scripts' / 'android_fog_line_acceptance.py'),
+               '--label', label, '--apk', apk, *extra]
 raise SystemExit(subprocess.call(command, cwd=str(ROOT)))
