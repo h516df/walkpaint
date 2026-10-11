@@ -127,20 +127,28 @@ internal class TrailPainter {
 
     fun frame(): PaintFrame? = frame
 
+    /** Bumped only when the image really changes, so the map is not handed a new one for nothing. */
+    var revision = 0
+        private set
+
     /** Cells already lit, for anything that needs to count them. */
     fun litCount(): Int = painted.size
 
     fun update(points: List<TrackPoint>, color: Int, anchor: TrackPoint? = null): Bitmap? {
         if (points.isEmpty()) return bitmap
         val current = frame
-        val fresh = if (current == null) points
-            else points.filterNot { current.contains(it.lat, it.lon) }
-        if (current == null || fresh.isNotEmpty()) {
+        // The frame follows the person, so tracks outside it are normal and must not force a
+        // rebuild. Rebuilding whenever any stored point fell outside repainted the entire history
+        // every two seconds, which is what made the map stutter.
+        val movedOut = current == null ||
+            (anchor != null && !current.contains(anchor.lat, anchor.lon))
+        if (movedOut) {
             val next = TrailPaint.frameOf(points, anchor = anchor) ?: return bitmap
             frame = next
             bitmap?.recycle()
             bitmap = Bitmap.createBitmap(next.widthPx, next.heightPx, Bitmap.Config.ARGB_8888)
             painted.clear()
+            revision++
         }
         val target = bitmap ?: return null
         val active = frame ?: return null
@@ -149,16 +157,20 @@ internal class TrailPainter {
         val canvas = Canvas(target)
         val cellPx = (TrailPaint.CELL_DEGREES * 111194.9 * pixelsPerMeter(active)).toFloat()
         if (painted.isEmpty()) canvas.drawRect(0f, 0f, active.widthPx.toFloat(), active.heightPx.toFloat(), fog)
+        var added = 0
         points.forEach { point ->
             if (!point.lat.isFinite() || !point.lon.isFinite()) return@forEach
+            if (!active.contains(point.lat, point.lon)) return@forEach
             val row = TrailPaint.cellRow(point.lat)
             val col = TrailPaint.cellCol(point.lon)
             if (!painted.add(TrailPaint.cellKey(row, col))) return@forEach
+            added++
             val left = active.pixelX(col * TrailPaint.CELL_DEGREES)
             val top = active.pixelY((row + 1) * TrailPaint.CELL_DEGREES)
             canvas.drawRect(left, top, left + cellPx, top + cellPx, clear)
             canvas.drawRect(left, top, left + cellPx, top + cellPx, tint)
         }
+        if (added > 0) revision++
         return target
     }
 
@@ -183,4 +195,5 @@ internal class TrailPainter {
         }
     }
 }
+
 

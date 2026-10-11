@@ -52,6 +52,7 @@ internal class AmapMapController(private val context: Context, private val onGes
     private var pendingRoads: RoadState? = null
     private val exploredShapes = mutableListOf<com.amap.api.maps.model.Polygon>()
     private val painter = TrailPainter()
+    private var paintedRevision = -1
 
     /** The explored ground wears the same colour as the trail, just faint enough to read through. */
     private fun exploredTint(color:Int)=Color.argb(
@@ -144,7 +145,9 @@ internal class AmapMapController(private val context: Context, private val onGes
         val painted = painter.update(paths.flatten(), exploredColor,
             latestPosition?.let { TrackPoint(it.latitude, it.longitude, it.time, it.accuracy) })
         val frame = painter.frame()
-        if (painted != null && frame != null) {
+        // Handing the map a fresh five megabyte bitmap on every fix is what made it stutter.
+        if (painted != null && frame != null && painter.revision != paintedRevision) {
+            paintedRevision = painter.revision
             a.addGroundOverlay(com.amap.api.maps.model.GroundOverlayOptions()
                 .image(com.amap.api.maps.model.BitmapDescriptorFactory.fromBitmap(painted))
                 .positionFromBounds(com.amap.api.maps.model.LatLngBounds(
@@ -232,6 +235,7 @@ internal class AmapMapController(private val context: Context, private val onGes
             .convert() ?: point
     }
 }
+
 
 
 
