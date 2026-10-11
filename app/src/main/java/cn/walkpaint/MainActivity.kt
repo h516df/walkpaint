@@ -976,6 +976,9 @@ class MainActivity : ComponentActivity() {
                 val paintImage = paintBitmap ?: android.graphics.Bitmap.createBitmap(1,1,android.graphics.Bitmap.Config.ARGB_8888)
                 style.addSource(org.maplibre.android.style.sources.ImageSource("wp-paint", quad, paintImage))
                 style.addLayer(org.maplibre.android.style.layers.RasterLayer("wp-paint-layer","wp-paint"))
+                // The style is brand new, so push whatever was already loaded; otherwise the image
+                // source keeps its one-pixel placeholder and nothing appears.
+                updateMapLayers()
                 style.addLayer(org.maplibre.android.style.layers.FillLayer("wp-explored-fill","wp-explored")
                     .withProperties(
                         PropertyFactory.fillColor(roadColor),
@@ -1209,5 +1212,6 @@ class MainActivity : ComponentActivity() {
     }
     private fun toast(text: String) = Toast.makeText(this, text, Toast.LENGTH_LONG).show()
 }
+
 
 
