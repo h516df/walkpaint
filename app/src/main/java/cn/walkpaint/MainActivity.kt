@@ -1048,14 +1048,20 @@ class MainActivity : ComponentActivity() {
         style.getSourceAs<GeoJsonSource>("wp-roads")?.setGeoJson(roadJson)
         style.getSourceAs<GeoJsonSource>("wp-painted")?.setGeoJson(paintedJson)
         style.getSourceAs<GeoJsonSource>("wp-explored")?.setGeoJson(exploredJson)
-        paintBitmap?.let { image ->
-            val source = style.getSourceAs<org.maplibre.android.style.sources.ImageSource>("wp-paint")
-            source?.setImage(image)
-            paintFrame?.let { f -> source?.setCoordinates(org.maplibre.android.geometry.LatLngQuad(
-                org.maplibre.android.geometry.LatLng(f.latMax, f.lonMin),
-                org.maplibre.android.geometry.LatLng(f.latMax, f.lonMax),
-                org.maplibre.android.geometry.LatLng(f.latMin, f.lonMax),
-                org.maplibre.android.geometry.LatLng(f.latMin, f.lonMin))) }
+        val painted = paintBitmap
+        val bounds = paintFrame
+        if (painted != null && bounds != null) {
+            // Rebuilt rather than swapped: an image source holds the image it was made with, so
+            // setImage on a source created from a placeholder leaves nothing on the map.
+            runCatching { style.removeLayer("wp-paint-layer") }
+            runCatching { style.removeSource("wp-paint") }
+            style.addSource(org.maplibre.android.style.sources.ImageSource("wp-paint",
+                org.maplibre.android.geometry.LatLngQuad(
+                    org.maplibre.android.geometry.LatLng(bounds.latMax, bounds.lonMin),
+                    org.maplibre.android.geometry.LatLng(bounds.latMax, bounds.lonMax),
+                    org.maplibre.android.geometry.LatLng(bounds.latMin, bounds.lonMax),
+                    org.maplibre.android.geometry.LatLng(bounds.latMin, bounds.lonMin)), painted))
+            style.addLayer(org.maplibre.android.style.layers.RasterLayer("wp-paint-layer","wp-paint"))
         }
     }
 
@@ -1212,6 +1218,7 @@ class MainActivity : ComponentActivity() {
     }
     private fun toast(text: String) = Toast.makeText(this, text, Toast.LENGTH_LONG).show()
 }
+
 
 
 

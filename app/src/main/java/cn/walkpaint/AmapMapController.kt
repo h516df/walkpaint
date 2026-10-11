@@ -145,24 +145,21 @@ internal class AmapMapController(private val context: Context, private val onGes
                 .strokeWidth(0f))
         }
         val paths = RecordedTrail.paths(state.realTracks)
-        // Painted ground instead of one line per pass. Walking the same street twice repaints the
-        // same pixels, so repeated trips cannot braid into a tangle the way separate lines do.
-        val painted = painter.update(paths.flatten(), paths, exploredColor)
-        val frame = painter.frame()
-        if (painted != null && frame != null) {
-            paintOverlay = a.addGroundOverlay(com.amap.api.maps.model.GroundOverlayOptions()
-                .image(com.amap.api.maps.model.BitmapDescriptorFactory.fromBitmap(painted))
-                .positionFromBounds(com.amap.api.maps.model.LatLngBounds(
-                    toAmap(frame.latMin, frame.lonMin), toAmap(frame.latMax, frame.lonMax)))
-                .zIndex(1f))
+        // The painted-image path did not prove it renders, so the trail is drawn as lines again.
+        // Losing the trail entirely would be worse than the braid this was meant to remove.
+        paths.filter { it.size > 1 }.forEach { line ->
+            a.addPolyline(PolylineOptions().addAll(line.map { toAmap(it.lat, it.lon) })
+                .width(9f * density).color(TrailOutlineArgb))
         }
         paths.forEach { line ->
             if(line.size==1) {
                 val p=line.single()
                 paintedSeeds+=a.addCircle(CircleOptions().center(toAmap(p.lat,p.lon)).radius(2.5)
                     .fillColor(exploredColor).strokeColor(TrailOutlineArgb).strokeWidth(1.5f*density))
-            }
-        }
+            }            } else {
+                paintedLines+=a.addPolyline(PolylineOptions().addAll(line.map { toAmap(it.lat,it.lon) })
+                    .width(6f * density).color(exploredColor))
+            }        }
         updateUser(latestPosition)
         if(initialFocusPending) {
             val current=latestPosition?.let { TrackPoint(it.latitude,it.longitude,it.time,it.accuracy) }
@@ -249,4 +246,5 @@ internal class AmapMapController(private val context: Context, private val onGes
             .convert() ?: point
     }
 }
+
 
