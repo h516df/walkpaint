@@ -39,7 +39,7 @@ internal object TrailPaint {
     /** Smallest frame, so one short walk still gets a usable image instead of a zero-size one. */
     const val MIN_SPAN_DEG = 0.002
     const val MARGIN = 0.06
-    const val STROKE_PX = 7f
+    const val STROKE_PX = 11f
 
     fun frameOf(points: List<TrackPoint>, maxPx: Int = MAX_PX): PaintFrame? {
         val usable = points.filter { it.lat.isFinite() && it.lon.isFinite() }
@@ -147,3 +147,4 @@ internal class TrailPainter {
         paintedPaths = 0
     }
 }
+

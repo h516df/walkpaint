@@ -51,6 +51,7 @@ internal class AmapMapController(private val context: Context, private val onGes
     private var pendingState: TrackState? = null
     private var pendingRoads: RoadState? = null
     private val exploredShapes = mutableListOf<com.amap.api.maps.model.Polygon>()
+    private val painter = TrailPainter()
 
     /** The explored ground wears the same colour as the trail, just faint enough to read through. */
     private fun exploredTint(color:Int)=Color.argb(
@@ -153,6 +154,18 @@ internal class AmapMapController(private val context: Context, private val onGes
                     .width(6f * density).color(exploredColor))
             }
         }
+        // Painted ground laid over the lines. A second pass over a street repaints the same
+        // pixels, so it covers the braid instead of adding to it. The lines stay underneath as a
+        // safety net: if this image ever fails to draw, the trail is still on the map.
+        val painted = painter.update(paths.flatten(), paths, exploredColor)
+        val frame = painter.frame()
+        if (painted != null && frame != null) {
+            a.addGroundOverlay(com.amap.api.maps.model.GroundOverlayOptions()
+                .image(com.amap.api.maps.model.BitmapDescriptorFactory.fromBitmap(painted))
+                .positionFromBounds(com.amap.api.maps.model.LatLngBounds(
+                    toAmap(frame.latMin, frame.lonMin), toAmap(frame.latMax, frame.lonMax)))
+                .zIndex(9f))
+        }
         updateUser(latestPosition)
         if(initialFocusPending) {
             val current=latestPosition?.let { TrackPoint(it.latitude,it.longitude,it.time,it.accuracy) }
@@ -235,3 +248,4 @@ internal class AmapMapController(private val context: Context, private val onGes
             .convert() ?: point
     }
 }
+
