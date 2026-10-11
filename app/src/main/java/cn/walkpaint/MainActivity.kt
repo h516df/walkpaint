@@ -148,6 +148,10 @@ class MainActivity : ComponentActivity() {
     private var paintedJson = RoadState().geoJson(true)
     /** Lit ground as merged strips, so the map never has to carry one shape per cell. */
     private var exploredJson = Explorer.stripsGeoJson(TrackState())
+    /** Painted ground for the fallback renderer, so the emulator can show the same thing. */
+    private val trailPainter = TrailPainter()
+    private var paintBitmap: android.graphics.Bitmap? = null
+    private var paintFrame: PaintFrame? = null
     private var roadJson = RoadState().geoJson(false)
     private var realGeoJson = geoJson(emptyList())
     private var demoGeoJson = geoJson(emptyList())
@@ -600,6 +604,9 @@ class MainActivity : ComponentActivity() {
                     // Explored ground is cumulative, so it reads the whole history rather than the
                     // selected day: the point is to see everything you have ever lit up at once.
                     val explored = Explorer.stripsGeoJson(next)
+                    val paintPaths = RecordedTrail.paths(next.realTracks)
+                    val paintImage = trailPainter.update(paintPaths.flatten(), paintPaths, roadColor)
+                    val paintBounds = trailPainter.frame()
                     runOnUiThread {
                         if(selectedDay!=day) return@runOnUiThread
                         snapshot = next; lastRevision = revision
@@ -608,6 +615,7 @@ class MainActivity : ComponentActivity() {
                         realGeoJson = real; demoGeoJson = demo
                         roadState = road; roadJson = roadBase; paintedJson = painted
                         exploredJson = explored
+                        paintBitmap = paintImage; paintFrame = paintBounds
                         updateMapLayers()
                     }
                 } finally { refreshing.set(false) }
@@ -954,6 +962,20 @@ class MainActivity : ComponentActivity() {
                 style.addSource(GeoJsonSource("wp-explored", exploredJson))
                 // Same colour as the trail line below, so the ground and the line are one mark on
                 // both renderers; the AMap path already follows the chosen colour.
+                val quad = paintFrame?.let { f ->
+                    org.maplibre.android.geometry.LatLngQuad(
+                        org.maplibre.android.geometry.LatLng(f.latMax, f.lonMin),
+                        org.maplibre.android.geometry.LatLng(f.latMax, f.lonMax),
+                        org.maplibre.android.geometry.LatLng(f.latMin, f.lonMax),
+                        org.maplibre.android.geometry.LatLng(f.latMin, f.lonMin))
+                } ?: org.maplibre.android.geometry.LatLngQuad(
+                    org.maplibre.android.geometry.LatLng(0.0, 0.0),
+                    org.maplibre.android.geometry.LatLng(0.0, 0.001),
+                    org.maplibre.android.geometry.LatLng(0.001, 0.001),
+                    org.maplibre.android.geometry.LatLng(0.001, 0.0))
+                val paintImage = paintBitmap ?: android.graphics.Bitmap.createBitmap(1,1,android.graphics.Bitmap.Config.ARGB_8888)
+                style.addSource(org.maplibre.android.style.sources.ImageSource("wp-paint", quad, paintImage))
+                style.addLayer(org.maplibre.android.style.layers.RasterLayer("wp-paint-layer","wp-paint"))
                 style.addLayer(org.maplibre.android.style.layers.FillLayer("wp-explored-fill","wp-explored")
                     .withProperties(
                         PropertyFactory.fillColor(roadColor),
@@ -1023,6 +1045,15 @@ class MainActivity : ComponentActivity() {
         style.getSourceAs<GeoJsonSource>("wp-roads")?.setGeoJson(roadJson)
         style.getSourceAs<GeoJsonSource>("wp-painted")?.setGeoJson(paintedJson)
         style.getSourceAs<GeoJsonSource>("wp-explored")?.setGeoJson(exploredJson)
+        paintBitmap?.let { image ->
+            val source = style.getSourceAs<org.maplibre.android.style.sources.ImageSource>("wp-paint")
+            source?.setImage(image)
+            paintFrame?.let { f -> source?.setCoordinates(org.maplibre.android.geometry.LatLngQuad(
+                org.maplibre.android.geometry.LatLng(f.latMax, f.lonMin),
+                org.maplibre.android.geometry.LatLng(f.latMax, f.lonMax),
+                org.maplibre.android.geometry.LatLng(f.latMin, f.lonMax),
+                org.maplibre.android.geometry.LatLng(f.latMin, f.lonMin))) }
+        }
     }
 
     private fun updateLocationLayer() {
@@ -1178,3 +1209,5 @@ class MainActivity : ComponentActivity() {
     }
     private fun toast(text: String) = Toast.makeText(this, text, Toast.LENGTH_LONG).show()
 }
+
+
