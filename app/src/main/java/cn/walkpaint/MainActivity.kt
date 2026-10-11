@@ -145,9 +145,8 @@ class MainActivity : ComponentActivity() {
     private var roadDownload: RoadDownload? = null
     private var onlineMap by mutableStateOf(false)
     private var showOnlineConsent by mutableStateOf(false)
+    private var mapFog: FogOverlay? = null
     private var paintedJson = RoadState().geoJson(true)
-    /** Lit ground as merged strips, so the map never has to carry one shape per cell. */
-    private var exploredJson = Explorer.stripsGeoJson(TrackState())
     private var roadJson = RoadState().geoJson(false)
     private var realGeoJson = geoJson(emptyList())
     private var demoGeoJson = geoJson(emptyList())
@@ -597,9 +596,6 @@ class MainActivity : ComponentActivity() {
                     val painted = geoJson(displayedTrack.realTracks)
                     val real = geoJson(displayedTrack.realTracks)
                     val demo = geoJson(next.tracks.filter { it.demo })
-                    // Explored ground is cumulative, so it reads the whole history rather than the
-                    // selected day: the point is to see everything you have ever lit up at once.
-                    val explored = Explorer.stripsGeoJson(next)
                     runOnUiThread {
                         if(selectedDay!=day) return@runOnUiThread
                         snapshot = next; lastRevision = revision
@@ -607,7 +603,6 @@ class MainActivity : ComponentActivity() {
                         mapTrackState=displayedTrack; mapRoadState=displayedRoad
                         realGeoJson = real; demoGeoJson = demo
                         roadState = road; roadJson = roadBase; paintedJson = painted
-                        exploredJson = explored
                         updateMapLayers()
                     }
                 } finally { refreshing.set(false) }
@@ -941,6 +936,11 @@ class MainActivity : ComponentActivity() {
         view.getMapAsync { loaded ->
             if (mapWidget !== view) return@getMapAsync
             mapInstance = loaded
+            mapFog?.project={ p -> loaded.projection.toScreenLocation(LatLng(p.lat,p.lon)) }
+            mapFog?.metersPerPixel={ loaded.projection.getMetersPerPixelAtLatitude(loaded.cameraPosition.target?.latitude ?: 0.0) }
+            loaded.addOnCameraMoveListener { mapFog?.cameraChanged() }
+            loaded.addOnCameraIdleListener { mapFog?.cameraChanged() }
+            mapFog?.cameraChanged()
             loaded.addOnCameraMoveStartedListener { reason ->
                 if(reason==MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) pauseMapFollowing()
             }
@@ -951,23 +951,20 @@ class MainActivity : ComponentActivity() {
                 style.addSource(GeoJsonSource("wp-user", userJson(userFix)))
                 style.addSource(GeoJsonSource("wp-roads", roadJson))
                 style.addSource(GeoJsonSource("wp-painted", paintedJson))
-                style.addSource(GeoJsonSource("wp-explored", exploredJson))
-                // Same colour as the trail line below, so the ground and the line are one mark on
-                // both renderers; the AMap path already follows the chosen colour.
-                style.addLayer(org.maplibre.android.style.layers.FillLayer("wp-explored-fill","wp-explored")
-                    .withProperties(
-                        PropertyFactory.fillColor(roadColor),
-                        PropertyFactory.fillOpacity(Explorer.EXPLORED_FILL_ALPHA)))
                 style.addLayer(LineLayer("wp-road-base","wp-roads").withProperties(
                     PropertyFactory.lineColor(UnexploredRoadArgb),
                     PropertyFactory.lineWidth(3f),PropertyFactory.lineOpacity(0.85f)))
                 style.addLayer(LineLayer("wp-painted-outline","wp-painted").withProperties(
-                    PropertyFactory.lineColor(TrailOutlineArgb),PropertyFactory.lineWidth(9f),
+                    PropertyFactory.lineColor(TrailOutlineArgb),PropertyFactory.lineWidth(4f),
                     PropertyFactory.lineCap(Property.LINE_CAP_ROUND),PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)))
                 style.addLayer(LineLayer("wp-painted-line","wp-painted").withProperties(
-                    PropertyFactory.lineColor(roadColor),PropertyFactory.lineWidth(6f),
+                    PropertyFactory.lineColor(roadColor),PropertyFactory.lineWidth(2.5f),
                     PropertyFactory.lineCap(Property.LINE_CAP_ROUND),PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND)))
-                style.addLayer(CircleLayer("wp-trail-seed","wp-painted").withProperties(
+                style.addLayer(CircleLayer("wp-trail-seed","wp-painted")
+                    .withFilter(org.maplibre.android.style.expressions.Expression.eq(
+                        org.maplibre.android.style.expressions.Expression.geometryType(),
+                        org.maplibre.android.style.expressions.Expression.literal("Point")))
+                    .withProperties(
                     PropertyFactory.circleColor(roadColor),PropertyFactory.circleRadius(4f),
                     PropertyFactory.circleStrokeColor(TrailOutlineArgb),PropertyFactory.circleStrokeWidth(1.5f)))
                 style.addLayer(CircleLayer("wp-user-halo", "wp-user").withProperties(
@@ -1019,13 +1016,14 @@ class MainActivity : ComponentActivity() {
             amapController.render(mapTrackState,mapRoadState)
             return
         }
+        mapFog?.setPaths(ExplorationFog.paths(mapTrackState))
         val style = mapInstance?.style ?: return
         style.getSourceAs<GeoJsonSource>("wp-roads")?.setGeoJson(roadJson)
         style.getSourceAs<GeoJsonSource>("wp-painted")?.setGeoJson(paintedJson)
-        style.getSourceAs<GeoJsonSource>("wp-explored")?.setGeoJson(exploredJson)
     }
 
     private fun updateLocationLayer() {
+        mapFog?.setLocation(userFix?.let { TrackPoint(it.latitude,it.longitude,it.time,it.accuracy) })
         if (amapActive) amapController.updateUser(userFix)
         else mapInstance?.style?.getSourceAs<GeoJsonSource>("wp-user")?.setGeoJson(userJson(userFix))
         syncHeadingLifecycle()
@@ -1110,7 +1108,14 @@ class MainActivity : ComponentActivity() {
                 runCatching { controller.release(view) }
             }
         }
-        AndroidView(factory = { view }, modifier = Modifier.fillMaxSize())
+        AndroidView(factory = { context ->
+            android.widget.FrameLayout(context).apply {
+                addView(view,android.widget.FrameLayout.LayoutParams(-1,-1))
+                val fog=FogOverlay(context)
+                controller.bindFog(fog)
+                addView(fog,android.widget.FrameLayout.LayoutParams(-1,-1))
+            }
+        }, modifier = Modifier.fillMaxSize())
     }
 
     @Composable
@@ -1136,10 +1141,20 @@ class MainActivity : ComponentActivity() {
                 headingSensor.stop()
                 retainedMapCamera=mapInstance?.cameraPosition
                 runCatching { view.onPause(); view.onStop(); view.onDestroy() }
-                if (mapWidget === view) { mapWidget = null; mapInstance = null }
+                if (mapWidget === view) { mapWidget = null; mapInstance = null; mapFog=null }
             }
         }
-        AndroidView(factory = { view }, modifier = Modifier.fillMaxSize())
+        AndroidView(factory = { context ->
+            android.widget.FrameLayout(context).apply {
+                addView(view,android.widget.FrameLayout.LayoutParams(-1,-1))
+                val fog=FogOverlay(context);mapFog=fog
+                fog.project={ p -> mapInstance?.projection?.toScreenLocation(LatLng(p.lat,p.lon)) }
+                fog.metersPerPixel={ mapInstance?.let { it.projection.getMetersPerPixelAtLatitude(it.cameraPosition.target?.latitude ?: 0.0) } ?: 100000.0 }
+                fog.setPaths(ExplorationFog.paths(mapTrackState))
+                fog.setLocation(userFix?.let { TrackPoint(it.latitude,it.longitude,it.time,it.accuracy) })
+                addView(fog,android.widget.FrameLayout.LayoutParams(-1,-1))
+            }
+        }, modifier = Modifier.fillMaxSize())
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
