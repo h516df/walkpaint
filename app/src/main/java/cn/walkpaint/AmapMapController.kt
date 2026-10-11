@@ -120,24 +120,8 @@ internal class AmapMapController(private val context: Context, private val onGes
         a.clear()
         paintedLines.clear()
         paintedSeeds.clear()
-        exploredShapes.clear()
         currentMarker = null
-        // Explored ground is drawn first so it sits under the trail. Neighbouring cells were merged
-        // into strips, so this is a few dozen shapes rather than one per cell: the map must not go
-        // back to stuttering every time a fix arrives.
-        Explorer.rectangles(state, Explorer.MAX_STRIPS).forEach { rect ->
-            val lat = rect.latRange()
-            val lon = rect.lonRange()
-            exploredShapes += a.addPolygon(com.amap.api.maps.model.PolygonOptions()
-                .addAll(listOf(
-                    toAmap(lat.start, lon.start),
-                    toAmap(lat.start, lon.endInclusive),
-                    toAmap(lat.endInclusive, lon.endInclusive),
-                    toAmap(lat.endInclusive, lon.start),
-                ))
-                .fillColor(exploredTint(exploredColor))
-                .strokeWidth(0f))
-        }
+        // Explored ground is the fog layer now; the 550 m tint that used to sit here duplicated it.
         val paths = RecordedTrail.paths(state.realTracks)
         // Every casing first, then every core: a later line's casing must not cover an earlier core.
         paths.filter { it.size > 1 }.forEach { line ->
@@ -181,7 +165,6 @@ internal class AmapMapController(private val context: Context, private val onGes
         exploredColor=color
         paintedLines.forEach { it.color=color }
         paintedSeeds.forEach { it.fillColor=color }
-        exploredShapes.forEach { it.fillColor=exploredTint(color) }
     }
 
     fun updateUser(location: Location?) {

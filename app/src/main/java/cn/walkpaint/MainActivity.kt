@@ -148,6 +148,10 @@ class MainActivity : ComponentActivity() {
     private var paintedJson = RoadState().geoJson(true)
     /** Lit ground as merged strips, so the map never has to carry one shape per cell. */
     private var exploredJson = Explorer.stripsGeoJson(TrackState())
+    /** The same fog the AMap path shows, so a device without AMap is not missing the feature. */
+    private val fogPainter = TrailPainter()
+    private var fogBitmap: android.graphics.Bitmap? = null
+    private var fogFrame: PaintFrame? = null
     private var roadJson = RoadState().geoJson(false)
     private var realGeoJson = geoJson(emptyList())
     private var demoGeoJson = geoJson(emptyList())
@@ -600,6 +604,10 @@ class MainActivity : ComponentActivity() {
                     // Explored ground is cumulative, so it reads the whole history rather than the
                     // selected day: the point is to see everything you have ever lit up at once.
                     val explored = Explorer.stripsGeoJson(next)
+                    val fogPoints = next.realTracks.filterNot { it.demo }.flatMap { it.points }
+                    val fogImage = fogPainter.update(fogPoints, roadColor,
+                        userFix?.let { TrackPoint(it.latitude, it.longitude, it.time, it.accuracy) })
+                    val fogBounds = fogPainter.frame()
                     runOnUiThread {
                         if(selectedDay!=day) return@runOnUiThread
                         snapshot = next; lastRevision = revision
@@ -607,7 +615,7 @@ class MainActivity : ComponentActivity() {
                         mapTrackState=displayedTrack; mapRoadState=displayedRoad
                         realGeoJson = real; demoGeoJson = demo
                         roadState = road; roadJson = roadBase; paintedJson = painted
-                        exploredJson = explored
+                        exploredJson = explored; fogBitmap = fogImage; fogFrame = fogBounds
                         updateMapLayers()
                     }
                 } finally { refreshing.set(false) }
@@ -975,6 +983,8 @@ class MainActivity : ComponentActivity() {
                     PropertyFactory.circleRadius(16f),
                     PropertyFactory.circleOpacity(0.18f)
                 ))
+                // The style is brand new, so push what was already loaded.
+                updateMapLayers()
                 style.addLayer(CircleLayer("wp-user-dot", "wp-user").withProperties(
                     PropertyFactory.circleColor(android.graphics.Color.rgb(23, 119, 205)),
                     PropertyFactory.circleRadius(7f),
@@ -1023,6 +1033,21 @@ class MainActivity : ComponentActivity() {
         style.getSourceAs<GeoJsonSource>("wp-roads")?.setGeoJson(roadJson)
         style.getSourceAs<GeoJsonSource>("wp-painted")?.setGeoJson(paintedJson)
         style.getSourceAs<GeoJsonSource>("wp-explored")?.setGeoJson(exploredJson)
+        val fog = fogBitmap
+        val fogBounds = fogFrame
+        if (fog != null && fogBounds != null) {
+            // Rebuilt rather than swapped: an image source holds the image it was made with, so
+            // setting an image on a source built from a placeholder leaves nothing on the map.
+            runCatching { style.removeLayer("wp-fog") }
+            runCatching { style.removeSource("wp-fog") }
+            style.addSource(org.maplibre.android.style.sources.ImageSource("wp-fog",
+                org.maplibre.android.geometry.LatLngQuad(
+                    org.maplibre.android.geometry.LatLng(fogBounds.latMax, fogBounds.lonMin),
+                    org.maplibre.android.geometry.LatLng(fogBounds.latMax, fogBounds.lonMax),
+                    org.maplibre.android.geometry.LatLng(fogBounds.latMin, fogBounds.lonMax),
+                    org.maplibre.android.geometry.LatLng(fogBounds.latMin, fogBounds.lonMin)), fog))
+            style.addLayer(org.maplibre.android.style.layers.RasterLayer("wp-fog","wp-fog"))
+        }
     }
 
     private fun updateLocationLayer() {

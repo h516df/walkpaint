@@ -52,7 +52,7 @@ internal object TrailPaint {
     /** The veil over ground not yet walked. Pale rather than dark, so the map stays legible. */
     const val FOG_COLOR = 0x73F2F4F5.toInt()
     /** How strongly an explored block takes the person's colour. */
-    const val CELL_TINT_ALPHA = 120
+    const val CELL_TINT_ALPHA = 95
 
     fun cellRow(lat: Double): Int = kotlin.math.floor(lat / CELL_DEGREES).toInt()
     fun cellCol(lon: Double): Int = kotlin.math.floor(lon / CELL_DEGREES).toInt()
@@ -183,3 +183,4 @@ internal class TrailPainter {
         }
     }
 }
+
