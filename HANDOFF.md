@@ -5,7 +5,7 @@
 - 工作区：`D:\Worktrees\WalkPaint\codex-recording-recovery-v038`；分支 `agent/codex/recording-recovery-v038`；基线 5059f979857afedfe206accdea263cf18322e18f（最新已发布 v0.37 之后的发布记录提交）。
 - 修复：旧暂停命令覆盖新恢复选择、旧定位任务跨会话写入、迷雾右/下边缘渐变、“定位我”误走历史范围而停留世界视野；更新选择正式文件且兼容历史命名；发布包非调试，原签名缺失时拒绝构建。
 - 验证：292 JVM 通过；真实 Android 快速停启从 FAIL 到 PASS；原生迷雾与更新安全边界 PASS；Google AVD 前台/后台/短时锁屏实际定位写库，连续涂色与定位视野截图核对；正式包覆盖安装前后五表逐行摘要一致。详情以 [v0.38 证据](docs/evidence/V038.md) 为准。
-- 分发：用户已明确授权原私有渠道。发布入口 [v0.38](https://github.com/h516df/walkpaint/releases/tag/v0.38)，标签精确指向交付提交；脚本在服务端资产大小和摘要核验后才开放。实际状态以 GitHub 与 dist/v0.38/publication.json 回执为准，禁止覆盖旧发布。
+- 分发：用户已明确授权原私有渠道。发布入口 [v0.38](https://github.com/h516df/walkpaint/releases/tag/v0.38)，标签精确指向交付提交；本次仅分发 ARM64 手机正式包及同字节历史命名兼容包、说明和 SHA256，通用包留作本机验收；脚本在服务端资产大小和摘要核验后才开放。已发布为 Latest、非草稿、非 prerelease；标签 9bcd16468c7eafc987d67c7b2b73e3ca60c23ff6，四项服务器资产核验通过，实际重新下载手机 APK/说明/清单验大小、SHA256与字节一致。回执见 docs/evidence/v038/publication.json。禁止覆盖旧发布。
 - 仍未验收：本人账号的本轮设备授权至下载安装、vivo 真机 ARM 高德、长时间户外后台。Issue #6 不关闭；不能把 Google 备用地图等同真机高德。本轮不合并历史 PR。
 - 回退：保留 v0.37 下载；已装 code40 后须构建原签名/schema2/code>=40 的修复包，不能卸载丢数据或直接降版。
 

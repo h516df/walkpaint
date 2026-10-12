@@ -17,6 +17,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -32,12 +33,17 @@ SIGNER = "21b74e3e2a10e12da8284d4e6bd7d99e55b00a385215902e94d7896f7a46c967"
 
 
 def run(argv, timeout=2400):
-    proc = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
-    out = proc.stdout.decode("utf-8", "replace")
-    if proc.returncode != 0:
+    read_api = argv[:2] == ["gh", "api"] and "--method" not in argv
+    for attempt in range(5 if read_api else 1):
+        proc = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
+        out = proc.stdout.decode("utf-8", "replace")
+        if proc.returncode == 0:
+            return out
+        if read_api and "unexpected EOF" in out and attempt < 4:
+            time.sleep(min(2 ** attempt, 8))
+            continue
         print(out[-3000:], flush=True)
         raise SystemExit("命令失败：" + " ".join(str(a) for a in argv))
-    return out
 
 
 def config():
@@ -94,6 +100,7 @@ def main():
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--target", help="已推送的精确提交 SHA，发布时必填")
     parser.add_argument("--prepared-dir", type=Path, help="已验收的两个正式包所在目录")
+    parser.add_argument("--phone-only", action="store_true", help="仅分发 ARM64 手机包；通用包仍可用于本机验收")
     args = parser.parse_args()
 
     repo, prefix = config()
@@ -105,21 +112,28 @@ def main():
             % (version, code, notes["versionName"], notes["versionCode"])
         )
 
-    if not args.no_build and args.prepared_dir is None:
-        print("== 出正式包 ==", flush=True)
-        run([str(GRADLE), "-p", str(ROOT), ":app:assembleRelease", "--console=plain"])
-    if args.prepared_dir is None and not APK.is_file():
-        raise SystemExit("没有正式包：" + str(APK))
+    if args.prepared_dir is None:
+        if args.no_build:
+            raise SystemExit("--no-build 必须指定 --prepared-dir，不能把最后一次构建误当两个架构的包")
+        prepared = DIST / f"v{version}" / "input"
+        prepared.mkdir(parents=True, exist_ok=True)
+        for variant in ('universal', 'arm64'):
+            print("== 出正式包："+variant+" ==", flush=True)
+            run([str(GRADLE), "-p", str(ROOT), ":app:assembleRelease",
+                 '-PwalkpaintArm64Only='+str(variant=='arm64').lower(),
+                 '--no-daemon','--max-workers=2','--console=plain'])
+            if not APK.is_file():
+                raise SystemExit("没有正式包：" + str(APK))
+            shutil.copyfile(APK,prepared/f'{prefix}-v{version}-{variant}.apk')
+        args.prepared_dir=prepared
 
     out = DIST / f"v{version}"
     out.mkdir(parents=True, exist_ok=True)
     assets = []
-    for variant in ('universal', 'arm64'):
-        source = args.prepared_dir / f'{prefix}-v{version}-{variant}.apk' if args.prepared_dir else APK
-        if variant == 'arm64' and args.prepared_dir is None:
-            continue
+    for variant in (('arm64',) if args.phone_only else ('universal', 'arm64')):
+        source = args.prepared_dir / f'{prefix}-v{version}-{variant}.apk'
         verify_apk(source, variant, version, code)
-        target = out / source.name if args.prepared_dir else out / f'{prefix}-v{version}-{variant}.apk'
+        target = out / source.name
         shutil.copyfile(source, target)
         assets.append(target)
         # v0.37 and older select only this historical name. It is still the signed release bytes.
@@ -150,32 +164,39 @@ def main():
         raise SystemExit('只允许向原私有仓库发布')
     run(['gh','api',f'repos/{repo}/commits/{args.target}'])
 
-    title = "v%s｜%s" % (version, (notes.get("新增") or ["小改动"])[0][:24])
+    title = f"v{version}｜足迹涂色更新"
     body = markdown(notes, sha)
-    existing = subprocess.run(
-        ["gh", "release", "view", f"v{version}", "--repo", repo],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    ).returncode == 0
+    existing = any(r['tag_name']==f'v{version}' for r in json.loads(run(['gh','api',f'repos/{repo}/releases'])))
     if existing:
         raise SystemExit('这个版本已存在，拒绝覆盖；先核对现有发布')
     tag_sha = run(['gh','api',f'repos/{repo}/git/ref/tags/v{version}','--jq','.object.sha']).strip()
     if tag_sha != args.target:
         raise SystemExit('远端标签未固定到当前提交')
-    body_file = out / 'release-body.md'
-    body_file.write_text(body,encoding='utf-8')
-    run(["gh", "release", "create", f"v{version}", *map(str,assets),
-         "--repo", repo, "--title", title, "--notes-file", str(body_file), '--draft','--verify-tag'])
-    remote = json.loads(run(['gh','api',f'repos/{repo}/releases/tags/v{version}']))
+    # The official REST path avoids the high-level CLI's unrelated GraphQL tag lookup.
+    payload = out / 'create-release.json'
+    payload.write_text(json.dumps({'tag_name':f'v{version}','target_commitish':args.target,
+        'name':title,'body':body,'draft':True,'prerelease':False},ensure_ascii=False),encoding='utf-8')
+    remote = json.loads(run(['gh','api',f'repos/{repo}/releases','--method','POST','--input',str(payload)]))
+    release_id = remote['id']
+    endpoint = remote['upload_url'].split('{')[0]
+    if endpoint != f'https://uploads.github.com/repos/{repo}/releases/{release_id}/assets':
+        raise SystemExit('上传地址不符合原仓库，保持草稿不发布')
+    for asset in assets:
+        print('正在上传 '+asset.name,flush=True)
+        # Dedicated uploader supplies replayable file streams and bounded network retries.
+        run(['gh','release','upload',f'v{version}',str(asset),'--repo',repo])
+    remote = json.loads(run(['gh','api',f'repos/{repo}/releases/{release_id}']))
     for asset in remote['assets']:
         expected = expected_assets.pop(asset['name'], None)
-        if not expected or asset['size'] != expected['size'] or asset.get('digest') != 'sha256:'+expected['sha256']:
+        if not expected or asset['state']!='uploaded' or asset['size'] != expected['size'] or asset.get('digest') != 'sha256:'+expected['sha256']:
             raise SystemExit('草稿资产校验失败，保持草稿不发布')
     if expected_assets:
         raise SystemExit('草稿缺少资产，保持草稿不发布')
     receipt = {'tag':f'v{version}','target':args.target,'assets':remote['assets'],'draft_verified':True}
     (out/'publication.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2),encoding='utf-8')
-    run(['gh','release','edit',f'v{version}','--repo',repo,'--draft=false','--latest'])
-    final = json.loads(run(['gh','api',f'repos/{repo}/releases/tags/v{version}']))
+    payload=out/'publish-release.json'
+    payload.write_text(json.dumps({'draft':False,'make_latest':'true'}),encoding='utf-8')
+    final = json.loads(run(['gh','api',f'repos/{repo}/releases/{release_id}','--method','PATCH','--input',str(payload)]))
     if final['draft'] or not final['published_at']:
         raise SystemExit('未确认发布状态，请核对发布页')
     print("已发布 v%s 到 %s" % (version, repo), flush=True)

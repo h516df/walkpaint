@@ -1,0 +1,40 @@
+{
+  "tag": "v0.38",
+  "target": "9bcd16468c7eafc987d67c7b2b73e3ca60c23ff6",
+  "draft_verified": true,
+  "assets": [
+    {
+      "name": "WalkPaint-v0.38-arm64-debug.apk",
+      "size": 65904451,
+      "digest": "sha256:9a6131a79f7f15960b1277dd3dc03a05d3ef48942c63a121f58dee513e6397aa",
+      "id": 633218803
+    },
+    {
+      "name": "WalkPaint-v0.38-arm64.apk",
+      "size": 65904451,
+      "digest": "sha256:9a6131a79f7f15960b1277dd3dc03a05d3ef48942c63a121f58dee513e6397aa",
+      "id": 633229702
+    },
+    {
+      "name": "WalkPaint-v0.38-release-notes.json",
+      "size": 1344,
+      "digest": "sha256:39601cdb12fda28db19335147f53fd7ca74490273983808c6529e3c3f80b594c",
+      "id": 633174442
+    },
+    {
+      "name": "WalkPaint-v0.38-SHA256.txt",
+      "size": 294,
+      "digest": "sha256:2e9a6b1b12ffcd9e59ccdfdc8f931160bde9733c798019964b085335e7315c8a",
+      "id": 633239552
+    }
+  ],
+  "published_at": "2026-10-12T09:02:37Z",
+  "url": "https://github.com/h516df/walkpaint/releases/tag/v0.38",
+  "latest": true,
+  "download_verified": true,
+  "download_files": [
+    "WalkPaint-v0.38-SHA256.txt",
+    "WalkPaint-v0.38-arm64.apk",
+    "WalkPaint-v0.38-release-notes.json"
+  ]
+}

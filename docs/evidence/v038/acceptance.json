@@ -124,5 +124,21 @@
       "size": 120496990,
       "sha256": "f553c6e3633ea3ed257ed5d9c45a66e816d644e55ed09f0af77423ec540aa589"
     }
+  },
+  "publication": {
+    "tag": "v0.38",
+    "target": "9bcd16468c7eafc987d67c7b2b73e3ca60c23ff6",
+    "published_at": "2026-10-12T09:02:37Z",
+    "latest": true,
+    "draft": false,
+    "asset_count": 4,
+    "download_verified": true,
+    "distribution": "arm64 phone release with legacy alias; universal retained locally"
+  },
+  "cleanup": {
+    "read_only_google_avd_closed": true,
+    "temporary_ui_xml_removed": true,
+    "dsh_target_running": false,
+    "dsh_target_inbox_empty": true
   }
 }
