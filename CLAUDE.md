@@ -1,3 +1,15 @@
+# v0.41 手机界面改版候选（2026-10-12）
+
+用户已选定移动端设计并要求真正用到 Android App。当前任务 #35，工作区 D:\Workspaces\Codex\2026-10-12\jie\work\worktrees\WalkPaint\codex-mobile-ui-redesign-v041，分支 agent/codex/mobile-ui-redesign-v041，固定基线 v0.40/e4b8301。代码、参考设计与证据在本分支；PR 链接见 #35 的关联 PR。
+
+候选 0.41/code43：原生地图摘要/记录操作、足迹列表/详情、我的、授权说明与深浅主题已完成。用户的最新选定设计取代历史“首页不得有摘要/记录按钮、我的只留两项”视觉约束；保留当前真实地图/迷雾、记录服务、原数据与颜色选择、原签名和更新安全流程。
+
+状态：301 JVM、正式构建及专用 Google AVD UI/320dp/旧行保留 PASS；ARM64 正式候选已准备，执行 dex 与验收通用包一致。用户手机/高德 ARM/本人下载安装/长期户外未验收。证据、包指纹和发布边界见 docs/evidence/V041_MOBILE_UI.md；不自动合并旧 PR 栈，不把代码推送或候选准备当手机已更新。
+
+后续：核对本分支 HEAD 和实时 Release，再按原私有渠道发布；用户只完成本人授权与系统安装确认。禁止覆盖既有版本或卸载/清数据；回退需原签名/schema2/code>=43 修复包。
+
+---
+
 # 项目规则
 
 通用规则来源：`D:\Projects\agent-rules\AGENTS.md`。当前事实以实时 Git、GitHub Release 和本项目 HANDOFF 最新节为准。

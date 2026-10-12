@@ -87,6 +87,8 @@ private const val VEIL_HANDOVER_MS = 600L
 class MainActivity : ComponentActivity() {
     private val repository by lazy { (application as WalkPaintApp).repository }
     private var currentTab by mutableIntStateOf(0)
+    private var appearanceMode by mutableIntStateOf(0)
+    private var showIntro by mutableStateOf(false)
     private val roadAppearance by lazy { RoadAppearance(this) }
     private var roadColor by mutableIntStateOf(ExploredRoadArgb)
     /** Name of the place the progress is measured around; null until resolved, never an error. */
@@ -388,8 +390,10 @@ class MainActivity : ComponentActivity() {
         showAmapConsent = amapSupported && BuildConfig.AMAP_KEY.isNotBlank() &&
             !amapConsent && !mapPref.getBoolean("amap_sdk_decision_seen", false)
         updateUi()
+        appearanceMode=getSharedPreferences("ui_appearance",Context.MODE_PRIVATE).getInt("mode",0).coerceIn(0,2)
+        showIntro=!trackingEnabled && !mapPref.getBoolean("mobile_intro_seen",false)
         setContent {
-            WalkPaintTheme {
+            WalkPaintTheme(appearanceMode) {
                 AppShell(
                     selectedTab = currentTab,
                     onTab = {
@@ -459,6 +463,12 @@ class MainActivity : ComponentActivity() {
                     onCopyDiagnostics = { openRecordingDiagnostics() },
                     internalBackupCount = repository.backupFiles().size,
                     mapProviderLabel = if (amapActive) "高德联网地图" else if(onlineMap) "OpenFreeMap 联网备用地图" else "离线足迹视图",
+                    appearanceMode=appearanceMode,
+                    onAppearanceMode={ mode ->
+                        appearanceMode=mode
+                        getSharedPreferences("ui_appearance",Context.MODE_PRIVATE).edit().putInt("mode",mode).apply()
+                    },
+                    onShowIntro={showIntro=true},
                     roadColor = roadColor,
                     onRoadAppearance = { showRoadAppearance=true },
                     onChooseAmap = {
@@ -552,7 +562,7 @@ class MainActivity : ComponentActivity() {
                     confirmButton = { TextButton(onClick = { copyTrackingDiagnostics() }) { Text("复制诊断") } },
                     dismissButton = { TextButton(onClick = { showDiagnostics = false }) { Text("关闭") } }
                 )
-                if (showAmapConsent && !confirmEnable && !pendingEnable && !showBackgroundPrompt && !showFineSettings) AlertDialog(
+                if (showAmapConsent && !showIntro && !confirmEnable && !pendingEnable && !showBackgroundPrompt && !showFineSettings) AlertDialog(
                     onDismissRequest = {
                         showAmapConsent = false
                         getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE).edit()
@@ -589,18 +599,17 @@ class MainActivity : ComponentActivity() {
                         }) { Text(if(amapConsent) "撤回并用离线地图" else "暂不用") }
                     }
                 )
-                if (confirmEnable) AlertDialog(
-                    onDismissRequest = { confirmEnable=false;pendingEnable=false },
-                    title = { Text("开启自动记录") },
-                    text = { Text("为了在出门和锁屏后记录走过的路，需要允许精确定位。足迹保存在本机，记录时会保留通知，可能增加耗电；你随时可以关闭。地图联网另行征求同意。") },
-                    confirmButton = { Button(onClick={
-                        confirmEnable=false
+                if (showIntro || confirmEnable) DesignOnboarding(
+                    onEnable={
+                        showIntro=false;confirmEnable=false
                         getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE).edit()
-                            .putBoolean("auto_notice_v3_seen",true).apply()
-                        continueEnable()
-                    }) { Text("同意并继续") } },
-                    dismissButton = { TextButton(onClick={confirmEnable=false;pendingEnable=false}) { Text("暂不开启") } }
-                )
+                            .putBoolean("mobile_intro_seen",true).putBoolean("auto_notice_v3_seen",true).apply()
+                        if(pendingEnable) continueEnable() else beginEnable()
+                    },
+                    onSkip={
+                        showIntro=false;confirmEnable=false;pendingEnable=false
+                        getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE).edit().putBoolean("mobile_intro_seen",true).apply()
+                    })
                 if(showBackgroundPrompt) AlertDialog(
                     onDismissRequest={showBackgroundPrompt=false;pendingEnable=false},
                     title={Text("允许后台定位")},

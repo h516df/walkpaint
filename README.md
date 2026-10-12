@@ -1,3 +1,9 @@
+# v0.41 手机界面改版候选
+
+已按用户选定设计实现 Android 原生界面。参考设计、代码与验收见 [#35](https://github.com/h516df/walkpaint/issues/35) 和 [本轮证据](docs/evidence/V041_MOBILE_UI.md)。基线为最新发布 v0.40，候选状态与未验收限制见证据；当前私有分发以 [Release 列表](https://github.com/h516df/walkpaint/releases) 为准。
+
+---
+
 # 足迹涂色 · v0.38
 
 自动记录步行、骑行和驾车足迹，沿已保存路线连续显露地图。无需准备道路包，数据保存在本机。
