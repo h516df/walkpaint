@@ -546,9 +546,12 @@ private fun ProfilePage(automatic:Boolean,notice:String?,onResolve:()->Unit,
                 SettingRow("备份与恢复","保存或找回你的足迹") { page="备份与恢复" }
                 SettingRow("隐私与权限","管理授权与后台运行") { page="隐私与权限" }
                 SettingRow("检查更新","当前版本 ${BuildConfig.VERSION_NAME}") { page="检查更新" }
-                // One entry, not two: the feedback page was only ever a wrapper around copying the
-                // same diagnosis the diagnostics page already shows.
-                SettingRow("诊断与反馈","查看原因、复制给开发者",onDiagnostics)
+                // The full page, not only the read-only dialog: this is where a problem is described,
+                // where the same diagnosis is previewed, and where the raw field material — the fixes
+                // themselves, the dropped ones and why — is exported. The dialog stays for anyone who
+                // only wants the text to copy.
+                SettingRow("诊断与反馈","预览报告，或导出记录现场") { page="问题反馈" }
+                SettingRow("完整诊断文本","原始计数与道路复算，可复制",onDiagnostics)
                 SettingRow("关于","版本与地图来源") { page="关于" }
             } }
             "备份与恢复" -> item { Section("保护足迹") {
