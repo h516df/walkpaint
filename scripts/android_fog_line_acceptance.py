@@ -70,9 +70,11 @@ WALK_SPACING_S = 3.0
 # red and green), which now matches nothing because the veil carries no tint at all. A bare
 # OpenFreeMap street pixel is light. The gate below stays low on purpose: it asks "is the fog on
 # screen", and the exact opacity is asserted by FogPixelProbe instead of inferred from a screenshot.
-VEIL_BLACK_LEVEL = 24
-VEIL_DARK_LEVEL = 70
-VEIL_PRESENTED_RATIO = 0.05
+#
+# The predicate itself lives in veil_measure.py because the phone lane has to ask the same question
+# of a different screen. Two copies of "what counts as veil" is how a pass on one lane stops meaning
+# a pass on the other.
+from veil_measure import classify_region, VEIL_BLACK_LEVEL, VEIL_PRESENTED_RATIO  # noqa: E402
 # Two clusters about twelve kilometres apart: the far one has to keep its paint and the ground
 # between them has to keep its veil.
 FAR_CLUSTER_MIN_METRES = 11000
@@ -191,30 +193,17 @@ def veil_stats(name):
 
     This is the observable signal that the fog layer is actually on screen, rather than merely
     having been handed to the map engine: the counters say the image was passed over, a picture
-    says whether a person can see it. The veil is dark navy, so it is the only thing in this scene
-    with blue above both red and green while still being dark; the pale veil of 0.36 scores ~0.002
-    on this test, which is what makes it a usable signal rather than a colour guess.
+    says whether a person can see it. The veil is opaque black, so it is the only thing in this
+    scene that is both very dark and neutral; the pale veil of 0.36 scored ~0.002 on this test,
+    which is what makes it a usable signal rather than a colour guess. The classifier itself is
+    shared with the phone lane in veil_measure.py.
     """
     from PIL import Image
     image = Image.open(out / (name + '.png')).convert('RGB')
     # Skip the top chip and the bottom tab bar; keep the map itself.
     region = image.crop((0, 300, image.width, image.height - 300)).resize((216, 360))
-    veil = 0
-    bare = 0
-    tinted = 0
-    total = 0
-    for r, g, b in region.getdata():
-        total += 1
-        luminance = 0.299 * r + 0.587 * g + 0.114 * b
-        if r < VEIL_BLACK_LEVEL and g < VEIL_BLACK_LEVEL and b < VEIL_BLACK_LEVEL:
-            veil += 1
-        elif luminance > 200 and g >= r:
-            bare += 1
-        if g > r + 8 and g > b and 90 < g < 200:
-            tinted += 1
-    return {'veil_ratio': round(veil / total, 3),
-            'bare_map_ratio': round(bare / total, 3),
-            'tint_ratio': round(tinted / total, 3)}
+    stats = classify_region(region.getdata())
+    return {key: stats[key] for key in ('veil_ratio', 'bare_map_ratio', 'tint_ratio')}
 
 
 def map_presented_ms(started, timeout_s=25):

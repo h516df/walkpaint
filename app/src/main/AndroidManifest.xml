@@ -25,7 +25,10 @@
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/update_paths" />
         </provider>
 
-        <activity android:name=".MainActivity" android:exported="true">
+        <!-- singleTop so a command that asks for the field export reaches the instance that
+             already holds the map, instead of stacking a second one on top of it. -->
+        <activity android:name=".MainActivity" android:exported="true"
+            android:launchMode="singleTop">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

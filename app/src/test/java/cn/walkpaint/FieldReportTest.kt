@@ -11,6 +11,8 @@ class FieldReportTest {
         device = "vivo test",
         android = "36",
         engine = "高德联网地图",
+        engineDetail = "引擎判定=正在用高德 本机首选ABI=arm64-v8a 高德支持本机=是\n" +
+            "高德=视图已建 地图加载完成=true 地面图层有(位图=512x512)",
         permissions = "精确定位=true 后台定位=true",
         recording = "本次服务：GPS回调 10 / 已入库 6 / 过滤 4",
         camera = "缩放=17.00 中心=31.23000,121.47000 跟随=true",
@@ -31,6 +33,7 @@ class FieldReportTest {
         assertTrue("a fix that never reached the database is not marked", text.contains("未入库"))
         assertTrue("the drop reason is missing", text.contains("UNRELIABLE_ACCURACY"))
         assertTrue(text.contains("高德联网地图"))
+        assertTrue("the export must say which engine was really running", text.contains("引擎判定="))
         assertTrue(text.contains("含你的行走坐标"))
     }
 
