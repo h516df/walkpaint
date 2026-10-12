@@ -1,0 +1,18 @@
+name: Delivery tool checks
+on:
+  pull_request:
+    paths: ['scripts/**', 'tests/**', '.github/workflows/delivery-tools.yml']
+  push:
+    branches: ['agent/codex/delivery-regression-tools']
+    paths: ['scripts/**', 'tests/**', '.github/workflows/delivery-tools.yml']
+permissions:
+  contents: read
+jobs:
+  delivery-tools:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6.1.0
+        with:
+          persist-credentials: false
+      - name: Release recovery and UI result assertions
+        run: python3 -m unittest discover -s tests -v

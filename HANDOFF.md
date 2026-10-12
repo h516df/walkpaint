@@ -1,3 +1,19 @@
+# 当前任务：交付工具与行为验收改进
+
+用户要求提高经常进行的 Vibe Coding 效率与质量，并明确要求直接实施。唯一写手是当前 Codex；工作区 work/ops-worktrees/WalkPaint/codex-delivery-regression-tools，分支 agent/codex/delivery-regression-tools，基线为已发布 v0.41 的 c46352eb2f700b78abeeb4d2f30b8271c08f0d01。
+
+本轮仅改发布工具、AndroidTest 探针和 UI 验收脚本；生产源码、版本、记录算法、原签名与正式安装包均保持。已发布 v0.41/code43，用户确认手机 v0.40，手机安装与 ARM 高德仍未验收。不自动整合历史 PR 栈。
+
+发布模块复用 h516df/android-update-kit PR #6；恢复原草稿且只续传缺少资产，已发布版本只读核对。原发布入口新增 --verify-only；--no-legacy-alias 只在明确结束旧更新器兼容后使用，默认继续保留旧命名。
+
+验证：16 项 Python 回归；AndroidTest 构建通过；已验收通用正式包不重建，专用 Google AVD 的实际日期集合、主题重启持久化、记录开关/服务、原五表旧行保留与安装包身份通过。实际引擎 OpenFreeMap/MapLibre。真实私有 v0.41 发布从原入口只读回读通过，零上传和发布写入。证据见 docs/evidence/DELIVERY_TOOLS.md。
+
+后续接续先核对本分支 HEAD、PR 与 docs/evidence/delivery-tools/inputs.json；不因换会话重建同一包或重新发版。工具回退可还原本次工具提交，不卸载或清除用户数据库。普通 Android UI 测试只能用既有 emulator-5556/WalkPaint_Google_API36，必须先调用原设备守卫。
+
+---
+
+以下为前阶段记录：
+
 # v0.41 手机界面改版候选（2026-10-12）
 
 用户已选定移动端设计并要求真正用到 Android App。当前任务 #35，工作区 D:\Workspaces\Codex\2026-10-12\jie\work\worktrees\WalkPaint\codex-mobile-ui-redesign-v041，分支 agent/codex/mobile-ui-redesign-v041，固定基线 v0.40/e4b8301。代码、参考设计与证据在本分支；PR 链接见 #35 的关联 PR。
