@@ -67,6 +67,33 @@ internal object TrailShape {
         return runs.filter { it.size > 1 }
     }
 
+    /**
+     * The line the map draws over the veil: the person's own ground, collapsed, clipped to what is
+     * on screen, and simplified to well under one bitmap pixel at the current view.
+     *
+     * The veil's image is capped at a few hundred pixels, so zoomed out the cleared corridor falls
+     * under a single pixel and the record of where the person has been would vanish — exactly the
+     * screen where that record matters most. This line carries it instead, at a fixed screen width,
+     * at every zoom. Handing the whole history to the map on every update was measured as a 2.1 s
+     * worst case on a loaded emulator, so only what can be seen is sent, and only to the precision
+     * the view can actually show.
+     */
+    fun network(paths: List<List<TrackPoint>>, frame: PaintFrame?): List<List<TrackPoint>> {
+        val runs = dedupe(paths)
+        if (frame == null || frame.latSpan <= 0.0 || frame.lonSpan <= 0.0) return runs
+        val perMetre = frame.heightPx / (frame.latSpan * 111194.9)
+        val tolerance = if (perMetre > 0.0) (0.75 / perMetre).coerceIn(0.0, 60.0) else 0.0
+        val latPad = frame.latSpan * 0.05
+        val lonPad = frame.lonSpan * 0.05
+        return runs.mapNotNull { run ->
+            val visible = run.filter {
+                it.lat in (frame.latMin - latPad)..(frame.latMax + latPad) &&
+                    it.lon in (frame.lonMin - lonPad)..(frame.lonMax + lonPad)
+            }
+            if (visible.size < 2) null else simplify(visible, tolerance)
+        }
+    }
+
     fun simplify(points: List<TrackPoint>, toleranceM: Double = TOLERANCE_M): List<TrackPoint> {
         if (points.size <= 2 || toleranceM <= 0.0) return points
         val keep = BooleanArray(points.size)

@@ -533,13 +533,12 @@ private fun ProfilePage(automatic:Boolean,notice:String?,onResolve:()->Unit,
                         }
                     }
                 } }
-                item { Section("常用") {
-                    SettingRow("备份与恢复","保存或找回你的足迹") { page="备份与恢复" }
-                    SettingRow("检查更新","当前版本 ${BuildConfig.VERSION_NAME}") { page="检查更新" }
-                } }
+                // One screen, one switch and the colour. The first screen answers "is it recording,
+                // and what colour is my ground"; everything else moved into 更多设置, where the
+                // entries are no longer listed twice.
                 item { Section("偏好") {
                     SettingRow("涂色颜色",RoadPaintColor.name(roadColor),onAppearance)
-                    SettingRow("更多设置","隐私、地图、诊断与关于") { page="更多设置" }
+                    SettingRow("更多设置","备份、隐私、地图、诊断与关于") { page="更多设置" }
                 } }
                 item { Text("足迹涂色  ${BuildConfig.VERSION_NAME}",color=Muted,fontSize=12.sp,modifier=Modifier.padding(vertical=8.dp)) }
             }

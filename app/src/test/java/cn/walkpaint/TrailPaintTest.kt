@@ -5,6 +5,11 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+/**
+ * The veil's contract, restated for v0.39: unknown ground is opaque black, only a walked corridor
+ * is cleared, and the frame is always wider than the view so its border can never be mistaken for
+ * ground that has been explored.
+ */
 class TrailPaintTest {
 
     private fun point(lat: Double, lon: Double) = TrackPoint(lat, lon, 0L, 5f)
@@ -14,20 +19,19 @@ class TrailPaintTest {
     @Test fun theClearedBandIsAWideOneSoAnOffsetPassStaysInsideIt() {
         // A second pass over a street carries its own offset. As long as the offset is smaller than
         // the cleared band, the second pass repaints ground that is already clear.
-        assertTrue("half band ${TrailPaint.CORRIDOR_M} m", TrailPaint.CORRIDOR_M >= 12.0)
+        assertTrue("half band ${TrailPaint.CORRIDOR_M} m", TrailPaint.CORRIDOR_M >= 25.0)
     }
 
-    @Test fun theEdgeOfTheBandIsSoftRatherThanStepped() {
-        assertTrue(TrailPaint.FEATHER_M >= 6.0)
+    @Test fun theEdgeOfTheBandIsASoftButNarrowRamp() {
+        // Narrow on purpose: the person asked for unknown ground to be unreadable, so the ramp must
+        // not turn into a translucent skirt tens of metres wide.
+        assertTrue("feather ${TrailPaint.FEATHER_M} m", TrailPaint.FEATHER_M in 1.0..8.0)
     }
 
-    @Test fun theVeilIsDarkEnoughToReadAsFogAndLightEnoughToSeeStreets() {
+    @Test fun unknownGroundIsOpaqueBlack() {
         val alpha = TrailPaint.FOG_COLOR ushr 24
-        assertTrue("alpha $alpha", alpha in 0x80..0xE8)
-    }
-
-    @Test fun theFrameItselfFadesOutSoItNeverReadsAsARectangle() {
-        assertTrue(TrailPaint.EDGE_FADE in 0.05..0.30)
+        assertEquals("alpha $alpha", 0xFF, alpha)
+        assertEquals("colour", 0x000000, TrailPaint.FOG_COLOR and 0x00FFFFFF)
     }
 
     @Test fun nothingRecordedMeansNothingToPaint() {
@@ -46,10 +50,11 @@ class TrailPaintTest {
         assertTrue("${frame.widthPx}x${frame.heightPx}", frame.heightPx <= TrailPaint.MAX_PX)
     }
 
-    @Test fun aFrameStretchedOverTensOfKilometresIsClampedAroundWhereYouAre() {
+    @Test fun beforeTheMapReportsAViewTheFrameIsTooWideToShowItsEdge() {
+        // An opaque veil whose border fell inside the screen would read as explored ground.
         val near = point(31.0, 121.0)
         val frame = TrailPaint.frameOf(listOf(near, point(35.0, 118.0)), anchor = near)!!
-        assertTrue(frame.latSpan * 111194.9 < TrailPaint.MAX_SPAN_METERS * 1.4)
+        assertTrue("lat span ${frame.latSpan}", frame.latSpan >= TrailPaint.FALLBACK_SPAN_DEG)
         assertTrue("the anchor fell outside its own frame", frame.contains(near.lat, near.lon))
     }
 
@@ -62,10 +67,10 @@ class TrailPaintTest {
     }
 
     @Test fun aMetreIsMorePixelsWideInASmallerFrame() {
-        val near = TrailPaint.frameOf(listOf(point(31.0, 121.0), point(31.004, 121.0)))!!
-        val far = TrailPaint.frameOf(listOf(point(31.0, 121.0), point(31.05, 121.0)))!!
+        val near = TrailPaint.frameFor(ViewBounds(31.0, 121.0, 31.004, 121.004), listOf(point(31.0, 121.0)))!!
+        val far = TrailPaint.frameFor(ViewBounds(31.0, 121.0, 31.05, 121.05), listOf(point(31.0, 121.0)))!!
         assertTrue(TrailPainter.pixelsPerMeter(near) > TrailPainter.pixelsPerMeter(far))
-        // The band has to stay drawable even when the frame covers a whole city.
+        // The band has to stay drawable even when the view covers a whole city.
         assertTrue("band was ${TrailPaint.CORRIDOR_M * TrailPainter.pixelsPerMeter(far)} px",
             TrailPaint.CORRIDOR_M * TrailPainter.pixelsPerMeter(far) > 1.0)
     }
@@ -87,6 +92,17 @@ class TrailPaintTest {
             frame.latSpan > view.latSpan)
     }
 
+    @Test fun theBorderOfTheFrameIsAlwaysOutsideTheView() {
+        // The veil no longer fades out at the border. Instead the border must simply never be on
+        // screen, whatever the view is.
+        val view = ViewBounds(31.0, 121.0, 31.20, 121.20)
+        val frame = TrailPaint.frameFor(view, listOf(point(31.0, 121.0)))!!
+        val marginLat = (frame.latSpan - view.latSpan) / 2
+        val marginLon = (frame.lonSpan - view.lonSpan) / 2
+        assertTrue("margin lat $marginLat", marginLat > 0.0)
+        assertTrue("margin lon $marginLon", marginLon > 0.0)
+    }
+
     @Test fun groundTwelveKilometresAwayIsInsideAFrameCentredOnThatGround() {
         // The regression this exists for: with the frame pinned to where the person is, old ground
         // far away fell outside the image and simply was not painted at all.
@@ -97,11 +113,5 @@ class TrailPaintTest {
         val atFar = ViewBounds(48.85, 2.50, 48.86, 2.53)
         val frame = TrailPaint.frameFor(atFar, listOf(near, far))!!
         assertTrue("the far ground fell outside the frame", frame.contains(far.lat, far.lon))
-    }
-
-    @Test fun theVeilThinsOutOverAFixedDistanceWhateverTheFrameSize() {
-        // A share of the frame would fade a twenty kilometre frame over kilometres of map; a fixed
-        // distance keeps the edge soft without eating the veil.
-        assertTrue(TrailPaint.FADE_METRES in 100.0..2000.0)
     }
 }

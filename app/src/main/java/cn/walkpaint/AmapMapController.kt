@@ -150,11 +150,12 @@ internal class AmapMapController(private val context: Context, private val onGes
     private fun renderNow(state: TrackState, roads: RoadState, paths: List<List<TrackPoint>>,
                           fog: Bitmap?, fogFrame: PaintFrame?, fogRevision: Int) {
         val a = map ?: return
-        // Explored ground is the veil layer now; a second tint on top of it was duplication, and a
-        // line over it was what braided. Only a day the person asked to look at is drawn as a line.
-        syncLines(a, casings, paths, 4f * density, TrailOutlineArgb, 1f)
+        // The veil paints the corridor; this line is the record of where the person walked, so it
+        // has to survive on top of an opaque veil. The ground overlay carries zIndex 9, so anything
+        // under that would be invisible.
+        syncLines(a, casings, paths, 4f * density, TrailOutlineArgb, 10f)
         syncLines(a, cores, paths, 2.5f * density,
-            (exploredColor and 0x00FFFFFF) or (0xB0 shl 24), 2f)
+            (exploredColor and 0x00FFFFFF) or (0xB0 shl 24), 11f)
         syncGround(a, fog, fogFrame, fogRevision)
         updateUser(latestPosition)
         if(initialFocusPending) {
@@ -257,6 +258,13 @@ internal class AmapMapController(private val context: Context, private val onGes
             com.amap.api.maps.model.LatLng(latMin, lonMin),
             com.amap.api.maps.model.LatLng(latMax, lonMax))
         map?.moveCamera(com.amap.api.maps.CameraUpdateFactory.newLatLngBounds(bounds, 80))
+    }
+
+    /** One line describing what the camera is showing, for the on-demand field export. */
+    fun cameraSummary(): String {
+        val camera = map?.cameraPosition ?: return "高德地图尚未就绪"
+        return String.format(java.util.Locale.ROOT, "缩放=%.2f 中心=%.5f,%.5f",
+            camera.zoom, camera.target.latitude, camera.target.longitude)
     }
 
     /** What the AMap view is showing, so the veil can follow it. */

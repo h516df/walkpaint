@@ -266,9 +266,12 @@ class RecordingService : Service(), LocationListener {
         }
     }
 
-    private fun filtered(reason: String) {
+    private fun filtered(reason: String, accuracy: Float = -1f) {
         AmbientTracking.status = reason
         RecordingDiagnostics.event(this, "filtered", reason)
+        // Recorded with the accuracy that was on the fix, because "which reason" alone never
+        // explained a walk that produced no record.
+        FieldRecorder.reject(System.currentTimeMillis(), reason, accuracy)
     }
 
     private fun isConfidentMovement(fix: Location): Boolean {
@@ -295,14 +298,19 @@ class RecordingService : Service(), LocationListener {
             lastCallbackElapsed = elapsed
             RecordingDiagnostics.event(this, "gps", "GPS_CALLBACK", health.callback(elapsed))
         }
+        if (location.hasAccuracy()) {
+            // Kept for the on-demand field export only: nothing here is written to disk.
+            FieldRecorder.fix(location.time, location.latitude, location.longitude,
+                location.accuracy, location.provider ?: "?")
+        }
         if (!location.hasAccuracy()) { filtered("MISSING_ACCURACY"); return }
         val ageMillis = (SystemClock.elapsedRealtimeNanos() - location.elapsedRealtimeNanos) / 1_000_000L
         if (!location.latitude.isFinite() || !location.longitude.isFinite() ||
             location.latitude !in -90.0..90.0 || location.longitude !in -180.0..180.0) {
-            filtered("INVALID_COORDINATE"); return
+            filtered("INVALID_COORDINATE", location.accuracy); return
         }
         val normalized = Geo.normalizedFixTime(location.time, System.currentTimeMillis(), ageMillis)
-        if (normalized == null) { filtered("STALE_FIX"); return }
+        if (normalized == null) { filtered("STALE_FIX", location.accuracy); return }
         val reliableFix = Location(location).apply { time = normalized }
         if (reliableFix.accuracy <= 250f) AmbientTracking.lastFix = reliableFix
 
@@ -311,7 +319,7 @@ class RecordingService : Service(), LocationListener {
         if (!reliableFix.accuracy.isFinite() || reliableFix.accuracy !in 1f..35f) {
             rawFixBeforeLast = null
             lastRawFix = null
-            filtered("UNRELIABLE_ACCURACY"); return
+            filtered("UNRELIABLE_ACCURACY", reliableFix.accuracy); return
         }
         RecordingDiagnostics.event(this, "valid_gps", "VALID_GPS_RECEIVED")
         val inferredMovement = isConfidentMovement(reliableFix)
@@ -332,6 +340,7 @@ class RecordingService : Service(), LocationListener {
                 if (accepted) {
                     AmbientTracking.lastSaved = System.currentTimeMillis()
                     RecordingDiagnostics.event(this, "saved", "SQLITE_SAVED")
+                    FieldRecorder.stored()
                     mainHandler.post {
                         if (!session.accepts(ticket)) return@post
                         AmbientTracking.status = "刚刚保存 GPS 足迹 · 精度 ${reliableFix.accuracy.toInt()} 米"
@@ -340,7 +349,7 @@ class RecordingService : Service(), LocationListener {
                 } else if (app.repository.lastError != null) {
                     AmbientTracking.status = app.repository.lastError!!
                     RecordingDiagnostics.event(this, "failure", "DATABASE_WRITE_FAILED")
-                } else filtered(app.repository.lastFilterReason)
+                } else filtered(app.repository.lastFilterReason, reliableFix.accuracy)
             } catch (e: Exception) {
                 AmbientTracking.status = "足迹保存失败 · 请查看诊断，原数据保留"
                 RecordingDiagnostics.event(this, "failure", "DATABASE_" + e.javaClass.simpleName)

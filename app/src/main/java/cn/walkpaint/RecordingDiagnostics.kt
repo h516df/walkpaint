@@ -60,6 +60,9 @@ internal object RecordingDiagnostics {
     fun event(context: Context, kind: String, reason: String, gap: Long? = null, occurredAt: Long = System.currentTimeMillis()) {
         val application = context.applicationContext
         val at = occurredAt
+        // Mirrored into the in-memory field recorder, so an export carries the whole timeline
+        // without a second set of call sites that could drift out of step with these.
+        FieldRecorder.event(at, kind, reason)
         writer.execute {
             synchronized(lock) {
                 val immediate = state(application).record(kind, reason, at, gap)

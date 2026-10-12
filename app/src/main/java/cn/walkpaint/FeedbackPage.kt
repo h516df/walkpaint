@@ -49,6 +49,12 @@ internal fun FeedbackPage(history:RecordingDiagnostics.HistoryView,report:String
                 Button(onClick={onPreview(category,description)},enabled=!busy,modifier=Modifier.fillMaxWidth()) {
                     Text(if(busy) "正在整理…" else "预览反馈报告")
                 }
+                // The raw material, for when the person can tell something is wrong but not what.
+                // A described problem is a summary; this is the evidence behind it.
+                OutlinedButton(onClick={onPreview(FieldReport.CATEGORY,"")},enabled=!busy,
+                    modifier=Modifier.fillMaxWidth()) { Text("导出记录现场") }
+                Text("记录现场＝最近 30 分钟的原始定位、每一个被丢弃的点和原因、当时地图与迷雾的实际状态。" +
+                    "含坐标，不会自动上传，只在你点分享时离开手机。",color=Muted,fontSize=12.sp,lineHeight=18.sp)
             } }
             item { Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {

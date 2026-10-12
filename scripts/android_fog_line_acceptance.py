@@ -65,10 +65,13 @@ COLD_START_BEST_MS_MAX = 12000
 MIN_FIXTURE_POINTS = 3000
 WALK_FIXES = 10
 WALK_SPACING_S = 3.0
-# A veiled map pixel is dark navy (blue above both red and green) and below this luminance; a bare
-# OpenFreeMap street pixel is light. Calibrated in section 4 of the evidence document: the same
-# view scores ~0.32 with the veil, ~0.002 on the pale veil of 0.36, and the gate is far below both.
-VEIL_DARK_LEVEL = 165
+# A veiled map pixel is opaque black as of 0.39: the fog no longer lets the basemap through, so
+# "veiled" means every channel is essentially zero rather than the old dark-navy test (blue above
+# red and green), which now matches nothing because the veil carries no tint at all. A bare
+# OpenFreeMap street pixel is light. The gate below stays low on purpose: it asks "is the fog on
+# screen", and the exact opacity is asserted by FogPixelProbe instead of inferred from a screenshot.
+VEIL_BLACK_LEVEL = 24
+VEIL_DARK_LEVEL = 70
 VEIL_PRESENTED_RATIO = 0.05
 # Two clusters about twelve kilometres apart: the far one has to keep its paint and the ground
 # between them has to keep its veil.
@@ -203,7 +206,7 @@ def veil_stats(name):
     for r, g, b in region.getdata():
         total += 1
         luminance = 0.299 * r + 0.587 * g + 0.114 * b
-        if b > g and b > r and luminance < VEIL_DARK_LEVEL:
+        if r < VEIL_BLACK_LEVEL and g < VEIL_BLACK_LEVEL and b < VEIL_BLACK_LEVEL:
             veil += 1
         elif luminance > 200 and g >= r:
             bare += 1

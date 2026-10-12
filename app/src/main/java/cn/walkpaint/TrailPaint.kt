@@ -2,11 +2,9 @@ package cn.walkpaint
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
-import android.graphics.Shader
 
 /** What the map is currently showing, in WGS84. The veil follows this rather than the walk. */
 internal data class ViewBounds(
@@ -67,24 +65,34 @@ internal object TrailPaint {
     const val MIN_SPAN_DEG = 0.002
     const val MARGIN = 0.12
     /**
-     * Past this the frame is too coarse to read anyway, so it follows where the person is instead
-     * of stretching over everything they have ever walked.
+     * The span of the frame drawn before the map has reported a usable view, centred on the person.
+     *
+     * The veil is opaque, so a frame narrower than the screen would read as ground the person has
+     * already explored — the opposite of what the veil means. This is deliberately as wide as any
+     * view the app accepts, so the frame's edge can never fall inside the screen. The cost is a
+     * coarse frame (the corridor lands under a pixel) for the moment before the camera reports
+     * where it is looking; the walked lines still show, because the map draws those itself.
      */
-    const val MAX_SPAN_METERS = 20000.0
+    const val FALLBACK_SPAN_DEG = 60.0
     /** The veil covers the viewport plus this share of it, so a pan does not outrun the image. */
     const val VIEW_MARGIN = 0.35
-    /** How far the veil fades out at the frame border, in metres, whatever the frame's size. */
-    const val FADE_METRES = 900.0
     /** Width of the ground a walk fully clears, and the band that carries the person's colour. */
-    const val CORRIDOR_M = 20.0
+    const val CORRIDOR_M = 30.0
     /** The ramp over which the veil comes back outside that band, so there is no hard edge. */
-    const val FEATHER_M = 12.0
-    /** The veil over ground not yet walked: dark enough to read as fog, not so dark the map dies. */
-    const val FOG_COLOR = 0xB01B2430.toInt()
+    const val FEATHER_M = 3.0
+    /**
+     * The veil over ground not yet walked. Opaque black on purpose: the person asked for unknown
+     * ground to be genuinely unknown, and a veil that lets the road network show through is not fog.
+     */
+    const val FOG_COLOR = 0xFF000000.toInt()
     /** How strongly cleared ground takes the person's own colour. */
     const val TINT_ALPHA = 84
-    /** The frame fades out over this share of its shorter side, so it never shows as a rectangle. */
-    const val EDGE_FADE = 0.14
+    /**
+     * When the corridor is thinner than this in the veil's own image, the veil cannot show it and
+     * the map has to draw the walked line itself. Above it the cleared corridor is plainly visible,
+     * and handing the map a line as well costs the UI thread a GeoJSON rebuild for nothing.
+     */
+    const val NETWORK_BELOW_PX = 2.0
 
     private const val METRES_PER_LAT = 111194.9
 
@@ -118,13 +126,19 @@ internal object TrailPaint {
             lonMin = viewport.lonMin - lonPad
             lonMax = viewport.lonMax + lonPad
         } else {
-            if (usable.isEmpty()) return null
-            latMin = usable.minOf { it.lat }
-            latMax = usable.maxOf { it.lat }
-            lonMin = usable.minOf { it.lon }
-            lonMax = usable.maxOf { it.lon }
-            centreLat = anchor?.lat ?: (latMax + latMin) / 2
-            centreLon = anchor?.lon ?: (lonMax + lonMin) / 2
+            // Before the map reports a projection there is no view to follow, so the frame is set
+            // wide enough that its edge cannot show while the camera is still settling.
+            val anchorLat = anchor?.lat
+                ?: usable.takeIf { it.isNotEmpty() }?.let { p -> (p.minOf { it.lat } + p.maxOf { it.lat }) / 2 }
+            val anchorLon = anchor?.lon
+                ?: usable.takeIf { it.isNotEmpty() }?.let { p -> (p.minOf { it.lon } + p.maxOf { it.lon }) / 2 }
+            if (anchorLat == null || anchorLon == null) return null
+            centreLat = anchorLat
+            centreLon = anchorLon
+            latMin = centreLat - FALLBACK_SPAN_DEG / 2
+            latMax = centreLat + FALLBACK_SPAN_DEG / 2
+            lonMin = centreLon - FALLBACK_SPAN_DEG / 2
+            lonMax = centreLon + FALLBACK_SPAN_DEG / 2
         }
         if (latMax - latMin < MIN_SPAN_DEG) {
             latMin = centreLat - MIN_SPAN_DEG / 2
@@ -133,23 +147,6 @@ internal object TrailPaint {
         if (lonMax - lonMin < MIN_SPAN_DEG) {
             lonMin = centreLon - MIN_SPAN_DEG / 2
             lonMax = centreLon + MIN_SPAN_DEG / 2
-        }
-        // The cap only applies to a frame derived from the walked area. When the frame follows the
-        // viewport it must cover the whole view at any zoom: capping it would leave the corners of a
-        // wide view with no veil at all, which reads as ground that has been explored. A very wide
-        // view gets a coarser image instead, which is the honest trade.
-        if (viewport == null || viewport.latSpan <= 0.0 || viewport.lonSpan <= 0.0) {
-            val capLat = MAX_SPAN_METERS / METRES_PER_LAT
-            val metresPerLon = METRES_PER_LAT * kotlin.math.cos(Math.toRadians(centreLat)).coerceAtLeast(0.05)
-            val capLon = MAX_SPAN_METERS / metresPerLon
-            if (latMax - latMin > capLat) {
-                latMin = centreLat - capLat / 2
-                latMax = centreLat + capLat / 2
-            }
-            if (lonMax - lonMin > capLon) {
-                lonMin = centreLon - capLon / 2
-                lonMax = centreLon + capLon / 2
-            }
         }
         val latMargin = (latMax - latMin) * MARGIN
         val lonMargin = (lonMax - lonMin) * MARGIN
@@ -203,15 +200,6 @@ internal class TrailPainter {
         strokeJoin = Paint.Join.ROUND
         xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC)
     }
-    /**
-     * A filled eraser, used once per freshly poured veil to fade the frame border. A stroke paint
-     * there only drew the outline of the band and left the veil in place.
-     */
-    private val eraseFill = Paint().apply {
-        style = Paint.Style.FILL
-        xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_OUT)
-    }
-
     /** Bumped only when the veil really changes, so the map is not handed a new image for nothing. */
     var revision = 0
         private set
@@ -254,7 +242,6 @@ internal class TrailPainter {
         val canvas = Canvas(target)
         canvas.drawRect(0f, 0f, next.widthPx.toFloat(), next.heightPx.toFloat(), fog)
         strokeAll(canvas, next, segmentsIn(paths, next))
-        fadeEdges(canvas, next)
         revision++
         return target
     }
@@ -295,6 +282,23 @@ internal class TrailPainter {
      */
     private fun segmentsIn(paths: List<List<TrackPoint>>, target: PaintFrame): List<FloatArray> {
         val out = ArrayList<FloatArray>()
+        // The same stretch of ground can be handed to the painter more than once: a walk out and
+        // back, the same trip listed twice, or the day view drawn on top of the cumulative one.
+        // Stroking it twice is not idempotent along a stroke's anti-aliased edge — each pass blends
+        // the veil and the person's colour again, so the boundary creeps darker — which is what the
+        // narrow ramp of 0.39 exposed. Identical ground is stroked once instead, with the endpoints
+        // ordered so that A→B and B→A collapse to the same key, quantised to a tenth of a pixel.
+        val seen = HashSet<Long>()
+        fun quantised(value: Float) = (value * 10f).toLong().coerceIn(0L, 0x1FFFL)
+        fun keyOf(x1: Float, y1: Float, x2: Float, y2: Float): Long {
+            val ax = quantised(x1); val ay = quantised(y1)
+            val bx = quantised(x2); val by = quantised(y2)
+            return if (ax < bx || (ax == bx && ay <= by)) {
+                (ax shl 39) or (ay shl 26) or (bx shl 13) or by
+            } else {
+                (bx shl 39) or (by shl 26) or (ax shl 13) or ay
+            }
+        }
         for (path in paths) {
             if (path.isEmpty()) continue
             if (path.size == 1) {
@@ -302,7 +306,7 @@ internal class TrailPainter {
                 val p = path[0]
                 if (p.lat.isFinite() && p.lon.isFinite() && target.contains(p.lat, p.lon)) {
                     val x = target.pixelX(p.lon); val y = target.pixelY(p.lat)
-                    out.add(floatArrayOf(x, y, x, y))
+                    if (seen.add(keyOf(x, y, x, y))) out.add(floatArrayOf(x, y, x, y))
                 }
                 continue
             }
@@ -312,8 +316,10 @@ internal class TrailPainter {
                 if (!a.lat.isFinite() || !a.lon.isFinite() || !b.lat.isFinite() || !b.lon.isFinite()) continue
                 if (maxOf(a.lat, b.lat) < target.latMin || minOf(a.lat, b.lat) > target.latMax) continue
                 if (maxOf(a.lon, b.lon) < target.lonMin || minOf(a.lon, b.lon) > target.lonMax) continue
-                out.add(floatArrayOf(target.pixelX(a.lon), target.pixelY(a.lat),
-                    target.pixelX(b.lon), target.pixelY(b.lat)))
+                val x1 = target.pixelX(a.lon); val y1 = target.pixelY(a.lat)
+                val x2 = target.pixelX(b.lon); val y2 = target.pixelY(b.lat)
+                if (!seen.add(keyOf(x1, y1, x2, y2))) continue
+                out.add(floatArrayOf(x1, y1, x2, y2))
             }
         }
         return out
@@ -347,33 +353,6 @@ internal class TrailPainter {
         for (segment in segments) {
             canvas.drawLine(segment[0], segment[1], segment[2], segment[3], paint)
         }
-    }
-
-    /**
-     * The veil is poured over the whole frame and only taken away along the route. The border is
-     * faded last, over a fixed distance rather than a share of the frame, so the veil thins out at
-     * its edge instead of ending in a rectangle whatever size the frame happens to be.
-     */
-    private fun fadeEdges(canvas: Canvas, target: PaintFrame) {
-        val perMetre = pixelsPerMeter(target)
-        // A share of the frame, capped in metres. The frame now follows the viewport, so at street
-        // zoom it is a few hundred metres across: a fixed nine hundred metre fade would cover the
-        // whole of it and leave the map bare. The cap keeps a twenty kilometre frame from fading
-        // over kilometres of map.
-        val shortest = minOf(target.widthPx, target.heightPx)
-        val fade = minOf(shortest * TrailPaint.EDGE_FADE, TrailPaint.FADE_METRES * perMetre).toInt()
-            .coerceIn(1, shortest / 3)
-        val opaque = TrailPaint.FOG_COLOR or (0xFF shl 24)
-        val transparent = TrailPaint.FOG_COLOR and 0x00FFFFFF
-        eraseFill.shader = LinearGradient(0f, 0f, fade.toFloat(), 0f, opaque, transparent, Shader.TileMode.CLAMP)
-        canvas.drawRect(0f, 0f, fade.toFloat(), target.heightPx.toFloat(), eraseFill)
-        eraseFill.shader = LinearGradient((target.widthPx - fade).toFloat(), 0f, target.widthPx.toFloat(), 0f, transparent, opaque, Shader.TileMode.CLAMP)
-        canvas.drawRect((target.widthPx - fade).toFloat(), 0f, target.widthPx.toFloat(), target.heightPx.toFloat(), eraseFill)
-        eraseFill.shader = LinearGradient(0f, 0f, 0f, fade.toFloat(), opaque, transparent, Shader.TileMode.CLAMP)
-        canvas.drawRect(0f, 0f, target.widthPx.toFloat(), fade.toFloat(), eraseFill)
-        eraseFill.shader = LinearGradient(0f, (target.heightPx - fade).toFloat(), 0f, target.heightPx.toFloat(), transparent, opaque, Shader.TileMode.CLAMP)
-        canvas.drawRect(0f, (target.heightPx - fade).toFloat(), target.widthPx.toFloat(), target.heightPx.toFloat(), eraseFill)
-        eraseFill.shader = null
     }
 
     private data class Ring(val reach: Float, val alpha: Float)

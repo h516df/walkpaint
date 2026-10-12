@@ -66,8 +66,13 @@ private const val VEIL_REFRESH_MS = 500L
  * coalesced into one shortly afterwards rather than dropped, so the last view is always drawn. */
 private const val VEIL_REFRESH_SETTLE_MS = 350L
 
-/** A viewport wider than this is not a view of the map; it is the engine before it is ready. */
-private const val MAX_SANE_VIEW_DEGREES = 5.0
+/**
+ * A viewport wider than this is not a view of the map; it is the engine before it is ready. It was
+ * five degrees, which also threw away a legitimately wide zoom-out; sixty still catches the
+ * whole-world region the engines report at launch, and a real view of the planet is not something
+ * this app shows.
+ */
+private const val MAX_SANE_VIEW_DEGREES = 60.0
 
 /**
  * Shortest gap between two handovers of the veil image to the map.
@@ -391,6 +396,10 @@ class MainActivity : ComponentActivity() {
                         if(it!=2 && privateUpdateState.busy) privateUpdater.cancel()
                         if(it==0 && currentTab!=0 && selectedDay==null) { follow.locate();lastCameraPoint=null }
                         currentTab=it;syncHeadingLifecycle()
+                        // The veil is opaque now, so entering the map tab without one shows a map the
+                        // person has not explored. The camera may not move at all on this switch, so
+                        // nothing else would ask for a redraw.
+                        if(it==0) refreshVeilForViewport(force=true)
                     },
                     state = snapshot,
                     fix = userFix,
@@ -680,12 +689,6 @@ class MainActivity : ComponentActivity() {
                     val daily = emptyMap<String,RoadState>()
                     val displayedRoad = RoadState()
                     val displayedTrack = DailyFootprints.select(next,day)
-                    // The default view draws no line: the veil below is the paint, so a long
-                    // history cannot pile up as overlapping passes. A chosen day does draw its
-                    // route, with repeated ground collapsed, because that is what was asked for.
-                    val trail = if (day == null) emptyList()
-                    else TrailShape.dedupe(RecordedTrail.paths(displayedTrack.realTracks))
-                    val painted = TrackMapJson.encodePaths(trail)
                     // The veil is cumulative, like the explored ground: it shows everything walked,
                     // never just the selected day, and it is the only thing that paints the ground.
                     // The veil follows the viewport now, so what it covers is what the person is
@@ -701,6 +704,23 @@ class MainActivity : ComponentActivity() {
                     }
                     val fogBounds = fogPainter.frame()
                     val fogStamp = fogPainter.revision
+                    // The line the map draws itself exists for the views the veil cannot cover: the
+                    // veil's image is capped at a few hundred pixels, so once the corridor falls
+                    // under a couple of them it stops being a corridor at all, and the record of
+                    // where the person has been would vanish on exactly the screen where it matters
+                    // most. Above that the cleared ground is plainly visible, so sending a line too
+                    // would only cost the UI thread a GeoJSON rebuild per update while walking.
+                    val perMetre = fogBounds?.let { TrailPainter.pixelsPerMeter(it) } ?: 0.0
+                    val veilShowsCorridor = perMetre > 0.0 &&
+                        TrailPaint.CORRIDOR_M * perMetre >= TrailPaint.NETWORK_BELOW_PX
+                    val trailPaths = RecordedTrail.paths(displayedTrack.realTracks)
+                    val trail = when {
+                        // A chosen day is always drawn: that is the route the person asked to see.
+                        day != null -> TrailShape.network(trailPaths, null)
+                        veilShowsCorridor -> emptyList()
+                        else -> TrailShape.network(trailPaths, fogBounds)
+                    }
+                    val painted = TrackMapJson.encodePaths(trail)
                     runOnUiThread {
                         try {
                             if(selectedDay!=day) return@runOnUiThread
@@ -982,6 +1002,9 @@ class MainActivity : ComponentActivity() {
     private fun prepareFeedback(category:String,description:String) {
         if(feedbackBusy) return
         feedbackBusy=true
+        // The field export is a different artefact from a described problem: it hands over the raw
+        // material, not a summary of it.
+        if (category == FieldReport.CATEGORY) { prepareFieldReport(); return }
         val application=applicationContext
         val enabled=AmbientTracking.enabled(this);val running=AmbientTracking.running
         val fine=AmbientTracking.hasFineLocation(this);val background=AmbientTracking.hasBackgroundLocation(this)
@@ -1000,6 +1023,80 @@ class MainActivity : ComponentActivity() {
             runOnUiThread { feedbackBusy=false;feedbackReport=text }
         }
     }
+    /** One line about what the camera is showing, for the field export. */
+    private fun cameraSummary(): String {
+        if (amapActive) return amapController.cameraSummary() + " 跟随=${follow.following}"
+        val camera = mapInstance?.cameraPosition ?: return "备用地图尚未就绪"
+        val target = camera.target ?: return "备用地图尚未就绪（没有中心）"
+        return "缩放=${fmt(camera.zoom, 2)} 中心=${fmt(target.latitude, 5)},${fmt(target.longitude, 5)}" +
+            " 跟随=${follow.following}"
+    }
+
+    private fun fmt(value: Double, digits: Int) = String.format(java.util.Locale.ROOT, "%.${digits}f", value)
+
+    /**
+     * The raw material, gathered on demand.
+     *
+     * This is the answer to "I can feel something is wrong and cannot describe it": every fix the
+     * receiver delivered in the last half hour, every fix that was thrown away with the reason and
+     * the accuracy it carried, the camera and veil the person was actually looking at, and the
+     * database's own count. Nothing is uploaded; the person copies or shares the text themselves.
+     */
+    private fun prepareFieldReport() {
+        val application = applicationContext
+        val enabled = AmbientTracking.enabled(this); val running = AmbientTracking.running
+        val fine = AmbientTracking.hasFineLocation(this); val background = AmbientTracking.hasBackgroundLocation(this)
+        val notifications = notificationsGranted()
+        val gpsProvider = runCatching {
+            getSystemService(android.location.LocationManager::class.java)
+                .isProviderEnabled(android.location.LocationManager.GPS_PROVIDER)
+        }.getOrDefault(false)
+        val whitelisted = runCatching {
+            getSystemService(android.os.PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)
+        }.getOrDefault(false)
+        val engine = when {
+            amapActive -> "高德联网地图"
+            onlineMap -> "OpenFreeMap 联网备用地图"
+            else -> "离线足迹视图"
+        }
+        val camera = cameraSummary()
+        val viewport = currentViewport
+        val frame = fogFrame
+        val bitmap = fogBitmap
+        refreshExecutor.execute {
+            val text = runCatching {
+                val state = repository.snapshot()
+                val now = System.currentTimeMillis()
+                val last = state.realTracks.flatMap { it.points }.maxByOrNull { it.time }
+                FieldReport.build(
+                    FieldFacts(
+                        now = now,
+                        version = "${BuildConfig.VERSION_NAME}（code${BuildConfig.VERSION_CODE}）",
+                        device = "${Build.BRAND} ${Build.MODEL}",
+                        android = Build.VERSION.SDK_INT.toString(),
+                        engine = engine,
+                        permissions = "精确定位=$fine 后台定位=$background 通知=$notifications " +
+                            "手机定位开关=$gpsProvider 电池白名单=$whitelisted 记录开关=$enabled 后台服务=$running",
+                        recording = RecordingDiagnostics.summary(application),
+                        camera = "$camera\n可见范围=" + (viewport?.let {
+                            "纬度${fmt(it.latSpan, 4)}° 经度${fmt(it.lonSpan, 4)}°"
+                        } ?: "地图还没报告（用兜底大帧）"),
+                        veil = "雾帧=" + (frame?.let {
+                            "${it.widthPx}x${it.heightPx} 覆盖纬度${fmt(it.latSpan, 4)}° 经度${fmt(it.lonSpan, 4)}°"
+                        } ?: "尚未生成") +
+                            " 位图=${bitmap?.let { "${it.width}x${it.height}" } ?: "无"} 版本=$fogRevision",
+                        storage = "数据库点数=${state.realPointCount} 行程=${state.realTracks.size} " +
+                            "记录里程=${state.totalMeters.toInt()}米" +
+                            (last?.let { " 最后一点=${SimpleDateFormat("MM-dd HH:mm:ss", Locale.ROOT).format(Date(it.time))} 精度=${it.accuracy.toInt()}米" } ?: ""),
+                        diagnosis = trackingDiagnostics(),
+                    ),
+                    FieldRecorder.snapshot(now),
+                )
+            }.getOrElse { "记录现场暂时无法整理，足迹保留。请稍后重试。" }
+            runOnUiThread { feedbackBusy = false; feedbackReport = text }
+        }
+    }
+
     private fun copyFeedback() {
         feedbackReport?.let {
             getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("足迹涂色反馈",it))
@@ -1052,15 +1149,18 @@ class MainActivity : ComponentActivity() {
         else mapInstance?.animateCamera(CameraUpdateFactory.newLatLngZoom(LatLng(lat, lon), zoom))
     }
 
-    /** What the map is showing right now, in WGS84. Null until the engine reports a projection. */
+    /** What the map is showing right now, in WGS84. Null until the engine reports a real view. */
     private fun mapViewport(): ViewBounds? {
-        if (amapActive) return amapController.viewport()
-        val bounds = mapInstance?.projection?.visibleRegion?.latLngBounds ?: return null
-        val view = ViewBounds(bounds.latitudeSouth, bounds.longitudeWest,
-            bounds.latitudeNorth, bounds.longitudeEast)
-        // Before the map has a real projection the engine reports a whole-world region (170° across
-        // was measured at launch). Taking that as the view would pour a veil over twenty kilometres
-        // and hand the map a very coarse image for the first second, so it is ignored instead.
+        val view: ViewBounds? = if (amapActive) amapController.viewport()
+        else mapInstance?.projection?.visibleRegion?.latLngBounds?.let {
+            ViewBounds(it.latitudeSouth, it.longitudeWest, it.latitudeNorth, it.longitudeEast)
+        }
+        // Before the engine has a real projection it reports a whole-world region (170° across was
+        // measured at launch). A frame built from that is a globe-sized image, so it is treated as
+        // "no view yet": the veil then falls back to a wide frame around the person, which still
+        // covers the screen. Both engines are checked the same way, because on the phone the same
+        // launch state is what produced a veil that only appeared after the person zoomed in.
+        if (view == null) return null
         if (view.latSpan > MAX_SANE_VIEW_DEGREES || view.lonSpan > MAX_SANE_VIEW_DEGREES) return null
         return view
     }
@@ -1193,7 +1293,14 @@ class MainActivity : ComponentActivity() {
         lastVeilRefresh = now
         currentViewport = mapViewport()
         val paths = fogPaths
-        if (paths.isEmpty()) return
+        if (paths.isEmpty()) {
+            // The veil is built from the stored tracks, and the first camera callback can arrive
+            // before any state update has run. Without this the first "settled" event drew nothing
+            // and the map stayed unveiled until something else happened to refresh the state.
+            lastRevision = -1L
+            updateUi()
+            return
+        }
         if (!refreshing.compareAndSet(false, true)) {
             // A state update is already running. Retry rather than drop: a camera that settles into
             // a new viewport exactly then would otherwise leave the veil drawn for the old view,
@@ -1340,6 +1447,20 @@ class MainActivity : ComponentActivity() {
         updateUi()
     }
 
+    /**
+     * Puts the veil under the walked line and the person's dot, but over the map's own layers.
+     *
+     * The veil is opaque, so anything drawn beneath it is simply gone. Appended as the topmost layer
+     * it hid the blue dot as soon as the image was rebuilt — the dot is added once at style load, so
+     * after the first veil handover it sat underneath. Inserting it explicitly keeps the veil where
+     * it belongs instead of depending on the order the layers happened to be added in.
+     */
+    private fun addFogLayer(style: org.maplibre.android.maps.Style) {
+        val layer = org.maplibre.android.style.layers.RasterLayer("wp-fog", "wp-fog")
+        val placed = runCatching { style.addLayerBelow(layer, "wp-painted-outline") }.isSuccess
+        if (!placed) runCatching { style.addLayer(layer) }
+    }
+
     private fun updateMapLayers() {
         if (amapActive) {
             amapController.render(mapTrackState,mapRoadState,mapTrailPaths,fogBitmap,fogFrame,fogRevision)
@@ -1371,18 +1492,17 @@ class MainActivity : ComponentActivity() {
                 org.maplibre.android.geometry.LatLng(fogBounds.latMin, fogBounds.lonMax),
                 org.maplibre.android.geometry.LatLng(fogBounds.latMin, fogBounds.lonMin))
             val existing = style.getSourceAs<org.maplibre.android.style.sources.ImageSource>("wp-fog")
+            // In place, then the layer is rebuilt: replacing the bitmap on a live source alone
+            // measured 0.000 on screen, so something has to make the renderer look again, and
+            // rebuilding the layer is cheaper than rebuilding the source.
             if (existing != null) {
-                // In place, then the layer is rebuilt: replacing the bitmap on a live source alone
-                // measured 0.000 on screen, so something has to make the renderer look again, and
-                // rebuilding the layer is cheaper than rebuilding the source.
                 existing.setCoordinates(quad)
                 existing.setImage(fog)
                 runCatching { style.removeLayer("wp-fog") }
-                style.addLayer(org.maplibre.android.style.layers.RasterLayer("wp-fog","wp-fog"))
             } else {
                 style.addSource(org.maplibre.android.style.sources.ImageSource("wp-fog", quad, fog))
-                style.addLayer(org.maplibre.android.style.layers.RasterLayer("wp-fog","wp-fog"))
             }
+            addFogLayer(style)
             if (BuildConfig.DEBUG) PerfTrace.upload(System.nanoTime() - handoverStart)
             fogTrace("handover-after")
         }
@@ -1521,6 +1641,9 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         activityResumed=true;syncHeadingLifecycle()
         updateUi()
+        // Same reason as the tab switch: coming back to a resting camera would otherwise leave an
+        // unveiled map on screen, and an unveiled map is indistinguishable from explored ground.
+        refreshVeilForViewport(force = true)
         beginVisibleLocation()
         if (AmbientTracking.enabled(this) && AmbientTracking.hasFineLocation(this) && !AmbientTracking.running) {
             AmbientTracking.start(this)
