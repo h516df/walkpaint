@@ -1,0 +1,128 @@
+{
+  "version": "0.38",
+  "versionCode": 40,
+  "base": "5059f979857afedfe206accdea263cf18322e18f",
+  "environment": {
+    "device": "emulator-5556",
+    "avd": "WalkPaint_Google_API36",
+    "android": 36,
+    "abi": "x86_64",
+    "map": "MapLibre / OpenFreeMap online fallback",
+    "data": "existing synthetic acceptance history preserved",
+    "location": "precise and background permission granted; emulator GPS injection",
+    "avd_storage": "temporary read-only copy, original userdata preserved"
+  },
+  "unit_tests": {
+    "total": 292,
+    "failures": 0,
+    "errors": 0
+  },
+  "guard_tests": 7,
+  "recovery_baseline_failed": true,
+  "recovery_fixed_pass": true,
+  "fog_edge_baseline_failed": true,
+  "fog_edge_fixed_pass": true,
+  "update_catalog_baseline_failures": 3,
+  "update_android_boundaries_pass": true,
+  "unauthorized_update_ui_pass": true,
+  "walk": {
+    "saved_by_phase": {
+      "foreground": 8,
+      "background": 3,
+      "screen_off": 4
+    },
+    "old_rows_preserved": true,
+    "before_counts": {
+      "trips": 7,
+      "points": 5007,
+      "roads": 0,
+      "road_matches": 142,
+      "coverage": 0
+    },
+    "after_counts": {
+      "trips": 7,
+      "points": 5022,
+      "roads": 0,
+      "road_matches": 157,
+      "coverage": 0
+    },
+    "map_handover_revisions": [
+      9,
+      11,
+      12,
+      13,
+      14,
+      16,
+      18,
+      19,
+      21,
+      23,
+      24,
+      26,
+      27,
+      29,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      45
+    ]
+  },
+  "release_upgrade": {
+    "all_five_tables_identical": true,
+    "tables": {
+      "trips": {
+        "count": 7,
+        "sha256": "db4e15e691965158c11197360e40a0308c8710e65653d622af5df20b05e9ed69"
+      },
+      "points": {
+        "count": 5023,
+        "sha256": "a47c1eb23dc605d3beca681dcd9dbee0c8663cc38b691bc6909468be5b472a49"
+      },
+      "roads": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "road_matches": {
+        "count": 158,
+        "sha256": "766762d87bcbc671f2c445cda6dacd365ad4e02ae28dcaba8f16179b92cd56e8"
+      },
+      "coverage": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    }
+  },
+  "release_walk": {
+    "release_saved_points": 5,
+    "version": "0.38",
+    "code": 40,
+    "before_count": 5023,
+    "after_count": 5028
+  },
+  "universal_arm64_dex_and_notes_identical": true,
+  "not_verified": [
+    "vivo ARM AMap",
+    "long outdoor background",
+    "current owner OAuth download to system install"
+  ],
+  "artifacts": {
+    "WalkPaint-v0.38-arm64.apk": {
+      "size": 65904451,
+      "sha256": "9a6131a79f7f15960b1277dd3dc03a05d3ef48942c63a121f58dee513e6397aa"
+    },
+    "WalkPaint-v0.38-universal.apk": {
+      "size": 120496990,
+      "sha256": "f553c6e3633ea3ed257ed5d9c45a66e816d644e55ed09f0af77423ec540aa589"
+    }
+  }
+}

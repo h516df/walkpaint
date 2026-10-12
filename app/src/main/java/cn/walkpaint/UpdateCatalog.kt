@@ -19,7 +19,11 @@ internal object UpdateCatalog {
         val newest=releases.maxBy { it.notes.code }
         // An installed newer preview needs no older APK for this CPU. Compare the manifest first.
         if(newest.notes.code<=installed) return UpdateCatalogResult.Current(newest.notes)
-        val apk=newest.assets.singleOrNull { it.optString("name")==PrivateUpdatePolicy.apkName(newest.notes.version,abis) }
+        val apk=PrivateUpdatePolicy.apkNames(newest.notes.version,abis).firstNotNullOfOrNull { name ->
+            val matches=newest.assets.filter { it.optString("name")==name }
+            updateRequire(matches.size<=1,"安装包资料重复，请打开发布页核对版本")
+            matches.singleOrNull()
+        }
             ?: throw UpdateFailure("新版暂未提供适合这台设备的安装包，请打开发布页")
         return UpdateCatalogResult.Available(UpdateCandidate(newest.notes,PrivateUpdatePolicy.asset(apk)))
     }

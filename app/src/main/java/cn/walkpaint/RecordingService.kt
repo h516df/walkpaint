@@ -57,7 +57,7 @@ object AmbientTracking {
     fun stop(context: Context) {
         setEnabled(context, false)
         try {
-            context.startService(Intent(context, RecordingService::class.java).setAction("STOP"))
+            context.startService(Intent(context, RecordingService::class.java).setAction("STOP_FROM_APP"))
         } catch (_: Exception) {
             context.stopService(Intent(context, RecordingService::class.java))
         }
@@ -76,6 +76,8 @@ class RecordingService : Service(), LocationListener {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val storeExecutor = Executors.newSingleThreadExecutor()
     private val isClosing = AtomicBoolean(false)
+    private val session = RecordingSession()
+    private var latestStartId = 0
     private var gpsEnabled = false
     private var lastCallbackElapsed = 0L
     private var lastRegistrationElapsed = 0L
@@ -150,6 +152,14 @@ class RecordingService : Service(), LocationListener {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        latestStartId = startId
+        // The preference already contains the user's most recent UI choice. An older queued
+        // pause must not overwrite a resume that happened before Android delivered this intent.
+        if (intent?.action == "STOP_FROM_APP") {
+            if (AmbientTracking.enabled(this)) return START_STICKY
+            endService("已暂停自动足迹")
+            return START_NOT_STICKY
+        }
         if (intent?.action == "STOP") {
             AmbientTracking.setEnabled(this, false)
             endService("已暂停自动足迹")
@@ -165,6 +175,11 @@ class RecordingService : Service(), LocationListener {
             return START_NOT_STICKY
         }
         try {
+            isClosing.set(false)
+            session.start()
+            rawFixBeforeLast = null
+            lastRawFix = null
+            lastNotificationAt = 0L
             val ongoing = notification("持续 GPS 记录 · 可能增加电耗")
             if (Build.VERSION.SDK_INT >= 29) {
                 startForeground(17, ongoing, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
@@ -309,15 +324,16 @@ class RecordingService : Service(), LocationListener {
             rawFixBeforeLast = null
             lastRawFix = null
         }
+        val ticket = session.ticket()
         storeExecutor.execute {
-            if (isClosing.get() || !AmbientTracking.enabled(this)) return@execute
+            if (!session.accepts(ticket) || !AmbientTracking.enabled(this)) return@execute
             try {
                 val accepted = app.repository.addPosition(reliableFix, inferredMovement)
                 if (accepted) {
                     AmbientTracking.lastSaved = System.currentTimeMillis()
                     RecordingDiagnostics.event(this, "saved", "SQLITE_SAVED")
                     mainHandler.post {
-                        if (isClosing.get()) return@post
+                        if (!session.accepts(ticket)) return@post
                         AmbientTracking.status = "刚刚保存 GPS 足迹 · 精度 ${reliableFix.accuracy.toInt()} 米"
                         updateNotification("刚刚记下新足迹")
                     }
@@ -370,6 +386,7 @@ class RecordingService : Service(), LocationListener {
     }
 
     private fun endService(status: String) {
+        session.stop()
         isClosing.set(true)
         AmbientTracking.running = false
         AmbientTracking.status = status
@@ -378,11 +395,14 @@ class RecordingService : Service(), LocationListener {
         unregisterPowerReceiver()
         releaseGnss()
         runCatching { locations.removeUpdates(gpsListener) }
+        gpsEnabled = false
         runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
-        stopSelf()
+        // Do not destroy an instance that already has a newer start command queued by Android.
+        stopSelf(latestStartId)
     }
 
     override fun onDestroy() {
+        session.stop()
         val wasClosing = isClosing.getAndSet(true)
         AmbientTracking.running = false
         mainHandler.removeCallbacksAndMessages(null)

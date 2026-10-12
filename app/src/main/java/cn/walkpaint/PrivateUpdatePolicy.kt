@@ -40,6 +40,11 @@ internal object PrivateUpdatePolicy {
         val variant=if(abis.firstOrNull()=="arm64-v8a") "arm64" else "universal"
         return "WalkPaint-v$version-$variant-debug.apk"
     }
+    fun apkNames(version:String,abis:List<String>):List<String> {
+        val variants=if(abis.firstOrNull()=="arm64-v8a") listOf("arm64","universal") else listOf("universal")
+        return variants.map { "WalkPaint-v$version-$it.apk" } +
+            variants.map { "WalkPaint-v$version-$it-debug.apk" }
+    }
     fun verifyHash(file:File,asset:UpdateAsset) {
         updateRequire(file.length()==asset.size,"安装包下载不完整，请重新下载")
         val sha=MessageDigest.getInstance("SHA-256")
