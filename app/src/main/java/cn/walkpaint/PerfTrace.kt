@@ -55,6 +55,8 @@ internal object PerfTrace {
     private val uploadCount = AtomicInteger()
     private val uploadNanos = AtomicLong()
     private val uploadMaxNanos = AtomicLong()
+    private val uploadSamples = LongArray(SAMPLES)
+    private val uploadSlot = AtomicInteger()
     /**
      * Panning redraws the veil for the new view, which is separate from a state update and is
      * measured separately: it is the cost of the fog following the map.
@@ -99,6 +101,7 @@ internal object PerfTrace {
         uploadCount.incrementAndGet()
         uploadNanos.addAndGet(nanos)
         uploadMaxNanos.updateAndGet { maxOf(it, nanos) }
+        store(uploadSamples, uploadSlot, nanos)
         report()
     }
 
@@ -132,7 +135,7 @@ internal object PerfTrace {
                 "veil_inc_n=%d veil_inc_med_ms=%.1f veil_inc_avg_ms=%.1f veil_inc_max_ms=%.1f " +
                 "veil_rebuild_n=%d veil_rebuild_max_ms=%.1f " +
                 "ui_n=%d ui_med_ms=%.1f ui_max_ms=%.1f " +
-                "upload_n=%d upload_avg_ms=%.1f upload_max_ms=%.1f " +
+                "upload_n=%d upload_med_ms=%.1f upload_avg_ms=%.1f upload_max_ms=%.1f " +
                 "pan_n=%d pan_med_ms=%.1f pan_max_ms=%.1f",
             updateCount.get(), median(updateSamples) / 1e6, updateNanos.get() / 1e6 / steady,
             updateMaxNanos.get() / 1e6,
@@ -141,7 +144,8 @@ internal object PerfTrace {
             incrementNanos.get() / 1e6 / increments, incrementMaxNanos.get() / 1e6,
             rebuildCount.get(), rebuildMaxNanos.get() / 1e6,
             uiCount.get(), median(uiSamples) / 1e6, uiMaxNanos.get() / 1e6,
-            uploadCount.get(), uploadNanos.get() / 1e6 / uploads, uploadMaxNanos.get() / 1e6,
+            uploadCount.get(), median(uploadSamples) / 1e6, uploadNanos.get() / 1e6 / uploads,
+            uploadMaxNanos.get() / 1e6,
             panCount.get(), median(panSamples) / 1e6, panMaxNanos.get() / 1e6))
     }
 }
