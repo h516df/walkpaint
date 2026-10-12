@@ -3,7 +3,7 @@ on:
   pull_request:
     paths: ['scripts/**', 'tests/**', '.github/workflows/delivery-tools.yml']
   push:
-    branches: ['agent/codex/delivery-regression-tools']
+    branches: [main]
     paths: ['scripts/**', 'tests/**', '.github/workflows/delivery-tools.yml']
 permissions:
   contents: read
