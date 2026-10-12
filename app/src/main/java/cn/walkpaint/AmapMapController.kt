@@ -108,7 +108,16 @@ internal class AmapMapController(private val context: Context, private val onGes
                 android.view.MotionEvent.ACTION_CANCEL -> endGesture()
             }
         }
-        map?.setOnMapLoadedListener { mapLoaded = true; onReady() }
+        map?.setOnMapLoadedListener {
+            mapLoaded = true
+            // Camera moves issued before the SDK finishes loading may be replaced by its default
+            // camera. Restore only after loading, or leave the initial focus pending for render.
+            retainedCamera?.let {
+                map?.moveCamera(CameraUpdateFactory.newCameraPosition(it))
+                initialFocusPending = false
+            }
+            onReady()
+        }
         // The veil follows the map: a pan or a zoom asks for a redraw for the new view.
         map?.setOnCameraChangeListener(object : AMap.OnCameraChangeListener {
             override fun onCameraChange(position: CameraPosition?) { onCamera() }
@@ -118,7 +127,6 @@ internal class AmapMapController(private val context: Context, private val onGes
         latestPosition = location
         initialFocusPending = true
         render(state,roads,emptyList(),null,null,-1)
-        retainedCamera?.let { map?.moveCamera(CameraUpdateFactory.newCameraPosition(it));initialFocusPending=false }
         return view
     }
 
@@ -164,7 +172,7 @@ internal class AmapMapController(private val context: Context, private val onGes
             (exploredColor and 0x00FFFFFF) or (0xB0 shl 24), 11f)
         syncGround(a, fog, fogFrame, fogRevision)
         updateUser(latestPosition)
-        if(initialFocusPending) {
+        if(initialFocusPending && mapLoaded) {
             val current=latestPosition?.let { TrackPoint(it.latitude,it.longitude,it.time,it.accuracy) }
             RoadMapFocus.choose(state,current,RoadState())?.let { point ->
                 a.moveCamera(CameraUpdateFactory.newLatLngZoom(toAmap(point.lat,point.lon),17f))
@@ -243,6 +251,7 @@ internal class AmapMapController(private val context: Context, private val onGes
      * camera to street level. Following a moving fix leaves the camera's own zoom alone.
      */
     fun followCamera(fix: Location, bearing: Float, animate: Boolean, minZoom: Float? = null) {
+        if (!mapLoaded || initialFocusPending) return
         val a=map ?: return
         val current=a.cameraPosition
         val zoom=when {

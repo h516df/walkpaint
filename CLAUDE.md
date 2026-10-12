@@ -1,3 +1,16 @@
+# v0.43 高德同引擎验收（2026-10-13）
+
+用户目标：解决 DSH 测试和 vivo 真机使用路径不同的问题；保留 v0.41 界面，未知区域全黑，只有走过的路线显露地图。
+
+当前主写手是 Codex，分支 agent/codex/amap-v042，目录 D:\Workspaces\Codex\2026-10-13\xai\work\worktrees\WalkPaint\codex-amap-v042。DSH 两个会话及其已识别发布后台任务已中止；不要再次派发恢复旧写手。基线是已发布 v0.41/c46352e，保留诊断提交 d1500a2。历史 main 与 PR 栈不合并。
+
+版本 0.43/code45、schema2、原签名。v0.42 标签已经由 DSH 推送到 13db588，未正式发布；保留该标签，不覆盖。正式验收只接受 ARM64 手机包在专用 Google AVD 经 native bridge 真实加载高德的路径，不能以备用地图通过代替。本人手机、长期户外记录及本人账号下载/系统安装仍未验收，Issue #6 保持开放。
+
+本轮修复：宽帧不扩大三十米通道；首屏与空路线保持未知区域不透光；中国高德视口回到 WGS84 后再绘制；缩放时同步选择通道或路线线条。现场导出说明实际引擎/图层/像素。证据、测试与回退边界见 docs/evidence/V043.md。
+
+以下保留的是历史交接记录；其中旧版本、写手与“x86 模拟器无法执行高德”的结论均不代表本轮状态。
+
+---
 # v0.41 手机界面改版候选（2026-10-12）
 
 用户已选定移动端设计并要求真正用到 Android App。当前任务 #35，工作区 D:\Workspaces\Codex\2026-10-12\jie\work\worktrees\WalkPaint\codex-mobile-ui-redesign-v041，分支 agent/codex/mobile-ui-redesign-v041，固定基线 v0.40/e4b8301。代码、参考设计与证据在本分支；PR 链接见 #35 的关联 PR。

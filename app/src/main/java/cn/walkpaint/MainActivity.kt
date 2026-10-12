@@ -137,7 +137,7 @@ class MainActivity : ComponentActivity() {
         { @Suppress("DEPRECATION") windowManager.defaultDisplay.rotation },
         { bearing -> mapHeading=bearing ?: 0f;syncFollowCamera() }) }
     private val amapController by lazy { AmapMapController(this,::pauseMapFollowing,
-        { syncFollowCamera(force=true) }, ::onMapCameraMoved, ::onMapCameraSettled) }
+        { refreshVeilForViewport(force=true) }, ::onMapCameraMoved, ::onMapCameraSettled) }
     private val amapSupported get() = AmapPlatform.supported(Build.SUPPORTED_ABIS.toList(), BuildConfig.ARM64_ONLY)
     private val amapActive get() = amapSupported && BuildConfig.AMAP_KEY.isNotBlank() && amapConsent
     private var showDiagnostics by mutableStateOf(false)

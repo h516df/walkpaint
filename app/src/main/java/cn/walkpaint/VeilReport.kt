@@ -80,8 +80,8 @@ internal object VeilReport {
         if (frame == null) return "雾帧=尚未生成（还没有定位，或地图引擎还没报告视图）"
         val perMetre = TrailPainter.pixelsPerMeter(frame)
         val raw = TrailPaint.CORRIDOR_M * perMetre
-        val drawn = maxOf(raw, 2.0)
-        val floor = if (raw < 2.0) "（已到2像素下限，这一帧太宽，画不出走廊）" else ""
+        val drawn = raw
+        val floor = if (!TrailPaint.corridorVisible(frame)) "（这一帧太宽，画不出走廊；雾层保持不透光，路线用线条显示）" else ""
         return String.format(Locale.ROOT,
             "雾帧=%dx%d像素 覆盖纬度%.5f° 经度%.5f° 每米=%.3f像素 走廊=%.1f像素%s 地图画行走线=%s",
             frame.widthPx, frame.heightPx, frame.latSpan, frame.lonSpan, perMetre, drawn, floor,
@@ -93,7 +93,7 @@ internal object VeilReport {
      *
      * The most common reason for the phone and the record disagreeing is that the phone was never
      * running the engine the record was written against. `高德只提供 ARM 库` is not a defect in the
-     * app: it is the reason an x86 emulator can never reproduce what the phone shows.
+     * app. An ARM64 artifact may use a declared native bridge; the actual engine is read back.
      */
     fun engineChoice(supported: Boolean, firstAbi: String, keyConfigured: Boolean,
                      consent: Boolean, active: Boolean): String = buildString {

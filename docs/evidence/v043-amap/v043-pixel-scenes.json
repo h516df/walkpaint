@@ -1,0 +1,50 @@
+{
+  "gesture-street": {
+    "veil_ratio": 0.799,
+    "bare_map_ratio": 0.005,
+    "tint_ratio": 0.009,
+    "sampled": 960000
+  },
+  "gesture-wide": {
+    "veil_ratio": 0.999,
+    "bare_map_ratio": 0.0,
+    "tint_ratio": 0.001,
+    "sampled": 960000
+  },
+  "gesture-return": {
+    "veil_ratio": 0.795,
+    "bare_map_ratio": 0.012,
+    "tint_ratio": 0.014,
+    "sampled": 960000
+  },
+  "release-near": {
+    "veil_ratio": 0.799,
+    "bare_map_ratio": 0.012,
+    "tint_ratio": 0.012,
+    "sampled": 960000
+  },
+  "tab-return": {
+    "veil_ratio": 0.799,
+    "bare_map_ratio": 0.012,
+    "tint_ratio": 0.012,
+    "sampled": 960000
+  },
+  "pan": {
+    "veil_ratio": 0.68,
+    "bare_map_ratio": 0.106,
+    "tint_ratio": 0.037,
+    "sampled": 960000
+  },
+  "pan-return": {
+    "veil_ratio": 0.799,
+    "bare_map_ratio": 0.012,
+    "tint_ratio": 0.012,
+    "sampled": 960000
+  },
+  "reopen": {
+    "veil_ratio": 0.799,
+    "bare_map_ratio": 0.012,
+    "tint_ratio": 0.012,
+    "sampled": 960000
+  }
+}

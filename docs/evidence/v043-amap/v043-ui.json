@@ -1,0 +1,42 @@
+{
+  "apk_sha256": "b8aa5e7479a925e109dc2e544ee186c5acd7addfd575be6e2cf64c2a80e4c5a2",
+  "phone_path": "not_verified",
+  "release-near": {
+    "zoom": 17.0,
+    "lat": 39.9102,
+    "lon": 116.39142,
+    "map_loaded": true,
+    "engine": "amap"
+  },
+  "footprints_visible": true,
+  "tab-return": {
+    "zoom": 17.0,
+    "lat": 39.9102,
+    "lon": 116.39142,
+    "map_loaded": true,
+    "engine": "amap"
+  },
+  "pan": {
+    "zoom": 17.0,
+    "lat": 39.9102,
+    "lon": 116.39352,
+    "map_loaded": true,
+    "engine": "amap"
+  },
+  "pan-return": {
+    "zoom": 17.0,
+    "lat": 39.9102,
+    "lon": 116.39142,
+    "map_loaded": true,
+    "engine": "amap"
+  },
+  "reopen": {
+    "zoom": 17.0,
+    "lat": 39.9102,
+    "lon": 116.39142,
+    "map_loaded": true,
+    "engine": "amap"
+  },
+  "today_points_still_visible": 3505,
+  "passed": true
+}

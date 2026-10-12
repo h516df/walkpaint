@@ -76,8 +76,10 @@ class VeilReportTest {
         assertTrue("the map has to draw the line in this state", line.contains("地图画行走线=是"))
         // 60 degrees of latitude is roughly 6,600 km, so thirty metres is far under one pixel.
         assertTrue(line, line.contains("每米=0.0"))
-        assertTrue("this frame relies on the 2 pixel floor, which the line admits to",
+        assertTrue("this frame is too coarse and must not inflate the corridor",
             TrailPaint.CORRIDOR_M * TrailPainter.pixelsPerMeter(wide) < 2.0)
+        assertFalse(line.contains("2像素下限"))
+        assertTrue(line.contains("走廊=0.0像素"))
     }
 
     @Test fun aStreetLevelFrameShowsTheCorridorItself() {

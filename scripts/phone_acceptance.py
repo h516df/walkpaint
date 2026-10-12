@@ -1,30 +1,6 @@
-"""Acceptance on a real, ARM phone — the only machine that can run the AMap engine.
-
-Why this script exists, in the project's own words: "your test and the real phone are different, so
-you will always have a problem". That was correct, and here is the whole of it. The AMap SDK ships
-native code for `arm64-v8a` and `armeabi-v7a` only (verified against the shipped universal APK: the
-`x86`/`x86_64` folders hold MapLibre and nothing else), so the x86_64 emulator cannot load it; and
-the Android emulator refuses an arm64 system image on an x86_64 host outright —
-
-    FATAL | Avd's CPU Architecture 'arm64' is not supported by the QEMU2 emulator on x86_64 host.
-
-— so no amount of local work can exercise the engine the person actually uses. Everything this
-script measures is therefore measured on the device itself: the screen it captures, the app's own
-report of what its engine did, and the device's own ABI. Nothing here is inferred from source.
-
-Prerequisites, in the order they will bite:
-  * `adb devices` must list the phone as `device` (USB, or a one-time wireless pairing).
-  * The phone must be arm64. An x86 phone cannot run AMap either, and this script says so instead
-    of producing a green result for a path the phone never took.
-  * The APK must be the arm64 or universal build. A MapLibre-only artifact would silently make the
-    whole exercise meaningless.
-
-Usage:
-    python -X utf8 scripts/phone_acceptance.py --apk dist/v0.41/input/WalkPaint-v0.41-universal.apk
-    python -X utf8 scripts/phone_acceptance.py --serial 192.168.1.20:5555 --apk ... --keep-going
-
-Every artefact lands in verification/phone-<serial>-<stamp>/ and the exit code is the verdict: 0 only
-when the phone ran the AMap engine and the fog was measurable on its screen.
+"""Historical phone acceptance helper; never run automatically without explicit phone authorization.
+Dedicated AVD ARM64 native-bridge evidence is supported by amap_runtime_evidence.py.
+Phone OEM, real location and owner account acceptance remain separate. See docs/evidence/V043.md.
 """
 from __future__ import annotations
 
