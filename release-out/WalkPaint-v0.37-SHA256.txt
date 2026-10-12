@@ -1,1 +1,1 @@
-2a299eed095908125782987e98703853d4c1755a0d3bf154f80c4dccbd1b24d5  WalkPaint-v0.37-arm64-debug.apk
+6acd23c2ee57fa9b5de005db09114de4fde96ca7fd78c6a330873353bc33fcda  WalkPaint-v0.37-arm64-debug.apk

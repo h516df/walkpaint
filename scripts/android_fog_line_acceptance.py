@@ -54,8 +54,8 @@ VEIL_INCREMENT_MED_MS_MAX = 30.0
 VEIL_INCREMENT_MAX_MS_MAX = 250.0
 VEIL_REBUILD_MAX_MS_MAX = 800.0
 PAN_MAX_MS_MAX = 800.0
-UI_MED_MS_MAX = 60.0
-UI_MAX_MS_MAX = 160.0
+UI_MED_MS_MAX = 20.0
+UI_MAX_MS_MAX = 120.0
 UPLOAD_MED_MS_MAX = 20.0
 UPLOAD_AVG_MS_MAX = 40.0
 UPLOAD_MAX_MS_MAX = 250.0
@@ -335,6 +335,9 @@ def open_map_privacy_page():
     retried and checked rather than assumed to have landed.
     """
     for _ in range(4):
+        if dismiss_system_dialogs():
+            time.sleep(1)
+            continue
         if not any('我的' == (t or '') for t in labels()):
             sh('input', 'keyevent', 'KEYCODE_BACK')
             time.sleep(1)
@@ -343,11 +346,13 @@ def open_map_privacy_page():
         for _ in range(3):
             if any('更多设置' == (t or '') for t in labels()):
                 break
+            dismiss_system_dialogs()
             time.sleep(1)
         tap('更多设置', wait=2.0)
         for _ in range(3):
             if any('隐私与权限' == (t or '') for t in labels()):
                 break
+            dismiss_system_dialogs()
             time.sleep(1)
         tap('隐私与权限', wait=2.0)
         page = labels()
@@ -387,6 +392,106 @@ def day_row_matching(predicate, scrolls=4):
     return None
 
 
+CAMERA_TAG = 'WalkPaintCam'
+
+
+def camera_state():
+    """The last camera record the app wrote: where the map is looking, in which mode, and where the
+    person is. Screenshots are tied to this, because colour alone cannot tell a near view from a far
+    one — which is exactly how a near view once passed as the far cluster."""
+    text = sh('logcat', '-d', '-s', CAMERA_TAG + ':D')
+    lines = [line for line in text.splitlines() if CAMERA_TAG in line]
+    if not lines:
+        return None
+    fields = dict(re.findall(r'([A-Za-z]+)=([^\s]+)', lines[-1].split(CAMERA_TAG + ': ')[-1]))
+    state = {}
+    for key, value in fields.items():
+        try:
+            state[key] = float(value)
+        except ValueError:
+            state[key] = value
+    return state
+
+
+def check_scene(name, state, predicate, description):
+    """Fails unless the camera record taken with a screenshot is really in the scene it claims.
+
+    The state is passed in rather than read again: the camera can move on between a picture and a
+    later reading, and judging one against the other is how a near view once passed as the far one.
+    """
+    checks['scene_' + name] = state
+    if state is None:
+        fail('no camera record for the %s scene, so the screenshot proves nothing' % name)
+    if not predicate(state):
+        fail('the %s screenshot was not taken in the scene it claims (%s): %s'
+             % (name, description, state))
+    return state
+
+
+def require_scene(name, predicate, description):
+    """Same as check_scene, for a moment when the camera is known to be standing still."""
+    return check_scene(name, camera_state(), predicate, description)
+
+
+def person_stayed_near(state, expected_lon=2.3523, tolerance=0.004):
+    """The person's own position must not have moved just because the map did."""
+    return state is not None and abs(state.get('fixLon', 0.0) - expected_lon) < tolerance
+
+
+def pan_camera(to_lon, to_lat, tolerance=0.0015, max_swipes=90, on_way=None):
+    """Drags the map with real swipes until the camera reaches the target, checking as it goes.
+
+    This is the path a person takes to look at old ground far away: drag the map until it is there.
+    A debug camera jump would not exercise the same code, so it is not used here. The swipe length
+    is worked out from the current view so a wide view does not overshoot and a close one is not
+    stuck taking a few metres at a time.
+    """
+    wx, wy = (int(v) for v in re.findall(r'\d+', sh('wm', 'size'))[:2])
+    cx, cy = wx // 2, wy // 2 - 200
+    swipes = 0
+    previous = None
+    overshoot = 0
+    for _ in range(max_swipes):
+        state = camera_state()
+        if state is None:
+            break
+        dlon = to_lon - state.get('lon', to_lon)
+        dlat = to_lat - state.get('lat', to_lat)
+        if on_way is not None:
+            on_way(state)
+        if abs(dlon) < tolerance and abs(dlat) < tolerance:
+            break
+        # If a drag made the distance worse the step was too long for this view; halve it, and give
+        # up after three in a row rather than wandering off across the map.
+        distance = abs(dlon) + abs(dlat)
+        if previous is not None and distance >= previous:
+            overshoot += 1
+            if overshoot >= 3:
+                break
+        else:
+            overshoot = 0
+        previous = distance
+        damping = 1.0 if overshoot == 0 else 0.5 ** overshoot
+        view_lon = state.get('viewLon') or 0.0
+        view_lat = state.get('viewLat') or 0.0
+        # Pixels needed for the remaining distance, with a small floor so a close view can still
+        # converge and a ceiling so a drag stays a drag.
+        if abs(dlon) >= tolerance and view_lon > 0:
+            step = int(min(600, max(30, abs(dlon) / view_lon * wx * damping)))
+            step = step if dlon < 0 else -step
+            sh('input', 'swipe', str(cx - step // 2), str(cy), str(cx + step // 2), str(cy), '250')
+        if abs(dlat) >= tolerance and view_lat > 0:
+            step = int(min(600, max(30, abs(dlat) / view_lat * wy * damping)))
+            # Screen y grows downward, so dragging up moves the map south: the opposite sign to the
+            # horizontal case. Getting this backwards walked the camera north by three kilometres.
+            step = -step if dlat < 0 else step
+            sh('input', 'swipe', str(cx), str(cy - step // 2), str(cx), str(cy + step // 2), '250')
+        swipes += 1
+        time.sleep(0.35)
+    checks['pan_swipes_to_%.3f' % to_lon] = swipes
+    return camera_state()
+
+
 def gestures():
     """Identical pan and double-tap zoom script for every run, on the same viewport."""
     wx, wy = (int(v) for v in re.findall(r'\d+', sh('wm', 'size'))[:2])
@@ -417,6 +522,38 @@ def walk_ten_fixes():
     total_after = db.execute('SELECT COUNT(*) FROM points').fetchone()[0]
     db.close()
     return total_after - total_before
+
+
+def route_line_starts(name, row_fraction=0.5, tolerance=55):
+    """Where the day's route crosses one horizontal scanline, in x pixels.
+
+    The reported defect was several parallel lines where one was expected — the same street walked
+    four times drawn as four lines a few metres apart. A colour share cannot see that, because four
+    thin lines and one thicker line cover a similar part of the screen; the distance between the
+    crossings can. The colour is the app's own route pigment (0x0B8C77), which the pale walked-ground
+    tint does not match.
+    """
+    from PIL import Image
+    image = Image.open(out / (name + '.png')).convert('RGB')
+    y = int(image.height * row_fraction)
+    starts = []
+    inside = False
+    for x in range(image.width):
+        r, g, b = image.getpixel((x, y))
+        route = (abs(r - 11) < tolerance and abs(g - 140) < tolerance
+                 and abs(b - 119) < tolerance and g - r > 50)
+        if route and not inside:
+            starts.append(x)
+        inside = route
+    return starts
+
+
+def closest_line_gap(name):
+    """The smallest gap between two route crossings, or None when fewer than two were found."""
+    starts = route_line_starts(name)
+    if len(starts) < 2:
+        return None
+    return min(b - a for a, b in zip(starts, starts[1:]))
 
 
 def host_memory_mb():
@@ -491,6 +628,10 @@ try:
     apk = (ROOT / args.apk).resolve()
     checks['apk'] = str(apk)
     checks['apk_sha256'] = hashlib.sha256(apk.read_bytes()).hexdigest()
+    # Nothing may be writing while the snapshot is taken: a running app records fixes every second,
+    # and an added row would be read as the install having changed the data.
+    sh('am', 'force-stop', PKG)
+    time.sleep(1)
     rows_installed_before = row_map()
     if not args.skip_install:
         # -d: the baseline run installs the build being replaced, whose version code is lower.
@@ -498,10 +639,26 @@ try:
         assert 'Success' in run('install', '-r', '-d',
             str(ROOT / 'app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk'),
             timeout=240), 'test install failed'
-    version = re.search(r'versionCode=(\d+)', sh('dumpsys', 'package', PKG))
-    name = re.search(r'versionName=([\w.]+)', sh('dumpsys', 'package', PKG))
+    # The package manager can still be busy straight after an install on a loaded host, so the
+    # version is polled instead of read once.
+    version = name = None
+    reported = ''
+    attempts = 0
+    for attempt in range(20):
+        attempts = attempt + 1
+        reported = sh('dumpsys', 'package', PKG)
+        version = re.search(r'versionCode=(\d+)', reported)
+        name = re.search(r'versionName=([\w.]+)', reported)
+        if version and name:
+            break
+        time.sleep(1)
     if not version or not name:
-        fail('installed package reports no version')
+        # Record what the query actually returned: an empty dump (service not ready), an error
+        # string (install failed) and an unparsable dump are three different problems.
+        checks['version_query_raw'] = reported[-400:]
+        checks['version_query_attempts'] = attempts
+        fail('installed package reports no version after %d attempts; raw=%r'
+             % (attempts, reported[-200:]))
     checks['version_code'] = int(version.group(1))
     checks['version_name'] = name.group(1)
     installed = hashlib.sha256(
@@ -510,11 +667,18 @@ try:
     if installed != checks['apk_sha256']:
         fail('installed package is not the file that was built')
 
-    # Installing over the previous build must not touch a single stored row.
-    rows_installed_after = row_map()
-    checks['install_preserved_rows'] = rows_installed_before == rows_installed_after
-    if not checks['install_preserved_rows']:
-        fail('installing the build changed or lost stored rows')
+    # Installing over the previous build must not touch a single stored row. With the install
+    # skipped there is nothing to compare, so the check is recorded as not applicable rather than
+    # passed or failed.
+    if args.skip_install:
+        checks['install_preserved_rows'] = 'not_applicable: install skipped'
+    else:
+        rows_installed_after = row_map()
+        checks['install_preserved_rows'] = rows_installed_before == rows_installed_after
+        if not checks['install_preserved_rows']:
+            changed = sorted(k for k in rows_installed_before if rows_installed_before.get(k) != rows_installed_after.get(k))
+            checks['rows_changed_by_install'] = changed[:20]
+            fail('installing the build changed or lost stored rows: %s' % changed[:5])
 
     # One deterministic scene: the test AVD's tables are cleared and the same anonymous fixture is
     # written again, so the replaced build and the candidate are shown exactly the same thing.
@@ -547,6 +711,10 @@ try:
         fail('the fixture did not report its far cluster')
     far_lat, far_lon = float(far.group(1)), float(far.group(2))
     checks['fixture_far'] = {'lat': far_lat, 'lon': far_lon}
+    # The two places the map has to be dragged between, named once so the scene checks below and
+    # the drag itself cannot drift apart.
+    FAR_LAT, FAR_LON = far_lat, far_lon
+    NEAR_LAT, NEAR_LON = end_lat, end_lon
     separation = math.hypot((far_lat - end_lat) * 111194.9,
                             (far_lon - end_lon) * 111194.9 * math.cos(math.radians(end_lat)))
     checks['fixture_cluster_separation_m'] = int(separation)
@@ -615,18 +783,23 @@ try:
         checks['extra_fixes_recorded'] = walk_ten_fixes()
     shot('map-after-walk')
     perf_before_gesture = perf_from_logcat() or {}
+    # The person keeps walking while the finger is on the map. Running the drag only after the walk
+    # finished proved nothing about the case the user complained about, so the fixes are injected
+    # from a thread while the same gesture script runs, and the counters have to show that updates
+    # really happened during it.
+    import threading
+    walker = threading.Thread(target=walk_ten_fixes, daemon=True)
+    walker.start()
     gestures()
+    walker.join()
     perf_after_gesture = perf_from_logcat() or {}
-    # The veil now follows the map, so a drag does redraw it — that is the price of the fog covering
-    # what a person is looking at. What must not happen is a state update, and each redraw must stay
-    # small; both are checked here.
     checks['gesture_counter_delta'] = {
         key: perf_after_gesture.get(key, 0) - perf_before_gesture.get(key, 0)
         for key in ('update_n', 'ui_n', 'upload_n', 'pan_n')
     }
-    if checks['gesture_counter_delta'].get('update_n', 0) > 0:
-        fail('a state update ran while the finger was dragging: %s'
-             % checks['gesture_counter_delta'])
+    if checks['gesture_counter_delta'].get('update_n', 0) <= 0:
+        fail('no state update happened while the finger was on the map, so a live fix during a '
+             'drag was never exercised: %s' % checks['gesture_counter_delta'])
     if perf_after_gesture.get('pan_n', 0) > 0 and perf_after_gesture.get('pan_max_ms', 0) > PAN_MAX_MS_MAX:
         fail('redrawing the veil for a new view took %.1f ms, above the %.0f ms limit'
              % (perf_after_gesture['pan_max_ms'], PAN_MAX_MS_MAX))
@@ -676,15 +849,15 @@ try:
         if perf['veil_rebuild_max_ms'] > VEIL_REBUILD_MAX_MS_MAX:
             note_failure('the slowest full veil rebuild is %.1f ms, above the %.0f ms limit'
                  % (perf['veil_rebuild_max_ms'], VEIL_REBUILD_MAX_MS_MAX))
-        # This is the part that can drop a frame while a finger is on the map.
+        # The original bound, unchanged: the veil image was cut to 512 px and unchanged GeoJSON is
+        # no longer resubmitted, which brought the whole UI block to 18 ms even on a loaded host.
         if perf['ui_med_ms'] > UI_MED_MS_MAX:
             note_failure('the UI thread spends %.1f ms at the median per update, above the %.0f ms limit'
                  % (perf['ui_med_ms'], UI_MED_MS_MAX))
         if perf['ui_max_ms'] > UI_MAX_MS_MAX:
             note_failure('the worst UI-thread update is %.1f ms, above the %.0f ms limit'
                  % (perf['ui_max_ms'], UI_MAX_MS_MAX))
-        # The UI block also carries the pre-existing road/trail/user layer update, which is tens of
-        # milliseconds on its own with this fixture; the share this work owns is the handover.
+        # The share this work owns: handing the veil image to the map.
         if perf['upload_med_ms'] > UPLOAD_MED_MS_MAX:
             note_failure('handing the veil to the map takes %.1f ms at the median, above the %.0f ms limit'
                  % (perf['upload_med_ms'], UPLOAD_MED_MS_MAX))
@@ -704,10 +877,20 @@ try:
                     'ui is the only work on the UI thread',
         }
 
-    # Switching tabs recreates the map view and its style; the veil has to come back with it.
+    # Switching tabs recreates the map view and its style; the veil and the paint have to come back
+    # with it. Re-centring on the person first makes this a picture of ground that was walked, so
+    # the assertion below is about what the person sees, not about an empty corner of the map.
     tap('我的', wait=1.5, exact=True)
     checks['map_tab_ready_after_tab_switch_ms'] = open_map_tab()
-    shot('map-tab-return')
+    tap('定位我', wait=3.0)
+    tab_state = capture_scene('map-tab-return')
+    check_scene('tab_return', tab_state, lambda s: s.get('day') == 'cumulative',
+                'the cumulative view is showing after the tab switch')
+    if checks['map-tab-return_stats']['veil_ratio'] < 0.25:
+        fail('the veil is missing after switching tabs: %s' % checks['map-tab-return_stats'])
+    if checks['map-tab-return_stats']['tint_ratio'] < 0.003:
+        fail('the walked ground is not painted after switching tabs: %s'
+             % checks['map-tab-return_stats'])
 
     # The selected day draws that day's route; it is the only line left, so its shape matters.
     # The tab needs a moment to settle before its screenshot, or the picture is still the map.
@@ -722,9 +905,20 @@ try:
     shot('map-day')
     if not any(t and '返回全部探索' in t for t in labels()):
         fail('the day map did not open; visible=' + str(labels()))
+    # One street must be one line. The replaced build drew the four passes over the same street as
+    # four parallel lines: measured on its own saved screenshot the closest pair of crossings is
+    # 19 px apart, while the candidate's is 282 px. Twenty pixels at this zoom is about twelve
+    # metres, so two different streets are never that close together.
+    checks['map_day_line_starts'] = route_line_starts('map-day')
+    checks['map_day_closest_line_gap'] = closest_line_gap('map-day')
+    if checks['map_day_closest_line_gap'] is not None and checks['map_day_closest_line_gap'] < 20:
+        fail('the day route is drawn as parallel double lines (closest pair %d px apart): %s'
+             % (checks['map_day_closest_line_gap'], checks['map_day_line_starts']))
 
-    # The second cluster, about twelve kilometres away and two days old. The person's own position
-    # stays where it is; only the map is moved, first to that day, then to the cumulative view.
+    # The second cluster, about twelve kilometres away and two days old. Opening that day shows it,
+    # then the cumulative view is restored and the map is dragged there with real swipes, which is
+    # what a person does; every screenshot is tied to the camera record so a near view cannot pass
+    # as the far cluster again.
     tap('足迹', wait=3.0, exact=True)
     older = day_row_matching(lambda text: bool(re.fullmatch(r'\d{4}/\d{2}/\d{2}', text.strip())))
     if older is None:
@@ -733,41 +927,112 @@ try:
     if not any(t and '返回全部探索' in t for t in labels()):
         fail('the older day map did not open; visible=' + str(labels()))
     checks['far_day_opened'] = True
-    tap('返回全部探索', wait=3.5)
-    shot('map-far-cluster')
-    checks['far_cluster_stats'] = veil_stats('map-far-cluster')
+    tap('返回全部探索', wait=3.0)
+    start_state = camera_state()
+    shot('map-cumulative-start')
+    check_scene('cumulative_start', start_state,
+                lambda s: s.get('day') == 'cumulative',
+                'the cumulative view is showing')
+
+    # The scene record, the screenshot and the pixel statistics are taken as one observation: the
+    # camera can move on between them, and a picture of one place judged against the coordinates of
+    # another is exactly how a near view once passed as the far cluster.
+    def capture_scene(name):
+        state = camera_state()
+        shot(name)
+        checks['scene_' + name] = state
+        checks[name + '_stats'] = veil_stats(name)
+        return state
+
+    def note_between(state):
+        if 'scene_map-between-clusters' in checks:
+            return
+        if 'lon' in state and 2.40 < state['lon'] < 2.47:
+            # Hold still, then take the picture and the camera reading together.
+            time.sleep(0.8)
+            capture_scene('map-between-clusters')
+
+    pan_camera(FAR_LON, FAR_LAT, on_way=note_between)
+    # Zoom in on the far cluster with real double taps, so the paint there is big enough to judge,
+    # then check again that the camera is still on it.
+    wx, wy = (int(v) for v in re.findall(r'\d+', sh('wm', 'size'))[:2])
+    for _ in range(3):
+        sh('input', 'tap', str(wx // 2), str(wy // 2 - 200))
+        time.sleep(0.08)
+        sh('input', 'tap', str(wx // 2), str(wy // 2 - 200))
+        time.sleep(1.2)
+    time.sleep(1.5)
+    far_state = capture_scene('map-far-cluster')
+    check_scene('far_cluster', far_state,
+                lambda s: (abs(s.get('lat', 0.0) - FAR_LAT) < 0.003
+                           and abs(s.get('lon', 0.0) - FAR_LON) < 0.003
+                           and s.get('day') == 'cumulative'),
+                'camera at the cluster twelve kilometres east, in the cumulative view')
+    if not person_stayed_near(far_state):
+        fail('the person was moved to the far cluster instead of the map: %s' % far_state)
+    checks['far_cluster_stats'] = checks['map-far-cluster_stats']
     # The ground walked twelve kilometres away has to still be painted, and the ground nobody has
-    # walked around it has to still be veiled. Calibrated on this scene: with the viewport-following
-    # frame the far view measures about 0.86 veiled and 0.02 painted; before the fix it was 0.00/0.00
-    # because the frame had been clamped around the person.
+    # walked around it has to still be veiled. Before the frame followed the view this scene
+    # measured 0.00/0.00, because the frame had been clamped around the person.
     if checks['far_cluster_stats']['veil_ratio'] < 0.25:
         fail('the far cluster is not veiled: %s' % checks['far_cluster_stats'])
     if checks['far_cluster_stats']['tint_ratio'] < 0.003:
         fail('the ground walked twelve kilometres away is not painted: %s'
              % checks['far_cluster_stats'])
 
-    # Pan back towards the near cluster: everything between them is ground nobody has walked, and
-    # it has to stay behind the veil rather than being fully exposed.
-    wx, wy = (int(v) for v in re.findall(r'\d+', sh('wm', 'size'))[:2])
-    for _ in range(3):
-        sh('input', 'swipe', str(wx // 2 - 400), str(wy // 2 - 150),
-           str(wx // 2 + 400), str(wy // 2 - 150), '400')
-        time.sleep(0.8)
-    time.sleep(1.5)
-    shot('map-between-clusters')
-    checks['between_clusters_stats'] = veil_stats('map-between-clusters')
+    # Halfway between the two clusters: ground nobody has walked, and it has to stay behind the
+    # veil. If the drag passed through without stopping there, the camera is taken back and the
+    # scene, the picture and the statistics are captured together.
+    if 'scene_map-between-clusters' not in checks:
+        pan_camera((FAR_LON + NEAR_LON) / 2.0, FAR_LAT)
+        time.sleep(1.5)
+        capture_scene('map-between-clusters')
+    between_state = checks['scene_map-between-clusters']
+    check_scene('between_clusters', between_state,
+                lambda s: 2.39 < s.get('lon', 0.0) < 2.48 and s.get('day') == 'cumulative',
+                'camera between the two clusters, in the cumulative view')
+    checks['between_clusters_stats'] = checks['map-between-clusters_stats']
     if checks['between_clusters_stats']['veil_ratio'] < 0.25:
         fail('the ground between the two clusters is not veiled: %s'
              % checks['between_clusters_stats'])
+    if checks['between_clusters_stats']['tint_ratio'] > 0.05:
+        fail('ground nobody has walked is painted between the clusters: %s'
+             % checks['between_clusters_stats'])
 
-    tap('定位我', wait=3.5)
-    shot('map-near-cluster')
-    checks['near_cluster_stats'] = veil_stats('map-near-cluster')
+    # And back to the near cluster, still by dragging. Walking ground has to be painted here, and
+    # the ground around it veiled: this is the same assertion the far cluster gets.
+    pan_camera(NEAR_LON, NEAR_LAT)
+    time.sleep(1.5)
+    near_state = capture_scene('map-near-cluster')
+    check_scene('near_cluster', near_state,
+                lambda s: (abs(s.get('lon', 0.0) - NEAR_LON) < 0.004
+                           and s.get('day') == 'cumulative'),
+                'camera back at the near cluster, in the cumulative view')
+    if not person_stayed_near(near_state):
+        fail('the person did not stay near while the map was dragged: %s' % near_state)
+    checks['near_cluster_stats'] = checks['map-near-cluster_stats']
+    if checks['near_cluster_stats']['veil_ratio'] < 0.25:
+        fail('the ground around the near cluster is not veiled: %s' % checks['near_cluster_stats'])
+    if checks['near_cluster_stats']['tint_ratio'] < 0.003:
+        fail('the ground walked near the person is not painted: %s' % checks['near_cluster_stats'])
 
+    # Reopening the app: the explored ground has to be visible again and the unknown still veiled.
+    # Row counts only prove the database survived; they say nothing about the picture.
     reopen = launch()
     checks['reopen_ms'] = reopen
     checks['map_tab_ready_after_reopen_ms'] = open_map_tab()
-    shot('map-reopen')
+    tap('定位我', wait=3.0)
+    reopen_state = capture_scene('map-reopen')
+    check_scene('reopen', reopen_state,
+                lambda s: s.get('day') == 'cumulative',
+                'the map is back in the cumulative view after a restart')
+    if not person_stayed_near(reopen_state):
+        fail('the person is not where they were after a restart: %s' % reopen_state)
+    reopen_stats = checks['map-reopen_stats']
+    if reopen_stats['veil_ratio'] < 0.25:
+        fail('the veil is missing after reopening the app: %s' % reopen_stats)
+    if reopen_stats['tint_ratio'] < 0.003:
+        fail('the walked ground is not painted after reopening the app: %s' % reopen_stats)
     checks['map_note_after_reopen'] = [t for t in labels() if t and ('解锁' in t or '附近' in t)]
 
     after_rows = row_map()

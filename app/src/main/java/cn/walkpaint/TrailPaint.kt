@@ -54,7 +54,15 @@ internal object TrailPaint {
      * cost of every repaint: a megapixel frame cost a hundred milliseconds to rebuild on a loaded
      * device, and half of that is spent on pixels nobody can see.
      */
-    const val MAX_PX = 768
+    /**
+     * Longest side of the veil image, in pixels.
+     *
+     * Handing the image to the map costs the UI thread one upload of its pixels, measured as the
+     * whole of that cost: at 768 the handover was 32-56 ms, and the picture only needs to carry a
+     * corridor a few dozen pixels wide with a soft edge. 512 halves the upload while still giving
+     * the fade more than twenty pixels to ramp over.
+     */
+    const val MAX_PX = 512
     /** Smallest frame, so one short walk still gets a usable image instead of a zero-size one. */
     const val MIN_SPAN_DEG = 0.002
     const val MARGIN = 0.12
@@ -126,16 +134,22 @@ internal object TrailPaint {
             lonMin = centreLon - MIN_SPAN_DEG / 2
             lonMax = centreLon + MIN_SPAN_DEG / 2
         }
-        val capLat = MAX_SPAN_METERS / METRES_PER_LAT
-        val metresPerLon = METRES_PER_LAT * kotlin.math.cos(Math.toRadians(centreLat)).coerceAtLeast(0.05)
-        val capLon = MAX_SPAN_METERS / metresPerLon
-        if (latMax - latMin > capLat) {
-            latMin = centreLat - capLat / 2
-            latMax = centreLat + capLat / 2
-        }
-        if (lonMax - lonMin > capLon) {
-            lonMin = centreLon - capLon / 2
-            lonMax = centreLon + capLon / 2
+        // The cap only applies to a frame derived from the walked area. When the frame follows the
+        // viewport it must cover the whole view at any zoom: capping it would leave the corners of a
+        // wide view with no veil at all, which reads as ground that has been explored. A very wide
+        // view gets a coarser image instead, which is the honest trade.
+        if (viewport == null || viewport.latSpan <= 0.0 || viewport.lonSpan <= 0.0) {
+            val capLat = MAX_SPAN_METERS / METRES_PER_LAT
+            val metresPerLon = METRES_PER_LAT * kotlin.math.cos(Math.toRadians(centreLat)).coerceAtLeast(0.05)
+            val capLon = MAX_SPAN_METERS / metresPerLon
+            if (latMax - latMin > capLat) {
+                latMin = centreLat - capLat / 2
+                latMax = centreLat + capLat / 2
+            }
+            if (lonMax - lonMin > capLon) {
+                lonMin = centreLon - capLon / 2
+                lonMax = centreLon + capLon / 2
+            }
         }
         val latMargin = (latMax - latMin) * MARGIN
         val lonMargin = (lonMax - lonMin) * MARGIN
@@ -165,13 +179,17 @@ internal object TrailPaint {
 internal class TrailPainter {
     private var frame: PaintFrame? = null
     private var bitmap: Bitmap? = null
+    /** The buffer being drawn into next, so the map can keep reading the one it was handed. */
+    private var scratch: Bitmap? = null
     private var colour = 0
-    /** Points of each incoming path already stroked, so a fix only ever paints its own new tail. */
-    private var paintedPerPath = mutableListOf<Int>()
-    /** Where the painted list began, so an import that reorders the history is noticed. */
-    private var paintedFrom: TrackPoint? = null
 
-    private val fog = Paint().apply { style = Paint.Style.FILL; color = TrailPaint.FOG_COLOR }
+    private val fog = Paint().apply {
+        style = Paint.Style.FILL
+        color = TrailPaint.FOG_COLOR
+        // Replace rather than blend. The buffer is reused between updates, and blending the veil
+        // over what was left in it would make the fog darker with every fix.
+        xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC)
+    }
     /**
      * The corridor is painted by *replacing* pixels, layer by layer, from the untouched veil at the
      * outside down to fully revealed at the edge of the walked band, and then with the person's own
@@ -208,67 +226,36 @@ internal class TrailPainter {
 
     fun update(paths: List<List<TrackPoint>>, color: Int, anchor: TrackPoint? = null,
                viewport: ViewBounds? = null): Bitmap? {
-        lastUpdateRebuilt = false
         if (paths.all { it.isEmpty() }) return bitmap
         colour = color
         val current = frame
-        // The frame follows the map now, so a pan or a zoom is what moves it; the person's own
-        // position only matters before the map has reported a projection at all.
+        // The frame follows the map, so a pan or a zoom is what moves it; the person's own position
+        // only matters before the map has reported a projection at all.
         val frameMoved = current == null || viewportMoved(current, viewport) ||
             (viewport == null && anchor != null && !current.contains(anchor.lat, anchor.lon))
-        // The remembered counts only describe the list they were built from. A restore, a day
-        // filter or a shorter list has to be repainted from scratch rather than patched.
-        val stale = paths.size < paintedPerPath.size ||
-            paths.withIndex().any { (index, path) ->
-                index < paintedPerPath.size && path.size < paintedPerPath[index]
-            } || (paintedFrom != null && paths.firstOrNull()?.firstOrNull() != paintedFrom)
-        if (frameMoved || stale) {
-            lastUpdateRebuilt = true
-            val next = if (!frameMoved && current != null) current
+        val next = if (!frameMoved && current != null) current
             else TrailPaint.frameFor(viewport, paths.flatten(), anchor) ?: return bitmap
-            frame = next
-            if (BuildConfig.DEBUG) {
-                android.util.Log.d("WalkPaintFog", "frame px=${next.widthPx}x${next.heightPx} " +
-                    "latSpan=${next.latSpan} lonSpan=${next.lonSpan} " +
-                    "perMetre=${pixelsPerMeter(next)} corridorPx=${TrailPaint.CORRIDOR_M * pixelsPerMeter(next)}")
-            }
-            // Left to the collector rather than recycled: a renderer may still be holding the old
-            // image in an overlay when this runs.
-            val fresh = Bitmap.createBitmap(next.widthPx, next.heightPx, Bitmap.Config.ARGB_8888)
-            bitmap = fresh
-            val canvas = Canvas(fresh)
-            canvas.drawRect(0f, 0f, next.widthPx.toFloat(), next.heightPx.toFloat(), fog)
-            paintedPerPath = MutableList(paths.size) { 0 }
-            paths.forEachIndexed { index, path -> paintedPerPath[index] = strokeWhole(canvas, next, path) }
-            paintedFrom = paths.firstOrNull()?.firstOrNull()
-            fadeEdges(canvas, next)
-            revision++
-            return fresh
+        frame = next
+        lastUpdateRebuilt = frameMoved
+        if (BuildConfig.DEBUG) {
+            android.util.Log.d("WalkPaintFog", "frame px=${next.widthPx}x${next.heightPx} " +
+                "latSpan=${next.latSpan} lonSpan=${next.lonSpan} " +
+                "perMetre=${pixelsPerMeter(next)} corridorPx=${TrailPaint.CORRIDOR_M * pixelsPerMeter(next)}")
         }
-        val target = bitmap ?: return null
-        val active = frame ?: return null
+        // Every update redraws the whole frame from the geometry instead of patching it. Patching
+        // poured a new segment's faint outer ring back over ground an earlier segment had already
+        // cleared, which showed up as dark rings wherever a walk met itself. Drawing everything at
+        // once, one ring at a time across all segments, makes the result depend only on the
+        // geometry: nothing a later segment draws can put veil back on cleared ground.
+        val target = scratch?.takeIf { it.width == next.widthPx && it.height == next.heightPx }
+            ?: Bitmap.createBitmap(next.widthPx, next.heightPx, Bitmap.Config.ARGB_8888)
+        scratch = bitmap
+        bitmap = target
         val canvas = Canvas(target)
-        var painted = false
-        paths.forEachIndexed { index, path ->
-            if (path.isEmpty()) return@forEachIndexed
-            val done = if (index < paintedPerPath.size) paintedPerPath[index] else 0
-            when {
-                // A lone fix is still ground: it gets the corridor as a dot.
-                path.size == 1 && done == 0 -> { stroke(canvas, active, path[0], path[0]); painted = true }
-                path.size >= 2 -> {
-                    // Paint the whole path the first time, then only the segment it grew by. One
-                    // segment of overlap means a reshape by simplification can never leave a gap.
-                    val from = if (done == 0) 1 else maxOf(1, done - 1)
-                    for (i in from until path.size) {
-                        if (!path[i - 1].lat.isFinite() || !path[i].lat.isFinite()) continue
-                        stroke(canvas, active, path[i - 1], path[i])
-                        painted = true
-                    }
-                }
-            }
-            if (paintedPerPath.size <= index) paintedPerPath.add(path.size) else paintedPerPath[index] = path.size
-        }
-        if (painted) revision++
+        canvas.drawRect(0f, 0f, next.widthPx.toFloat(), next.heightPx.toFloat(), fog)
+        strokeAll(canvas, next, segmentsIn(paths, next))
+        fadeEdges(canvas, next)
+        revision++
         return target
     }
 
@@ -289,35 +276,77 @@ internal class TrailPainter {
     /** Wipes the veil back to unexplored, for when the colour or the data changes. */
     fun clear() {
         frame = null
-        paintedPerPath = mutableListOf()
-        paintedFrom = null
+        bitmap = null
+        scratch = null
         revision++
     }
 
     fun release() {
         bitmap = null
+        scratch = null
         frame = null
-        paintedPerPath = mutableListOf()
-        paintedFrom = null
     }
 
-    private fun strokeWhole(canvas: Canvas, target: PaintFrame, path: List<TrackPoint>): Int {
-        if (path.isEmpty()) return 0
-        if (path.size == 1) {
-            if (path[0].lat.isFinite() && path[0].lon.isFinite()) stroke(canvas, target, path[0], path[0])
-            return 1
+    /**
+     * The in-frame segments, already in frame pixels.
+     *
+     * The frame follows the view, so most of a long history lies outside it: dropping those here is
+     * what keeps a redraw proportional to what can be seen rather than to everything ever walked.
+     */
+    private fun segmentsIn(paths: List<List<TrackPoint>>, target: PaintFrame): List<FloatArray> {
+        val out = ArrayList<FloatArray>()
+        for (path in paths) {
+            if (path.isEmpty()) continue
+            if (path.size == 1) {
+                // A lone fix is still ground: it gets the corridor as a dot.
+                val p = path[0]
+                if (p.lat.isFinite() && p.lon.isFinite() && target.contains(p.lat, p.lon)) {
+                    val x = target.pixelX(p.lon); val y = target.pixelY(p.lat)
+                    out.add(floatArrayOf(x, y, x, y))
+                }
+                continue
+            }
+            for (index in 1 until path.size) {
+                val a = path[index - 1]
+                val b = path[index]
+                if (!a.lat.isFinite() || !a.lon.isFinite() || !b.lat.isFinite() || !b.lon.isFinite()) continue
+                if (maxOf(a.lat, b.lat) < target.latMin || minOf(a.lat, b.lat) > target.latMax) continue
+                if (maxOf(a.lon, b.lon) < target.lonMin || minOf(a.lon, b.lon) > target.lonMax) continue
+                out.add(floatArrayOf(target.pixelX(a.lon), target.pixelY(a.lat),
+                    target.pixelX(b.lon), target.pixelY(b.lat)))
+            }
         }
-        for (index in 1 until path.size) {
-            val a = path[index - 1]
-            val b = path[index]
-            if (!a.lat.isFinite() || !a.lon.isFinite() || !b.lat.isFinite() || !b.lon.isFinite()) continue
-            // The frame now follows the view, so most of a long history is outside it: skipping the
-            // segments that cannot touch it is what keeps a redraw proportional to the view.
-            if (maxOf(a.lat, b.lat) < target.latMin || minOf(a.lat, b.lat) > target.latMax) continue
-            if (maxOf(a.lon, b.lon) < target.lonMin || minOf(a.lon, b.lon) > target.lonMax) continue
-            stroke(canvas, target, a, b)
+        return out
+    }
+
+    /**
+     * Draws the corridor, one ring at a time across every segment.
+     *
+     * The outer loop is the ring, not the segment, and that ordering is the point: a segment's
+     * faint wide ring is laid down before any segment's narrow fully-cleared one, so ground that is
+     * already explored can never be veiled again by a later segment passing near it.
+     */
+    private fun strokeAll(canvas: Canvas, target: PaintFrame, segments: List<FloatArray>) {
+        if (segments.isEmpty()) return
+        val perMetre = pixelsPerMeter(target)
+        val core = (TrailPaint.CORRIDOR_M * perMetre).toFloat().coerceAtLeast(2f)
+        val feather = (TrailPaint.FEATHER_M * perMetre).toFloat().coerceAtLeast(1f)
+        val veilAlpha = (TrailPaint.FOG_COLOR ushr 24).toFloat()
+        paint.color = TrailPaint.FOG_COLOR or (0xFF shl 24)
+        ringsFor(feather).forEach { ring ->
+            paint.strokeWidth = core + 2f * feather * ring.reach
+            paint.alpha = (veilAlpha * ring.alpha).toInt().coerceIn(1, 255)
+            for (segment in segments) {
+                canvas.drawLine(segment[0], segment[1], segment[2], segment[3], paint)
+            }
         }
-        return path.size
+        // Then the person's own colour on the ground the fade has just cleared.
+        paint.color = colour and 0x00FFFFFF
+        paint.strokeWidth = core
+        paint.alpha = TrailPaint.TINT_ALPHA.coerceIn(1, 255)
+        for (segment in segments) {
+            canvas.drawLine(segment[0], segment[1], segment[2], segment[3], paint)
+        }
     }
 
     /**
@@ -345,49 +374,28 @@ internal class TrailPainter {
         eraseFill.shader = null
     }
 
-    /**
-     * Clears the corridor along one segment: the same round-capped stroke at four widths, each
-     * removing more of the veil than the one before. The widest, faintest pass is what leaves the
-     * soft edge; the narrowest takes the middle out completely, which is also what stops the tint
-     * from piling up when the same street is walked again.
-     */
-    private fun stroke(canvas: Canvas, target: PaintFrame, a: TrackPoint, b: TrackPoint) {
-        val x1 = target.pixelX(a.lon); val y1 = target.pixelY(a.lat)
-        val x2 = target.pixelX(b.lon); val y2 = target.pixelY(b.lat)
-        val perMetre = pixelsPerMeter(target)
-        val core = (TrailPaint.CORRIDOR_M * perMetre).toFloat().coerceAtLeast(2f)
-        val feather = (TrailPaint.FEATHER_M * perMetre).toFloat().coerceAtLeast(1f)
-        // Fade rings, outermost first: each one replaces the pixel with a fainter veil than the one
-        // inside it, so the edge is a ramp.
-        val veilAlpha = (TrailPaint.FOG_COLOR ushr 24).toFloat()
-        paint.color = TrailPaint.FOG_COLOR or (0xFF shl 24)
-        RINGS.forEach { ring ->
-            paint.strokeWidth = core + 2f * feather * ring.reach
-            paint.alpha = (veilAlpha * ring.alpha).toInt().coerceIn(1, 255)
-            canvas.drawLine(x1, y1, x2, y2, paint)
-        }
-        // Then the person's own colour on the ground the fade has just cleared.
-        paint.color = colour and 0x00FFFFFF
-        paint.strokeWidth = core
-        paint.alpha = TrailPaint.TINT_ALPHA.coerceIn(1, 255)
-        canvas.drawLine(x1, y1, x2, y2, paint)
-    }
-
     private data class Ring(val reach: Float, val alpha: Float)
 
     companion object {
-        /** Steps in the fade. Enough that one step is under five levels of alpha and the gap
-         * between two of them is smaller than a pixel, so the ramp reads as a gradient rather than
-         * as the rings it is made of. */
+        /** Most steps in the fade. One step is under five levels of alpha, and the gap between two
+         * of them is smaller than a pixel, so the ramp reads as a gradient rather than as the rings
+         * it is made of. */
         private const val FADE_STEPS = 36
 
         /**
          * Outermost first, each one a step fainter, from the untouched veil down to fully revealed
          * at the edge of the walked band.
+         *
+         * The count follows the frame: the ramp is a fixed number of metres wide, so on a wide
+         * frame it spans only a few pixels and a long list of rings would be work with nothing to
+         * show for it.
          */
-        private val RINGS = (0..FADE_STEPS).map { step ->
-            val t = step.toFloat() / FADE_STEPS
-            Ring(1f - t, (1f - t).coerceAtLeast(0.004f))
+        private fun ringsFor(featherPx: Float): List<Ring> {
+            val steps = (featherPx / 1.5f).toInt().coerceIn(3, FADE_STEPS)
+            return (0..steps).map { step ->
+                val t = step.toFloat() / steps
+                Ring(1f - t, (1f - t).coerceAtLeast(0.004f))
+            }
         }
 
         fun pixelsPerMeter(frame: PaintFrame): Double {

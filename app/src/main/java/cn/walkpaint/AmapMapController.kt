@@ -251,6 +251,14 @@ internal class AmapMapController(private val context: Context, private val onGes
 
     fun view(): MapView? = currentView
 
+    /** Shows a whole walked area, used when the person asks to see all of their exploration. */
+    fun focusBounds(latMin: Double, lonMin: Double, latMax: Double, lonMax: Double) {
+        val bounds = com.amap.api.maps.model.LatLngBounds(
+            com.amap.api.maps.model.LatLng(latMin, lonMin),
+            com.amap.api.maps.model.LatLng(latMax, lonMax))
+        map?.moveCamera(com.amap.api.maps.CameraUpdateFactory.newLatLngBounds(bounds, 80))
+    }
+
     /** What the AMap view is showing, so the veil can follow it. */
     fun viewport(): ViewBounds? {
         val bounds = map?.projection?.visibleRegion?.latLngBounds ?: return null

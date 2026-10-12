@@ -99,13 +99,57 @@ internal object FogPixelProbe {
         }
         check(worst <= 8, "walking the street again changed the paint by $worst/255")
 
-        // 5. A frame for a viewport centred on far-away ground still contains that ground: the veil
+        // 5. Ground already cleared must not be veiled again by a later segment. This is the defect
+        //    that made dark rings appear wherever a walk met itself: a new segment's faint outer ring
+        //    was poured back over ground an earlier segment had cleared. Parallel offset passes, a
+        //    crossing street and a new tail are all in the fixture, so all three are checked.
+        val rowY = frame.pixelY(BASE_LAT).toInt().coerceIn(0, frame.heightPx - 1)
+        fun rowAlphas(image: Bitmap): List<Int> = (0 until frame.widthPx step 2).map { x ->
+            alpha(image.getPixel(x, rowY))
+        }
+        val before = rowAlphas(bitmap)
+        val beforeColours = (0 until frame.widthPx step 2).map { x -> bitmap.getPixel(x, rowY) }
+        val crossed = painter.update(listOf(street,
+            listOf(point(-200.0, 8.0), point(200.0, 8.0)),      // a second pass, eight metres east
+            listOf(point(0.0, -200.0), point(0.0, 200.0)),      // a street crossing the first
+            listOf(point(200.0, 0.0), point(400.0, 0.0))),      // a new tail carrying on
+            PIGMENT, null, view) ?: return "FOG_PIXEL_PROBE_FAIL: no image for the crossing case"
+        val after = rowAlphas(crossed)
+        var worstRevelled = 0
+        var worstWhere = ""
+        before.indices.forEach { index ->
+            val was = before[index]
+            if (was > 0xB0 - 8) return@forEach
+            val x = index * 2
+            val pixel = crossed.getPixel(x, rowY)
+            // Being painted over is not being veiled again: the veil is navy (blue above green),
+            // the person's colour is the other way round.
+            val veiledAgain = (pixel and 0xFF) > (pixel shr 8 and 0xFF)
+            val increase = if (veiledAgain) after[index] - was else 0
+            if (increase > worstRevelled) {
+                worstRevelled = increase
+                worstWhere = "x=$x was=$was now=${after[index]} " +
+                    "colour=${Integer.toHexString(pixel)} before=${Integer.toHexString(beforeColours[index])}"
+            }
+        }
+        check(worstRevelled <= 8,
+            "a later segment poured veil back over cleared ground (worst +$worstRevelled/255 at $worstWhere)")
+
+        // 6. A frame for a viewport centred on far-away ground still contains that ground: the veil
         //    follows the map, so old footprints cannot fall outside the image.
         val far = point(12_000.0, 0.0)
         val farView = ViewBounds(far.lat - 0.0018, far.lon - 0.0026, far.lat + 0.0018, far.lon + 0.0026)
         val farFrame = TrailPaint.frameFor(farView, listOf(street.first(), far))!!
         check(farFrame.contains(far.lat, far.lon),
             "ground twelve kilometres away fell outside a frame centred on it")
+
+        // 7. A view wider than the old span cap must still be fully covered: capping the frame would
+        //    leave its corners unveiled, which reads as ground that has been explored.
+        val wideView = ViewBounds(BASE_LAT - 0.15, BASE_LON - 0.20, BASE_LAT + 0.15, BASE_LON + 0.20)
+        val wideFrame = TrailPaint.frameFor(wideView, listOf(street.first()))!!
+        check(wideFrame.contains(wideView.latMin, wideView.lonMin) &&
+            wideFrame.contains(wideView.latMax, wideView.lonMax),
+            "a view thirty kilometres across is not fully covered by the veil frame")
 
         return if (failures.isEmpty()) "FOG_PIXEL_PROBE_PASS"
         else "FOG_PIXEL_PROBE_FAIL: " + failures.joinToString(" | ")

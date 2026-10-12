@@ -1,26 +1,39 @@
-# 当前分发：v0.37 候选（DSH 分支，2026-10-12）**未发布**
+# 当前分发：v0.37 候选（DSH 分支，2026-10-12）**未发布 · 复核复检进行中**
 
-> 本节取代下方 v0.26 段落作为当前状态。三项用户反复反馈的问题——地图拖动 / 进入地图页卡顿、迷雾是一块块方形色块、轨迹线上的串珠与麻花——已在同一场景复现、修掉并复测；复核后追加的三项（迷雾像素自证、阈值/指标措辞纠正、**大范围历史**）也已完成。大范围历史先因**按截图目测**误判为"渲染尺度不对"而退回，随后用四段链路日志 + 像素实测推翻误判、修好并复测。**高德 ARM 真机路径本机无法运行，未验收**；候选包与证据就绪但**未发布**。
+> 本节取代下方 v0.26 段落作为当前状态。**上一轮 `candidate-v0.37n` 的 `passed=true` 已被证伪，不再作为证据**：08:52 复核指出那轮的 `fixed/map-far-cluster.png` 其实是近处街区（脚本点"返回全部探索"后 `follow.locate()` 把相机拉回了人的位置），而当时还没有相机场景断言，颜色比例断言因此误过。当前代码已再次变更（累计视图改为显示已探索范围、绘制改为逐环整体重画、掩膜 512、跳过未变化 GeoJSON、跟随视口的帧不再受 20 公里上限裁剪），**正在对新候选做受影响复验**；只有新包对应的「相机场景 + 像素 + 性能」证据作数。**高德 ARM 真机路径本机无法运行，仍未验收**；候选未发布。
 
-- **工作目录 / 分支**：`D:\Worktrees\WalkPaint\dsh-lasterror`，`fix/dsh-lasterror-recovery`，业务改动 `9672f2f` 起（复核后的改动见后续提交）。与 `D:\Projects\WalkPaint` 完全隔离，主副本未改。
+- **工作目录 / 分支**：`D:\Worktrees\WalkPaint\dsh-lasterror`，`fix/dsh-lasterror-recovery`。业务改动自 `9672f2f` 起，复核后两轮见提交历史（`dd711b9`、`337b4cb` 及之后）。与 `D:\Projects\WalkPaint` 完全隔离。
 - **版本**：`versionCode 39` / `versionName 0.37`；包名 `cn.walkpaint`、schema2、原 debug 签名（SHA-256 `21b74e3e…`、SHA-1 `fae3df35…`）不变，可覆盖安装。
-- **候选包（未发布）**：
-  - 手机 arm64：`release-out/WalkPaint-v0.37-arm64-debug.apk`，70,387,176 字节，SHA256 `2a299eed095908125782987e98703853d4c1755a0d3bf154f80c4dccbd1b24d5`
-  - 模拟器通用（**整轮验收 passed=true**）：`verification/fog-line/candidate-v0.37n-universal.apk`，SHA256 `951c72bf93171d4e02158ec36b77307b4f2800310e3330df334418e4bff0181a`
-  - 两包 `classes*.dex` **逐字节相同**（已核对），arm64 包只多 `lib/arm64-v8a/*`；**arm64 包本机装不了（AVD 是 x86_64），它没有被实际运行过**，运行证据对应通用包。
-  - 被替换的基线：`verification/fog-line/baseline-v0.36-universal.apk`，SHA256 `98d020197ccfb50daaad63db5794be86eac51d2afb9a8168c9bc14a3014e3a6`
+- **候选包**：见本节末尾「候选与指纹」（复验通过后才会给出最终通用包与手机包哈希；旧 `n` 的哈希只作为"证据不足"的历史记录保留）。
 - **实际测试引擎**：专用 Google AVD `emulator-5556`（`WalkPaint_Google_API36`，x86_64，SDK 36）。`AmapPlatform.supported` 只接受 ARM 进程，所以本机只能跑**备用地图（OpenFreeMap）引擎**；引擎从运行中的 App「我的 → 更多设置 → 隐私与权限」读回。**备用地图通过不等于高德通过。**
+- **本轮要复验的四条**（08:52 复核）：
+  1. **场景身份**：每张截图必须绑定实际相机中心/可见 bounds/累计或当天模式/人的位置；远簇截图必须真的在 `2.5163` 附近，且人是被"拖动地图"而非被移动过去的（`pan_camera` 用真实 `input swipe`）。
+  2. **追加轨迹不得把已探索地面重新盖雾**：绘制改为逐"环"整体重画；像素探针新增"平行偏移 + 交叉 + 新尾巴"的逐像素断言。
+  3. **整页 UI 成本**：分解计时证明 UI 块里赋值 4.6 ms、交接 55.7 ms（= 位图上传）；掩膜 768→512、跳过未变化 GeoJSON 后实测 `ui_med 18.3 ms`，**恢复原判据 20/120**；拖动改为"边持续注入定位边拖动"并断言期间确有状态更新。
+  4. **宽视野不露底**：跟随视口的帧不再受 20 公里上限裁剪（细节变粗，但未知区域仍被遮住）；像素探针断言 30 公里跨度视口四角都在帧内。
+- **未验收 / 开放**：① 高德 ARM 真机；② 户外长时间后台记录；③ `map_tab_ready_ms` 被测试工具 dump 延迟污染、不可比；④ 极宽缩放的观感只在模拟器上看过。
+- **发布**：未上传、未建 Release、未合并 PR；沿用同一私有渠道发布需要用户明确一句确认。
+
+## 候选与指纹
+
+- **手机 arm64（可覆盖安装）**：`release-out/WalkPaint-v0.37-arm64-debug.apk`，70,387,176 字节，
+  SHA256 `6acd23c2ee57fa9b5de005db09114de4fde96ca7fd78c6a330873353bc33fcda`；
+  同目录 `WalkPaint-v0.37-SHA256.txt`。包名 `cn.walkpaint`，versionCode 39 / versionName 0.37，
+  原 debug 证书（SHA-256 `21b74e3e…`）。`classes*.dex` 与下面这台模拟器实测的通用包**逐字节相同**（已核对），
+  arm64 包只多 `lib/arm64-v8a/*`。**arm64 包本机装不了（AVD 是 x86_64），它没有被运行过**，
+  运行证据对应通用包。
+- **模拟器实测通用包（本机备用地图引擎）**：`verification/fog-line/candidate-v0.37r-universal.apk`，
+  SHA256 `be5ffcc600c903d28930bc99b976daba4ff6208c79f89153ef40860c81fc0695`。
+- 这一轮已确认的证据（r 包）：像素探针 `FOG_PIXEL_PROBE_PASS`（含"追加偏移/交叉/新尾巴不得重新盖雾""宽视野四角都被覆盖"）；
+  性能计数健康：`ui_med 14.4 ms`（原判据 ≤20）、`upload_med 1.6 ms`、`veil_inc_med 3.5 ms`、`pan_med 1.7 ms`；
+  拖动期间确有状态更新（`gesture_counter_delta.update_n = 4`）。
+- **历史（证据不足，仅存档）**：`candidate-v0.37n-universal.apk` SHA256 `951c72bf…`（那轮 `passed=true` 因缺少相机场景断言而不成立）；`candidate-v0.37q-universal.apk` SHA256 `33315a46…`（相机场景断言正确判它失败：宽视野下平移步长过粗，相机被推到 54.2°N）。
+- 被替换的基线：`verification/fog-line/baseline-v0.36-universal.apk`，SHA256 `98d020197ccfb50daaad63db5794be86eac51d2afb9a8168c9bc14a3014e3a6`。
 - **同一场景复现**（`verification/fog-line/before/map-follow.png`）：同一条街走 4 趟的匿名夹具上，基线画出**四条并排深绿线**（麻花）+ 线端圆点（串珠），整屏被 550 米网格染色铺满（方块）。修复后同一视角（`after/map-follow.png`，单簇夹具）是连续柔和的雾 + 约 20 米柔边涂色带。
-- **实测数值**（每次运行前重启 AVD；最新一轮 `passed=true`，主机可用内存 1340 MB / 15.5 GB）：
-  - 迷雾交接（本次改动自己负责的那段 UI 工作）：中位 **1.7 ms**、最大 57 ms
-  - 迷雾增量重绘：中位 **6.1 ms** / 最大 15.4 ms；全量重建最大 11 ms；平移重画中位 16 ms / 最大 365 ms
-  - UI 线程每次更新：中位 **37 ms**（其中约 30 ms 是**既有**的道路/轨迹/定位图层 GeoJSON 更新，本改动之前就存在）
-  - 整次更新中位 264 ms，其中 `prep_med` 259 ms 是既有的数据库快照与历史分组（后台线程）
-  - 拖动期间：状态更新 **0 次**（`update_n` 增量 0），雾在手指抬起后才交接
-  - 强停后重新进入 Activity：0.36 中位 **10084 ms**；0.37 本轮 5057 / 11928 ms（主机内存紧时全部计时项会整体约 2 倍恶化，含未改动的 `prep_med`）
-  - 早期失败报告保留在 `verification/fog-line/after/history/`
-- **像素自证**：`FOG_PIXEL_PROBE_PASS`（走廊只带染色、雾从涂层外缘渐变回升、帧边界真渐隐、**重复经过逐像素不变**、12 公里外的视口帧包含该地面）。这套断言当场抓到三个常量测试漏掉的渲染缺陷（CLEAR 是二进制清除、边框渐隐用了 STROKE 画笔、DST_OUT 会让重复经过越擦越薄），都已修。
-- **大范围历史（复核第 1 条）**：帧跟随视口后，12 公里外、两天前的旧簇**仍然被涂色**，两簇之间没人走过的地方**仍然有雾**；验收里已有三处断言（远簇 `veil 0.577 / tint 0.107`、之间 `veil 0.973`、近簇 `0.571 / 0.108`）。
+- **实测数值**（**上一轮 n，证据不足，仅作历史**；新候选的数值在复验通过后替换本节）：那一轮 `passed=true`、主机可用内存 1340 MB；雾交接中位 1.7 ms、迷雾增量中位 6.1 ms、UI 总量中位 37 ms、拖动期间状态更新 0 次、远簇 `veil 0.577 / tint 0.107`。**其中"远簇"与"拖动 0 次更新"两项已被证伪**（前者场景不对，后者是把压力抽掉）。
+- **本轮已在本机测到的（同一台机器、主机很忙、`prep_med` 1610 ms）**：UI 总量中位 **18.3 ms**（原判据 ≤20）、雾交接中位 **6.9 ms**、迷雾增量中位 8.4 ms；拖动改为边注入定位边拖动后，`gesture_counter_delta.update_n` 为 **4**（证明压力真的发生了）。
+- **像素自证**：`FOG_PIXEL_PROBE_PASS`（走廊只带染色、雾从涂层外缘渐变回升、帧边界真渐隐、**重复经过逐像素不变**、**追加偏移/交叉/新尾巴不得把已探索地面重新盖雾**、12 公里视口帧包含该地面、30 公里跨度视口四角都在帧内）。这套断言抓到的缺陷包括：`CLEAR` 是二进制清除、边框渐隐用了 STROKE 画笔、`DST_OUT` 会让重复经过越擦越薄、**追加线段的外环重新盖雾**、**复用缓冲区时 `SRC_OVER` 让雾越叠越深**。
+- **大范围历史（复核第 1 条）**：待新候选复验——上一轮那次"远簇已修"的结论**不成立**（截图其实是近处）；本轮加了相机场景断言，并且发现产品路径本身也到不了远处（累计视图在 zoom≈21 时一次滑动只挪 30 米），因此把"返回全部探索"改为**显示已探索范围**（`showExploredExtent`，超过 800 米时按边界取景），用户才能看到远处旧足迹。是否真的看到，以新候选的 `scene_far_cluster` 断言与截图为准。
 - **未验收 / 开放**：
   1. **高德 ARM 真机**：迷雾观感、拖动帧率、涂色深浅需用户真机确认。
   2. **视野上限**：雾帧跟随视口，上限 20 公里；视野比 20 公里更宽时帧被截到 20 公里，四角没有雾（夹具未覆盖这一档）。
@@ -29,6 +42,31 @@
   5. 本机这版 MapLibre（13.5.2）上 `ImageSource.setImage/setCoordinates` 不刷新画面，故每次改动重建 source+layer（实测 UI 线程 2–7 ms）；这是本机行为，未逐版核对上游。
 - **发布**：候选与证据就绪，**未上传、未建 Release、未合并 PR**；沿用同一私有渠道发布需要用户明确一句确认。
 - **证据**：`docs/evidence/V037_FOG_LINE.md`、`verification/fog-line/{before,after,fixed}/`（acceptance.json + 截图 + history）、脚本 `scripts/android_fog_line_acceptance.py`（fail-closed）、`scripts/android_reopen_probe.py`、`scripts/run_fog_acceptance_fresh.py`。
+
+## 工具练习：Perfetto 离线入口（合成 trace，**不是业务成绩**）
+
+按 `android-performance` 技能第 1 题，用已安装工具独立分析 `D:\AI\Tools\android-performance\exercise.json`（目标进程 `org.example.coaching`），输出到本工作树 `verification/perf-drill/drill1-exercise-summary.json`（唯一文件名，未覆盖任何旧报告）。命令与返回码：
+
+```powershell
+python -X utf8 D:\AI\Tools\android-performance\analyze_trace.py --trace 'D:\AI\Tools\android-performance\exercise.json' --package 'org.example.coaching' --out '...\verification\perf-drill\drill1-exercise-summary.json'
+# status=observed, frames=not_measured, exit 0
+```
+
+结论与边界（依据观察值，不迁移数字为产品阈值）：
+
+- **值得优先查的是 `render_prepare`**：主线程 2 次、合计 220 ms、单次最大 122 ms；而 `bitmap_upload` 只有 1.7 ms。这正是"上传很快、整页仍可能慢"的形态——先看主线程那段，而不是盯着便宜的局部步骤。
+- **不能证明拖动不卡**：`frame_metrics.status=not_measured`（帧数据为 0），trace 里也没有手势与更新的重叠信息；且片段可嵌套，不能相加当总耗时。
+- **不能证明手机已验或最终包正确**：这是 442 字节的合成 trace、只有一个进程，既没有设备/引擎/APK 身份，也没有真实操作时间线。
+- 工具语义：`exit 0` 只代表"目标进程有观察值"，报告自身写着 `product_acceptance: not_verified`；因此本段只算入口调用与结论边界的练习，**不计入任何业务验收**。
+
+## 环境层结论（有复用价值，不是产品成绩）
+
+反复出现的三类症状——**安装后 `dumpsys package` 返回成功但读不到版本**、**截图里 `veil_ratio` 只有 0.01**、**颜色/性能数值忽好忽坏**——经最小定位分成两层，不要混为一谈：
+
+1. **harness 查询层**：`run()` 在非零退出/超时时抛异常，而实际遇到的是"命令成功、输出为空"（安装刚结束时 PackageManager 未就绪）。已改为轮询并记录 `version_query_raw` / `version_query_attempts`，三层（空输出 / 错误串 / 解析失败）可区分。
+2. **模拟器窗口层**：截图里雾"不可见"的那次，屏幕上是 **"System UI isn't responding"** 弹窗；`dumpsys window` 显示 `mFocusedApp=cn.walkpaint/.MainActivity` 但 **`mCurrentFocus=null`**，而设备是 Awake、屏幕 ON。用只读工具 `inspect_emulator.py` 判定为 `blocked / foreground_unobserved / stage=foreground_1`；执行一次 `am force-stop com.android.systemui`（不重启 AVD、不动数据）后复测得到 **`observed_ready / two_matching_observations`**（`mCurrentFocus` 恢复为 `Window{… cn.walkpaint/cn.walkpaint.MainActivity}`）。观测文件：`verification/ready-r-round2.json`、`ready-r-round2-app-foreground.json`、`ready-r-round3-after-systemui-restart.json`。
+
+结论边界（工具自己写的）：`observed_ready` 只说明这两个瞬间**版本/前台可观测**，**不证明渲染正常、没有遮挡、性能合格，也不证明 APK 哈希相同**；版本码相同不等于包相同，所以安装指纹（`installed_apk_sha256` 与候选哈希逐字节比对）与产品场景断言仍然保留。`blocked` 时不得把截图颜色或空样本判为产品回归。
 
 ---
 

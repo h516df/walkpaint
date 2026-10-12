@@ -165,7 +165,39 @@ class MainActivity : ComponentActivity() {
     private var boundaryRoads: List<RoadSegment>?=null
     private fun clearDaySelection() {
         selectedDay=null;pendingTripFocus=null;follow.locate();lastCameraPoint=null
-        lastRevision=-1;updateUi();syncFollowCamera(force=true)
+        lastRevision=-1;updateUi()
+        // "Back to all exploration" shows what has actually been explored. Following the person at
+        // street zoom cannot do that once the history is bigger than a few streets: ground walked
+        // days ago is kilometres away, and dragging there by hand at street zoom is not something a
+        // person can do. The person's own position is one tap away with 定位我.
+        if (!showExploredExtent()) syncFollowCamera(force=true)
+    }
+
+    /**
+     * Fits the camera to the ground that has been explored, when that is more than a couple of
+     * streets. Returns false when the history is small enough that following the person is the
+     * more useful view.
+     */
+    private fun showExploredExtent(): Boolean {
+        val points = snapshot.realTracks.flatMap { it.points }
+        if (points.size < 2) return false
+        val latMin = points.minOf { it.lat }
+        val latMax = points.maxOf { it.lat }
+        val lonMin = points.minOf { it.lon }
+        val lonMax = points.maxOf { it.lon }
+        val metres = maxOf(
+            (latMax - latMin) * 111194.9,
+            (lonMax - lonMin) * 111194.9 * kotlin.math.cos(Math.toRadians((latMin + latMax) / 2)))
+        if (!metres.isFinite() || metres < 800.0) return false
+        follow.gesture()
+        if (amapActive) {
+            amapController.focusBounds(latMin, lonMin, latMax, lonMax)
+        } else {
+            val bounds = org.maplibre.android.geometry.LatLngBounds.Builder()
+                .include(LatLng(latMin, lonMin)).include(LatLng(latMax, lonMax)).build()
+            mapInstance?.moveCamera(CameraUpdateFactory.newLatLngBounds(bounds, 80))
+        }
+        return true
     }
     private var roadBusy by mutableStateOf(false)
     private var roadMessage by mutableStateOf("")
@@ -187,6 +219,9 @@ class MainActivity : ComponentActivity() {
     private var fogSourceRevision = -1
     /** The whole-history geometry the veil is drawn from, reused when only the view moves. */
     private var fogPaths: List<List<TrackPoint>> = emptyList()
+    /** What was last handed to the map, so an unchanged submission is skipped. */
+    private var submittedRoadJson = ""
+    private var submittedPaintedJson = ""
     /** What the map is showing, so the veil follows it instead of following the person. */
     private var currentViewport: ViewBounds? = null
     private var lastVeilRefresh = 0L
@@ -675,7 +710,15 @@ class MainActivity : ComponentActivity() {
                             mapTrackState=displayedTrack; mapRoadState=displayedRoad
                             mapTrailPaths = trail
                             roadState = road; roadJson = roadBase; paintedJson = painted
+                            val assignNanos = System.nanoTime() - uiStart
                             handOverVeil(fogImage, fogBounds, fogStamp)
+                            if (BuildConfig.DEBUG) {
+                                android.util.Log.d("WalkPaintPerf", String.format(java.util.Locale.ROOT,
+                                    "UI parts assign_ms=%.1f handover_ms=%.1f total_ms=%.1f",
+                                    assignNanos / 1e6,
+                                    (System.nanoTime() - uiStart - assignNanos) / 1e6,
+                                    (System.nanoTime() - uiStart) / 1e6))
+                            }
                             if (BuildConfig.DEBUG) PerfTrace.ui(System.nanoTime() - uiStart)
                         } finally {
                             // Released after the handover, so the painter never draws into the bitmap
@@ -1035,7 +1078,30 @@ class MainActivity : ComponentActivity() {
      */
     private fun onMapCameraMoved() { refreshVeilForViewport(force = false) }
 
-    private fun onMapCameraSettled() { refreshVeilForViewport(force = true) }
+    private fun onMapCameraSettled() {
+        cameraTrace("settled")
+        refreshVeilForViewport(force = true)
+    }
+
+    /**
+     * Debug-only record of what the map is actually showing, so a screenshot can be tied to the
+     * scene it was taken in instead of being judged on colour alone: the camera centre and zoom,
+     * whether a single day is selected or the cumulative view, the person's own position, and the
+     * visible bounds.
+     */
+    private fun cameraTrace(stage: String) {
+        if (!BuildConfig.DEBUG) return
+        val camera = mapInstance?.cameraPosition
+        val target = camera?.target
+        val fix = userFix
+        val view = currentViewport
+        android.util.Log.d("WalkPaintCam", "$stage lat=${target?.latitude} lon=${target?.longitude} " +
+            "zoom=${camera?.zoom} day=${selectedDay ?: "cumulative"} " +
+            "fixLat=${fix?.latitude} fixLon=${fix?.longitude} " +
+            "viewLat=${view?.latSpan} viewLon=${view?.lonSpan} " +
+            "frameLat=${fogFrame?.latMin}..${fogFrame?.latMax} " +
+            "frameLon=${fogFrame?.lonMin}..${fogFrame?.lonMax}")
+    }
 
     /**
      * Debug-only trace of the whole handover chain: the viewport, the frame the veil was drawn
@@ -1128,7 +1194,13 @@ class MainActivity : ComponentActivity() {
         currentViewport = mapViewport()
         val paths = fogPaths
         if (paths.isEmpty()) return
-        if (!refreshing.compareAndSet(false, true)) return
+        if (!refreshing.compareAndSet(false, true)) {
+            // A state update is already running. Retry rather than drop: a camera that settles into
+            // a new viewport exactly then would otherwise leave the veil drawn for the old view,
+            // which shows as fog missing from the new one.
+            mainHandler.postDelayed({ refreshVeilForViewport(force = true) }, 250)
+            return
+        }
         val viewport = currentViewport
         val colour = roadColor
         val handOver = force
@@ -1202,6 +1274,8 @@ class MainActivity : ComponentActivity() {
                 // The style is brand new, so push what was already loaded. The fog source went with
                 // the old style, so its remembered revision has to be forgotten as well.
                 fogSourceRevision = -1
+                submittedRoadJson = ""
+                submittedPaintedJson = ""
                 updateMapLayers()
                 if (BuildConfig.DEBUG && intent?.getBooleanExtra("fogCameraProbe", false) == true) {
                     // Two controlled camera moves, so one run shows where the chain breaks.
@@ -1272,8 +1346,16 @@ class MainActivity : ComponentActivity() {
             return
         }
         val style = mapInstance?.style ?: return
-        style.getSourceAs<GeoJsonSource>("wp-roads")?.setGeoJson(roadJson)
-        style.getSourceAs<GeoJsonSource>("wp-painted")?.setGeoJson(paintedJson)
+        // Submitted only when it really changed: setGeoJson rebuilds the whole feature set on the
+        // UI thread, and the roads and the day's route are the same string on most updates.
+        if (roadJson != submittedRoadJson) {
+            style.getSourceAs<GeoJsonSource>("wp-roads")?.setGeoJson(roadJson)
+            submittedRoadJson = roadJson
+        }
+        if (paintedJson != submittedPaintedJson) {
+            style.getSourceAs<GeoJsonSource>("wp-painted")?.setGeoJson(paintedJson)
+            submittedPaintedJson = paintedJson
+        }
         val fog = fogBitmap
         val fogBounds = fogFrame
         // Rebuilt rather than swapped: an image source holds the image it was made with, so setting
