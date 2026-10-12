@@ -1,0 +1,17 @@
+{
+  "base": "c46352eb2f700b78abeeb4d2f30b8271c08f0d01",
+  "inputs": {
+    "scripts/mobile_ui_acceptance.py": "3c9905f0faf79b148d270aca0349ff337b9b42c027a4a38d0e478661b8bcb133",
+    "scripts/ui_acceptance_assertions.py": "120a8c9b766d1231b2b1a83a603f192d97033f7d4baea857ff81f0fffa0bbdc7",
+    "scripts/publish_release.py": "a2e5103f6d07b1d7cb7725b797eb8f0378e8fd189aa2da1d90ede96206f556b4",
+    "scripts/release_remote.py": "924943309f35dd916224cc81d78e5e572f99435a1e11fdb7560f437408cce244",
+    "app/src/androidTest/java/cn/walkpaint/UiStateProbe.kt": "772f2d364181f2a9106d0949f4e577ec375f7cf851ea7d2a1c28bc30fc047938",
+    "app/src/androidTest/java/cn/walkpaint/RoadAcceptanceInstrumentation.kt": "6c27d8b412432a6114e70d4728714803fa81b68c55718ac2b07818e01d52bdb9"
+  },
+  "test_apk_sha256": "2ae4e414fb3bc470a693f1c70f7892dbcc130c18e888894d2b71ac8cdec8c721",
+  "visual_review": {
+    "dark_after_restart": "inspected",
+    "source_app_changed": false
+  },
+  "source_app_apk_sha256": "64841c507972117250b60c7cb9742fc8d0be2ac5796278227cb90c282f1d4402"
+}
