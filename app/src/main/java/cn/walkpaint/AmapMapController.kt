@@ -45,6 +45,10 @@ internal class AmapMapController(private val context: Context, private val onGes
     private val cores = mutableListOf<Polyline>()
     private var ground: GroundOverlay? = null
     private var paintedRevision = -1
+    /** Kept only so an exported field report can say what the phone's own engine ended up with. */
+    private var groundPixels: String? = null
+    private var groundFrame: PaintFrame? = null
+    private var mapLoaded = false
     /** Display coordinates are converted once per point, not once per point per redraw. */
     private val converted = HashMap<Long, LatLng>()
     private var retainedCamera: CameraPosition?=null
@@ -82,6 +86,8 @@ internal class AmapMapController(private val context: Context, private val onGes
         cores.clear()
         ground = null
         paintedRevision = -1
+        groundPixels = null
+        mapLoaded = false
         converted.clear()
         map?.uiSettings?.isZoomControlsEnabled = false
         map?.uiSettings?.isCompassEnabled = false
@@ -102,7 +108,7 @@ internal class AmapMapController(private val context: Context, private val onGes
                 android.view.MotionEvent.ACTION_CANCEL -> endGesture()
             }
         }
-        map?.setOnMapLoadedListener { onReady() }
+        map?.setOnMapLoadedListener { mapLoaded = true; onReady() }
         // The veil follows the map: a pan or a zoom asks for a redraw for the new view.
         map?.setOnCameraChangeListener(object : AMap.OnCameraChangeListener {
             override fun onCameraChange(position: CameraPosition?) { onCamera() }
@@ -200,6 +206,8 @@ internal class AmapMapController(private val context: Context, private val onGes
             existing.setImage(descriptor)
             existing.setPositionFromBounds(bounds)
         }
+        groundPixels = "${fog.width}x${fog.height}"
+        groundFrame = frame
         if (BuildConfig.DEBUG) PerfTrace.upload(System.nanoTime() - handoverStart)
     }
 
@@ -273,12 +281,41 @@ internal class AmapMapController(private val context: Context, private val onGes
         return ViewBounds(bounds.southwest.latitude, bounds.southwest.longitude,
             bounds.northeast.latitude, bounds.northeast.longitude)
     }
+
+    /**
+     * What the AMap side of the veil actually ended up doing, for the on-demand field export.
+     *
+     * The AMap SDK is ARM-only, so no emulator on this project's x86_64 machines can run it, and
+     * nothing here can be checked from a workstation. Reporting it from inside the running phone is
+     * the only way to tell "the SDK never loaded", "the SDK loaded but the ground overlay was never
+     * created", and "the overlay exists and the map is drawing the basemap over it" apart. Only the
+     * third of those would need a different way of hiding the map, so guessing between them is what
+     * produced a fix that could not be trusted.
+     */
+    fun describe(): String {
+        if (map == null) return "高德=视图未创建"
+        val pixels = groundPixels
+        val layer = when {
+            ground != null -> "有(位图=$pixels 图层版本=$paintedRevision 边界=" +
+                (groundFrame?.let { String.format(java.util.Locale.ROOT, "%.5f,%.5f~%.5f,%.5f",
+                    it.latMin, it.lonMin, it.latMax, it.lonMax) } ?: "未记录") + ")"
+            pixels != null -> "没有（位图已交给高德 $pixels，但地面图层没建起来）"
+            else -> "没有（还没有位图）"
+        }
+        return "高德=视图已建 地图加载完成=$mapLoaded 地面图层$layer " +
+            "折线=描边${casings.size}条/芯${cores.size}条(zIndex 10/11，地面图层zIndex 9) " +
+            "坐标换算缓存=${converted.size} 手势挂起=$gestureActive"
+    }
+
     fun release(view: MapView) {
         if (view !== currentView) return
         retainedCamera=map?.cameraPosition
         casings.clear()
         cores.clear()
         ground = null
+        groundPixels = null
+        groundFrame = null
+        mapLoaded = false
         paintedRevision = -1
         currentMarker = null
         map = null
