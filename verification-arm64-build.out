@@ -1,0 +1,65 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.1.0/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:generateDebugBuildConfig FROM-CACHE
+> Task :app:generateDebugResources FROM-CACHE
+> Task :app:packageDebugResources FROM-CACHE
+> Task :app:processDebugNavigationResources FROM-CACHE
+> Task :app:parseDebugLocalResources FROM-CACHE
+> Task :app:generateDebugRFile FROM-CACHE
+
+> Task :app:compileDebugKotlin
+w: file:///D:/Worktrees/WalkPaint/dsh-v042-amap-verify/app/src/main/java/cn/walkpaint/FootprintDatabase.kt:120:96 Unnecessary non-null assertion (!!) on a non-null receiver of type 'TrackPoint'.
+w: file:///D:/Worktrees/WalkPaint/dsh-v042-amap-verify/app/src/main/java/cn/walkpaint/FootprintDatabase.kt:153:70 Unnecessary non-null assertion (!!) on a non-null receiver of type 'TrackPoint'.
+w: file:///D:/Worktrees/WalkPaint/dsh-v042-amap-verify/app/src/main/java/cn/walkpaint/FootprintDatabase.kt:303:74 Unnecessary non-null assertion (!!) on a non-null receiver of type 'String'.
+w: file:///D:/Worktrees/WalkPaint/dsh-v042-amap-verify/app/src/main/java/cn/walkpaint/FootprintDatabase.kt:304:69 Unnecessary non-null assertion (!!) on a non-null receiver of type 'TrackPoint'.
+w: file:///D:/Worktrees/WalkPaint/dsh-v042-amap-verify/app/src/main/java/cn/walkpaint/FootprintDatabase.kt:318:29 Condition is always 'true'.
+w: file:///D:/Worktrees/WalkPaint/dsh-v042-amap-verify/app/src/main/java/cn/walkpaint/TrailPaint.kt:258:39 Condition is always 'true'.
+w: file:///D:/Worktrees/WalkPaint/dsh-v042-amap-verify/app/src/main/java/cn/walkpaint/TrailShape.kt:54:20 Unnecessary safe call on a non-null receiver of type 'MutableList<TrackPoint>'.
+w: file:///D:/Worktrees/WalkPaint/dsh-v042-amap-verify/app/src/main/java/cn/walkpaint/TrailShape.kt:194:29 Redundant call of conversion method.
+w: file:///D:/Worktrees/WalkPaint/dsh-v042-amap-verify/app/src/main/java/cn/walkpaint/TrailShape.kt:194:61 Redundant call of conversion method.
+w: file:///D:/Worktrees/WalkPaint/dsh-v042-amap-verify/app/src/main/java/cn/walkpaint/TrailShape.kt:195:29 Redundant call of conversion method.
+w: file:///D:/Worktrees/WalkPaint/dsh-v042-amap-verify/app/src/main/java/cn/walkpaint/TrailShape.kt:195:61 Redundant call of conversion method.
+
+> Task :app:javaPreCompileDebug FROM-CACHE
+> Task :app:compileDebugJavaWithJavac
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets
+> Task :app:compressDebugAssets
+> Task :app:desugarDebugFileDependencies FROM-CACHE
+> Task :app:checkDebugAarMetadata
+> Task :app:compileDebugNavigationResources FROM-CACHE
+> Task :app:mapDebugSourceSetPaths
+> Task :app:mergeDebugResources FROM-CACHE
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDebug FROM-CACHE
+> Task :app:processDebugMainManifest FROM-CACHE
+> Task :app:processDebugManifest FROM-CACHE
+> Task :app:processDebugManifestForPackage FROM-CACHE
+> Task :app:processDebugResources
+> Task :app:dexBuilderDebug
+> Task :app:mergeDebugGlobalSynthetics
+> Task :app:processDebugJavaRes
+> Task :app:mergeDebugJavaResource
+> Task :app:checkDebugDuplicateClasses
+> Task :app:mergeExtDexDebug FROM-CACHE
+> Task :app:mergeLibDexDebug FROM-CACHE
+> Task :app:mergeProjectDexDebug
+> Task :app:mergeDebugJniLibFolders
+> Task :app:mergeDebugNativeLibs
+
+> Task :app:stripDebugDebugSymbols
+Unable to strip the following libraries, packaging them as they are: libAMapSDK_MAP_v11_3_100.so, libandroidx.graphics.path.so, libapssdk.so, libmaplibre.so. Run with --info option to learn more.
+
+> Task :app:validateSigningDebug
+> Task :app:writeDebugAppMetadata
+> Task :app:writeDebugSigningConfigVersions
+> Task :app:packageDebug
+> Task :app:createDebugApkListingFileRedirect
+> Task :app:assembleDebug
+
+BUILD SUCCESSFUL in 1m 34s
+38 actionable tasks: 22 executed, 16 from cache
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.1.0/userguide/configuration_cache_enabling.html

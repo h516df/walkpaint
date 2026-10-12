@@ -88,7 +88,16 @@ parser.add_argument('--allow-missing-perf', action='store_true',
                     help='baseline runs only: the build being replaced has no counters at all')
 parser.add_argument('--online-basemap', action='store_true',
                     help='turn the fallback basemap on so the veil is judged over real streets')
+parser.add_argument('--require-engine', choices=['amap', 'fallback', 'any'], default='any',
+                    help='which map engine this run must actually be exercising. "amap" fails the '
+                         'run unless the app reports the AMap engine active AND the ARM AMap '
+                         'library was really loaded, so a MapLibre fallback can never be summarised '
+                         'as "the AMap path passes"')
 args = parser.parse_args()
+
+# `engine_gate` collects the evidence that the required engine really ran, and is enforced with the
+# rest of the verdict at the end.
+engine_gate = {'required': args.require_engine, 'evidence': {}, 'failures': []}
 
 require_walkpaint_google_avd(ADB, SERIAL)
 base = [ADB, '-s', SERIAL]
@@ -1059,6 +1068,52 @@ finally:
         keep = re.search(r'Override (?:size|density): (\S+)', original)
         sh('wm', what, keep.group(1) if keep else 'reset')
     checks['device_restored'] = original_mock in sh('appops', 'get', '2000', 'android:mock_location')
+
+    # Which engine did this run actually measure? A green fog result on the MapLibre fallback says
+    # nothing about the engine the complaint is about, so when a specific engine is required the
+    # evidence has to name it — and "the app says AMap" is not enough on its own: the installer must
+    # have chosen the ARM ABI and the loader must have mapped the ARM AMap library, or the SDK is
+    # not really running at all.
+    checks['engine'] = {'required': engine_gate['required'], 'evidence': engine_gate['evidence']}
+    if args.require_engine == 'amap':
+        dumped = sh('dumpsys', 'package', PKG)
+        primary = re.search(r'primaryCpuAbi=(\S+)', dumped)
+        engine_gate['evidence']['primary_cpu_abi'] = primary.group(1) if primary else None
+        log = sh('logcat', '-d')
+        loaded = sorted(set(re.findall(r'Load \S*lib(AMapSDK_MAP\w*|apssdk\w*)\.so', log)))
+        engine_gate['evidence']['arm_amap_libraries_loaded'] = loaded
+        report_path = re.search(r'field report written: (\S+)',
+                                sh('logcat', '-d', '-s', 'WalkPaintField:I'))
+        engine_text = ''
+        if report_path:
+            engine_text = subprocess.run([ADB, '-s', SERIAL, 'exec-out', 'cat', report_path.group(1)],
+                                         capture_output=True).stdout.decode('utf-8', 'replace')
+            out.joinpath('field-report.txt').write_text(engine_text, encoding='utf-8')
+        engine_gate['evidence']['report_engine_amap'] = '引擎判定=正在用高德' in engine_text
+        engine_gate['evidence']['report_ground_overlay'] = '地面图层有' in engine_text
+        if engine_gate['evidence']['primary_cpu_abi'] != 'arm64-v8a':
+            engine_gate['failures'].append(
+                'primaryCpuAbi=%s, so the process is not running the ARM libraries at all'
+                % engine_gate['evidence']['primary_cpu_abi'])
+        if not loaded:
+            engine_gate['failures'].append(
+                'no ARM AMap library was loaded into the process')
+        if not engine_gate['evidence']['report_engine_amap']:
+            engine_gate['failures'].append(
+                'the app did not report the AMap engine as active, so this run measured the fallback')
+        if engine_text and not engine_gate['evidence']['report_ground_overlay']:
+            engine_gate['failures'].append(
+                'AMap was active but no ground overlay was created, so no veil was drawn')
+        checks['failures'].extend(engine_gate['failures'])
+    elif args.require_engine == 'fallback':
+        report_path = re.search(r'field report written: (\S+)',
+                                sh('logcat', '-d', '-s', 'WalkPaintField:I'))
+        if report_path:
+            engine_text = subprocess.run([ADB, '-s', SERIAL, 'exec-out', 'cat', report_path.group(1)],
+                                         capture_output=True).stdout.decode('utf-8', 'replace')
+            if '引擎判定=正在用高德' in engine_text:
+                checks['failures'].append('this run was required to be the fallback but AMap ran')
+
     checks['passed'] = not checks['failures'] and checks.get('device_restored') is True
     out.joinpath('acceptance.json').write_text(
         json.dumps(checks, ensure_ascii=False, indent=2), encoding='utf-8')

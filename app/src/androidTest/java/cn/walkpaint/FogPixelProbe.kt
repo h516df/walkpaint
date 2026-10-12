@@ -157,6 +157,58 @@ internal object FogPixelProbe {
             wideFrame.contains(wideView.latMax, wideView.lonMax),
             "a view thirty kilometres across is not fully covered by the veil frame")
 
+        // 9. The first frame is the one the person sees when they open the app, and it is drawn
+        //    before the engine has reported a view — so it is built around the person and it is
+        //    very coarse. Thirty metres of corridor is a fraction of a pixel in it. The image must
+        //    therefore be entirely opaque: no corridor at all, rather than a widened stand-in. A
+        //    two pixel stand-in was over thirty kilometres of never-walked ground, and on this
+        //    screen it covered the whole display. The person's words: no fog on opening, fog only
+        //    after zooming in.
+        val launchPainter = TrailPainter()
+        val launch = launchPainter.update(listOf(street), PIGMENT, street.first(), null)
+            ?: return "FOG_PIXEL_PROBE_FAIL: no image was produced for the launch frame"
+        var launchRevealed = 0
+        for (x in 0 until launch.width step 3) {
+            for (y in 0 until launch.height step 3) {
+                if (alpha(launch.getPixel(x, y)) != 0xFF) launchRevealed++
+            }
+        }
+        check(launchRevealed == 0,
+            "the launch frame revealed $launchRevealed sampled pixel(s): unknown ground was readable " +
+                "on the first screen")
+
+        // 10. A wide view must not reveal either, for the same reason: the corridor is far under a
+        //     pixel there, and the map draws the walked route as a line instead of the image faking
+        //     a corridor. This is the "zoom out and everything unexplored shows through" case.
+        val widePainter = TrailPainter()
+        val wideImage = widePainter.update(listOf(street, listOf(far)), PIGMENT, null, wideView)
+            ?: return "FOG_PIXEL_PROBE_FAIL: no image was produced for the wide view"
+        var wideRevealed = 0
+        for (x in 0 until wideImage.width step 2) {
+            for (y in 0 until wideImage.height step 2) {
+                if (alpha(wideImage.getPixel(x, y)) != 0xFF) wideRevealed++
+            }
+        }
+        check(wideRevealed == 0,
+            "a view thirty kilometres across revealed $wideRevealed sampled pixel(s) of ground " +
+                "nobody walked")
+
+        // 11. Ground that was walked and is then reported as not walked has to lose its corridor.
+        //     The painter skips a redundant repaint, and "no paths" is not "nothing changed": the
+        //     skip once looked only at the input, so clearing the dataset kept serving the old,
+        //     partly revealed image. Reusing one painter here is the whole point — a fresh one would
+        //     pass without exercising the skip at all.
+        val cached = TrailPainter()
+        val painted = cached.update(listOf(street), PIGMENT, null, view)
+            ?: return "FOG_PIXEL_PROBE_FAIL: no image for the cached-empty case"
+        val paintedCentre = alpha(painted.getPixel(midX, midY))
+        check(paintedCentre < 128, "the first pass did not reveal the corridor: alpha=$paintedCentre")
+        val emptied = cached.update(emptyList(), PIGMENT, null, view)
+            ?: return "FOG_PIXEL_PROBE_FAIL: emptying the dataset produced no image"
+        val emptiedCentre = alpha(emptied.getPixel(midX, midY))
+        check(emptiedCentre == 0xFF,
+            "an emptied dataset kept the old corridor: alpha=$emptiedCentre where 255 was expected")
+
         return if (failures.isEmpty()) "FOG_PIXEL_PROBE_PASS"
         else "FOG_PIXEL_PROBE_FAIL: " + failures.joinToString(" | ")
     }

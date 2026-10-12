@@ -68,11 +68,15 @@ private const val VEIL_REFRESH_SETTLE_MS = 350L
 
 /**
  * A viewport wider than this is not a view of the map; it is the engine before it is ready. It was
- * five degrees, which also threw away a legitimately wide zoom-out; sixty still catches the
- * whole-world region the engines report at launch, and a real view of the planet is not something
- * this app shows.
+ * five degrees, which also threw away a legitimately wide zoom-out; sixty still threw away a real
+ * wide zoom-out as well, and rejecting a view the person is actually looking at is worse than
+ * framing it: the veil then falls back to a person-centred frame that may not cover the screen, and
+ * the basemap shows around its edge. So the limit is now only wide enough to catch the degenerate
+ * whole-world region the engines report at launch, and the frame follows whatever real view it gets.
+ * A frame too coarse to draw the corridor no longer widens it (see TrailPaint.corridorVisible), so a
+ * wide view is safe to accept: it stays fully veiled and the walked route is drawn as a line.
  */
-private const val MAX_SANE_VIEW_DEGREES = 60.0
+private const val MAX_SANE_VIEW_DEGREES = 170.0
 
 /**
  * Shortest gap between two handovers of the veil image to the map.
@@ -729,9 +733,9 @@ class MainActivity : ComponentActivity() {
                     // where the person has been would vanish on exactly the screen where it matters
                     // most. Above that the cleared ground is plainly visible, so sending a line too
                     // would only cost the UI thread a GeoJSON rebuild per update while walking.
-                    val perMetre = fogBounds?.let { TrailPainter.pixelsPerMeter(it) } ?: 0.0
-                    val veilShowsCorridor = perMetre > 0.0 &&
-                        TrailPaint.CORRIDOR_M * perMetre >= TrailPaint.NETWORK_BELOW_PX
+                    // The predicate is TrailPaint's, not a copy of it: the veil leaves the corridor
+                    // out exactly when this line is drawn, and the two must not be able to disagree.
+                    val veilShowsCorridor = fogBounds?.let { TrailPaint.corridorVisible(it) } == true
                     val trailPaths = RecordedTrail.paths(displayedTrack.realTracks)
                     val trail = when {
                         // A chosen day is always drawn: that is the route the person asked to see.
@@ -1147,7 +1151,11 @@ class MainActivity : ComponentActivity() {
                             "手机定位开关=$gpsProvider 电池白名单=$whitelisted 记录开关=$enabled 后台服务=$running",
                         recording = RecordingDiagnostics.summary(application),
                         camera = "$camera\n可见范围=" + (viewport?.let {
-                            "纬度${fmt(it.latSpan, 4)}° 经度${fmt(it.lonSpan, 4)}°"
+                            "纬度${fmt(it.latSpan, 4)}° 经度${fmt(it.lonSpan, 4)}° " +
+                                // WGS84 on purpose: the engine's own camera target above is in the
+                                // datum it draws in, and printing this one lets a reader tell a
+                                // missing datum conversion from a doubled one by comparing the two.
+                                "可见中心(WGS84)=${fmt(it.centreLat, 6)},${fmt(it.centreLon, 6)}"
                         } ?: "地图还没报告（用兜底大帧）"),
                         veil = VeilReport.frame(frame, lineByMap) + "\n" +
                             (stats?.let { VeilReport.image(it, fogRevision) }

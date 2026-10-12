@@ -260,11 +260,16 @@ internal class AmapMapController(private val context: Context, private val onGes
 
     fun view(): MapView? = currentView
 
-    /** Shows a whole walked area, used when the person asks to see all of their exploration. */
+    /**
+     * Shows a whole walked area, used when the person asks to see all of their exploration.
+     *
+     * The corners arrive in WGS84 and AMap places things in GCJ-02, so they go through the same
+     * conversion as every other coordinate handed to it. Passing them raw put "view all" a few
+     * hundred metres off in China while looking perfect on the Paris fixture.
+     */
     fun focusBounds(latMin: Double, lonMin: Double, latMax: Double, lonMax: Double) {
         val bounds = com.amap.api.maps.model.LatLngBounds(
-            com.amap.api.maps.model.LatLng(latMin, lonMin),
-            com.amap.api.maps.model.LatLng(latMax, lonMax))
+            toAmap(latMin, lonMin), toAmap(latMax, lonMax))
         map?.moveCamera(com.amap.api.maps.CameraUpdateFactory.newLatLngBounds(bounds, 80))
     }
 
@@ -275,22 +280,35 @@ internal class AmapMapController(private val context: Context, private val onGes
             camera.zoom, camera.target.latitude, camera.target.longitude)
     }
 
-    /** What the AMap view is showing, so the veil can follow it. */
+    /**
+     * What the AMap view is showing, so the veil can follow it — in WGS84, like every other input
+     * the veil is given.
+     *
+     * AMap reports its visible region in the datum it draws in, GCJ-02, while the stored track, the
+     * distance maths and the frame are all WGS84. Returning the raw corners put the frame a few
+     * hundred metres from the ground it was meant to cover wherever the offset applies — and the
+     * frame's corners were then offset a *second* time by `toAmap()` when the ground overlay was
+     * placed. The project's anonymous fixture sits in Paris, where the shift is the identity, which
+     * is exactly why every local check passed. A fixture in China is what shows it.
+     */
     fun viewport(): ViewBounds? {
         val bounds = map?.projection?.visibleRegion?.latLngBounds ?: return null
-        return ViewBounds(bounds.southwest.latitude, bounds.southwest.longitude,
-            bounds.northeast.latitude, bounds.northeast.longitude)
+        val southWest = CnCoordinate.gcjToWgs(bounds.southwest.latitude, bounds.southwest.longitude)
+        val northEast = CnCoordinate.gcjToWgs(bounds.northeast.latitude, bounds.northeast.longitude)
+        return ViewBounds(southWest[0], southWest[1], northEast[0], northEast[1])
     }
 
     /**
      * What the AMap side of the veil actually ended up doing, for the on-demand field export.
      *
-     * The AMap SDK is ARM-only, so no emulator on this project's x86_64 machines can run it, and
-     * nothing here can be checked from a workstation. Reporting it from inside the running phone is
-     * the only way to tell "the SDK never loaded", "the SDK loaded but the ground overlay was never
-     * created", and "the overlay exists and the map is drawing the basemap over it" apart. Only the
-     * third of those would need a different way of hiding the map, so guessing between them is what
-     * produced a fix that could not be trusted.
+     * Reporting it from inside the running app is the only way to tell "the SDK never loaded", "the
+     * SDK loaded but the ground overlay was never created", and "the overlay exists and the map is
+     * drawing the basemap over it" apart. Only the third of those would need a different way of
+     * hiding the map, so guessing between them is what produced a fix that could not be trusted.
+     *
+     * (This header used to claim the AMap SDK could never be exercised from a workstation. That was
+     * wrong: the x86_64 images ship an ARM bridge, so an arm64-only build runs the real engine here.
+     * See scripts/amap_translation_probe.py and docs/evidence/V042.md.)
      */
     fun describe(): String {
         if (map == null) return "高德=视图未创建"
