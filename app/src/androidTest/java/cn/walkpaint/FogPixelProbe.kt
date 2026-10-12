@@ -157,6 +157,22 @@ internal object FogPixelProbe {
             wideFrame.contains(wideView.latMax, wideView.lonMax),
             "a view thirty kilometres across is not fully covered by the veil frame")
 
+        // 9. A subpixel corridor must never become a kilometre-wide revealed stripe.
+        val startupPainter = TrailPainter()
+        val startup = startupPainter.update(listOf(street), PIGMENT, street.first(), null)!!
+        val startupFrame = startupPainter.frame()!!
+        check(!TrailPaint.corridorVisible(startupFrame), "startup frame unexpectedly resolves a 30m corridor")
+        check(startup.getPixel(startupFrame.pixelX(BASE_LON).toInt(), startupFrame.pixelY(BASE_LAT).toInt()) == 0xFF000000.toInt(),
+            "subpixel startup corridor erased the unknown map")
+        val wide = TrailPainter().update(listOf(street), PIGMENT, null, wideView)!!
+        check(wide.getPixel(wide.width / 2, wide.height / 2) == 0xFF000000.toInt(),
+            "wide viewport widened a subpixel corridor")
+
+        // 10. An empty selection must not inherit the previous selection's cleared corridor.
+        val empty = painter.update(emptyList(), PIGMENT, null, view)!!
+        check(empty.getPixel(midX, midY) == 0xFF000000.toInt(),
+            "empty paths kept a previously explored corridor")
+
         return if (failures.isEmpty()) "FOG_PIXEL_PROBE_PASS"
         else "FOG_PIXEL_PROBE_FAIL: " + failures.joinToString(" | ")
     }

@@ -263,31 +263,47 @@ internal class AmapMapController(private val context: Context, private val onGes
     /** Shows a whole walked area, used when the person asks to see all of their exploration. */
     fun focusBounds(latMin: Double, lonMin: Double, latMax: Double, lonMax: Double) {
         val bounds = com.amap.api.maps.model.LatLngBounds(
-            com.amap.api.maps.model.LatLng(latMin, lonMin),
-            com.amap.api.maps.model.LatLng(latMax, lonMax))
+            toAmap(latMin, lonMin), toAmap(latMax, lonMax))
         map?.moveCamera(com.amap.api.maps.CameraUpdateFactory.newLatLngBounds(bounds, 80))
     }
 
     /** One line describing what the camera is showing, for the on-demand field export. */
     fun cameraSummary(): String {
         val camera = map?.cameraPosition ?: return "高德地图尚未就绪"
+        val source = fromAmap(camera.target.latitude, camera.target.longitude)
         return String.format(java.util.Locale.ROOT, "缩放=%.2f 中心=%.5f,%.5f",
-            camera.zoom, camera.target.latitude, camera.target.longitude)
+            camera.zoom, source.latitude, source.longitude)
+    }
+
+    fun cameraSource(): Triple<Double, Double, Float>? {
+        val camera = map?.cameraPosition ?: return null
+        val source = fromAmap(camera.target.latitude, camera.target.longitude)
+        return Triple(source.latitude, source.longitude, camera.zoom)
     }
 
     /** What the AMap view is showing, so the veil can follow it. */
     fun viewport(): ViewBounds? {
         val bounds = map?.projection?.visibleRegion?.latLngBounds ?: return null
-        return ViewBounds(bounds.southwest.latitude, bounds.southwest.longitude,
-            bounds.northeast.latitude, bounds.northeast.longitude)
+        val southwest = fromAmap(bounds.southwest.latitude, bounds.southwest.longitude)
+        val northeast = fromAmap(bounds.northeast.latitude, bounds.northeast.longitude)
+        return ViewBounds(southwest.latitude, southwest.longitude,
+            northeast.latitude, northeast.longitude)
+    }
+
+    private fun fromAmap(lat: Double, lon: Double): LatLng {
+        if (!CoordinateConverter.isAMapDataAvailable(lat, lon)) return LatLng(lat, lon)
+        val source = CoordinateInverse.toSource(lat, lon) { sourceLat, sourceLon ->
+            val display = toAmap(sourceLat, sourceLon)
+            display.latitude to display.longitude
+        }
+        return LatLng(source.first, source.second)
     }
 
     /**
      * What the AMap side of the veil actually ended up doing, for the on-demand field export.
      *
-     * The AMap SDK is ARM-only, so no emulator on this project's x86_64 machines can run it, and
-     * nothing here can be checked from a workstation. Reporting it from inside the running phone is
-     * the only way to tell "the SDK never loaded", "the SDK loaded but the ground overlay was never
+     * Report the actual engine on both the phone and an ARM64 native-bridge AVD. This distinguishes
+     * "the SDK never loaded", "the SDK loaded but the ground overlay was never
      * created", and "the overlay exists and the map is drawing the basemap over it" apart. Only the
      * third of those would need a different way of hiding the map, so guessing between them is what
      * produced a fix that could not be trusted.

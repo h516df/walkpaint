@@ -11,9 +11,9 @@ import java.util.Locale
  * writes the same deterministic route straight into the app's own database instead: a street
  * walked four times with different lateral offsets, a second street walked twice, and a loop.
  *
- * With `reset` it first clears the table so every run starts from exactly the same scene; the
- * database it clears belongs to the throwaway test AVD, never to a person. The route sits in a
- * densely mapped, anonymous part of Paris so the veil is judged over real streets.
+ * With `reset` it replaces only this probe's own fixture rows. All unrelated trips and roads
+ * are preserved. The caller guards the dedicated AVD; China exercises the SDK coordinate shift,
+ * while the historical Paris fixture covers the unchanged coordinates outside that area.
  */
 internal object FogTrailProbe {
     const val TRIP_PREFIX = "fogperf-fixture-v2"
@@ -26,23 +26,33 @@ internal object FogTrailProbe {
     private const val STEP_M = 1.4
     private const val ACCURACY = 6.0
 
-    fun run(instrumentation: Instrumentation, reset: Boolean): String {
+    fun run(instrumentation: Instrumentation, reset: Boolean, region: String = "paris"): String {
+        require(region == "paris" || region == "china")
+        val prefix = if (region == "china") TRIP_PREFIX + "-cn" else TRIP_PREFIX
         val context = instrumentation.targetContext
         FootprintDatabase(context).use { db ->
             val writable = db.writableDatabase
             if (reset) {
                 writable.beginTransaction()
                 try {
-                    listOf("road_matches", "points", "trips", "coverage", "roads").forEach {
-                        writable.execSQL("DELETE FROM " + it)
-                    }
+                    // Only replace this probe's own rows. Preserve every unrelated trip and road.
+                    writable.execSQL("DELETE FROM road_matches WHERE point_id IN (SELECT p.id FROM points p JOIN trips t ON t.id=p.trip_id WHERE t.id LIKE ?)", arrayOf(prefix + "%"))
+                    writable.execSQL("DELETE FROM points WHERE trip_id IN (SELECT id FROM trips WHERE id LIKE ?)", arrayOf(prefix + "%"))
+                    writable.execSQL("DELETE FROM trips WHERE id LIKE ?", arrayOf(prefix + "%"))
                     writable.setTransactionSuccessful()
                 } finally {
                     writable.endTransaction()
                 }
             }
             val now = System.currentTimeMillis()
-            val trips = fixtures(now)
+            val trips = fixtures(now).map { trip ->
+                if (region != "china") trip else trip.copy(
+                    id = trip.id.replace(TRIP_PREFIX, prefix),
+                    points = trip.points.map { point ->
+                        doubleArrayOf(point[0] - BASE_LAT + 39.9075,
+                            point[1] - BASE_LON + 116.3913, point[2])
+                    })
+            }
             var written = 0
             writable.beginTransaction()
             try {
@@ -60,7 +70,7 @@ internal object FogTrailProbe {
             } finally {
                 writable.endTransaction()
             }
-            val kept = stored(writable)
+            val kept = stored(writable, prefix)
             check(written == kept) { "fixture rows missing: wrote $written, stored $kept" }
             check(kept >= 3000) { "fixture is too small to prove anything: $kept points" }
             // The anchor is the end of the near cluster: "定位我" must stay there while the map is
@@ -74,10 +84,10 @@ internal object FogTrailProbe {
         }
     }
 
-    private fun stored(writable: android.database.sqlite.SQLiteDatabase): Int =
+    private fun stored(writable: android.database.sqlite.SQLiteDatabase, prefix: String): Int =
         writable.rawQuery(
             "SELECT COUNT(*) FROM points p JOIN trips t ON t.id=p.trip_id WHERE t.id LIKE ?",
-            arrayOf(TRIP_PREFIX + "%")).use { it.moveToFirst(); it.getInt(0) }
+            arrayOf(prefix + "%")).use { it.moveToFirst(); it.getInt(0) }
 
     private data class FixtureTrip(val id: String, val start: Long, val points: List<DoubleArray>)
 

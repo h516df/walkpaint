@@ -10,6 +10,7 @@ rootProject.file("local.properties").takeIf { it.isFile }?.inputStream()?.use { 
 val amapKey = (mapProperties.getProperty("walkpaintAmapKey")
     ?: providers.gradleProperty("walkpaintAmapKey").orNull).orEmpty().trim()
 require(amapKey.matches(Regex("[A-Za-z0-9]*"))) { "Invalid AMap Android Key" }
+val arm64Only = providers.gradleProperty("walkpaintArm64Only").orNull == "true"
 // Public GitHub App client id only. Never put a client secret or a PC token here.
 val updateClientId = (providers.gradleProperty("walkpaintUpdateClientId").orNull ?: "Iv23liQM3N2avCTc0QAd").trim()
 require(updateClientId.matches(Regex("[A-Za-z0-9.]*"))) { "Invalid public update client id" }
@@ -21,13 +22,14 @@ android {
         applicationId = "cn.walkpaint"
         minSdk = 26
         targetSdk = 36
-        versionCode = 44
-        versionName = "0.42"
+        versionCode = 45
+        versionName = "0.43"
         testInstrumentationRunner = "cn.walkpaint.RoadAcceptanceInstrumentation"
         // Optional phone-sized APK; the default universal debug APK remains emulator-compatible.
-        if (providers.gradleProperty("walkpaintArm64Only").orNull == "true") {
+        if (arm64Only) {
             ndk { abiFilters.add("arm64-v8a") }
         }
+        buildConfigField("boolean", "ARM64_ONLY", arm64Only.toString())
         buildConfigField("String", "AMAP_KEY", "\"$amapKey\"")
         buildConfigField("String", "UPDATE_CLIENT_ID", "\"$updateClientId\"")
         manifestPlaceholders["AMAP_API_KEY"] = amapKey

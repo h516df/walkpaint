@@ -84,11 +84,15 @@ parser.add_argument('--apk', default='app/build/outputs/apk/debug/app-debug.apk'
 parser.add_argument('--label', required=True, help='evidence folder, e.g. before / after')
 parser.add_argument('--skip-install', action='store_true')
 parser.add_argument('--skip-walk', action='store_true', help='do not inject extra fixes on top of the fixture')
+parser.add_argument('--require-engine', choices=('amap', 'fallback'), help='fail if the actual engine differs')
+parser.add_argument('--fixture-region', choices=('paris', 'china'), default='paris')
 parser.add_argument('--allow-missing-perf', action='store_true',
                     help='baseline runs only: the build being replaced has no counters at all')
 parser.add_argument('--online-basemap', action='store_true',
                     help='turn the fallback basemap on so the veil is judged over real streets')
 args = parser.parse_args()
+if args.require_engine == 'amap' and (args.fixture_region != 'china' or args.online_basemap):
+    parser.error('AMap acceptance requires --fixture-region china and must preserve AMap consent')
 
 require_walkpaint_google_avd(ADB, SERIAL)
 base = [ADB, '-s', SERIAL]
@@ -425,9 +429,9 @@ def require_scene(name, predicate, description):
     return check_scene(name, camera_state(), predicate, description)
 
 
-def person_stayed_near(state, expected_lon=2.3523, tolerance=0.004):
+def person_stayed_near(state, expected_lon=None, tolerance=0.004):
     """The person's own position must not have moved just because the map did."""
-    return state is not None and abs(state.get('fixLon', 0.0) - expected_lon) < tolerance
+    return state is not None and abs(state.get('fixLon', 0.0) - (NEAR_LON if expected_lon is None else expected_lon)) < tolerance
 
 
 def pan_camera(to_lon, to_lat, tolerance=0.0015, max_swipes=90, on_way=None):
@@ -614,8 +618,9 @@ try:
     checks['device_abilist'] = sh('getprop', 'ro.product.cpu.abilist').strip()
     checks['device_sdk'] = sh('getprop', 'ro.build.version.sdk').strip()
     first_abi = checks['device_abilist'].split(',')[0].strip()
-    # AmapPlatform only accepts an ARM process, so this AVD cannot run the AMap renderer at all.
-    checks['amap_supported_on_this_device'] = first_abi in ('arm64-v8a', 'armeabi-v7a')
+    # Availability is not runtime proof. ARM64-only APKs can use an advertised native bridge.
+    checks['amap_supported_on_this_device'] = any(abi in ('arm64-v8a', 'armeabi-v7a')
+                                                for abi in checks['device_abilist'].split(','))
 
     apk = (ROOT / args.apk).resolve()
     checks['apk'] = str(apk)
@@ -626,9 +631,8 @@ try:
     time.sleep(1)
     rows_installed_before = row_map()
     if not args.skip_install:
-        # -d: the baseline run installs the build being replaced, whose version code is lower.
-        assert 'Success' in run('install', '-r', '-d', str(apk), timeout=240), 'app install failed'
-        assert 'Success' in run('install', '-r', '-d',
+        assert 'Success' in run('install', '-r', str(apk), timeout=240), 'app install failed'
+        assert 'Success' in run('install', '-r',
             str(ROOT / 'app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk'),
             timeout=240), 'test install failed'
     # The package manager can still be busy straight after an install on a loaded host, so the
@@ -658,6 +662,14 @@ try:
     checks['installed_apk_sha256'] = installed
     if installed != checks['apk_sha256']:
         fail('installed package is not the file that was built')
+    if args.require_engine == 'amap':
+        from amap_runtime_evidence import verify_runtime
+        runtime = sh('am', 'instrument', '-w', '-e', 'amapRuntimeProbe', 'true',
+                     TEST_PKG + '/' + RUNNER, timeout=150)
+        runtime_match = re.search(r'AMAP_RUNTIME_PASS: (\{[^\r\n]+\})', runtime)
+        if not runtime_match:
+            fail('required AMap renderer did not load; no fallback evidence accepted')
+        checks['amap_runtime'] = verify_runtime(apk, json.loads(runtime_match.group(1)))
 
     # Installing over the previous build must not touch a single stored row. With the install
     # skipped there is nothing to compare, so the check is recorded as not applicable rather than
@@ -672,9 +684,9 @@ try:
             checks['rows_changed_by_install'] = changed[:20]
             fail('installing the build changed or lost stored rows: %s' % changed[:5])
 
-    # One deterministic scene: the test AVD's tables are cleared and the same anonymous fixture is
-    # written again, so the replaced build and the candidate are shown exactly the same thing.
+    # Replace only this probe's owned fixture rows, preserving every unrelated trip and road.
     seeded = sh('am', 'instrument', '-w', '-e', 'fogTrailProbe', 'true', '-e', 'fogTrailReset', 'true',
+                '-e', 'fogFixtureRegion', args.fixture_region,
                 TEST_PKG + '/' + RUNNER, timeout=240)
     checks['fixture_probe'] = [line for line in seeded.splitlines() if 'FOG_TRAIL_PROBE' in line]
     if 'FOG_TRAIL_PROBE_PASS' not in seeded:
@@ -756,6 +768,8 @@ try:
         fail('the app reported no map provider; visible=' + str(profile))
     checks['engine_label'] = engine
     checks['engine'] = 'amap' if '高德' in engine else 'fallback'
+    if args.require_engine and checks['engine'] != args.require_engine:
+        fail('actual engine differs from --require-engine; downgrade is not acceptance')
     checks['amap_path_verified'] = checks['engine'] == 'amap'
     if not checks['amap_supported_on_this_device'] and checks['amap_path_verified']:
         fail('engine claims AMap on an ABI that cannot load it')

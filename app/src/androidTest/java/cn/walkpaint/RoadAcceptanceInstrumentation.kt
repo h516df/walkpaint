@@ -23,11 +23,18 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
     private var directTrailProbe=false
     private var fogTrailProbe=false
     private var fogTrailReset=false
+    private var fogFixtureRegion="paris"
+    private var amapRuntimeProbe=false
     private var fogPixelProbe=false
     private var updateLogoutProbe=false
     private var candidateSha:String?=null
     override fun onStart() {
         val result = Bundle()
+        if(amapRuntimeProbe) {
+            try { result.putString("stream",AmapRuntimeProbe.run(this));finish(Activity.RESULT_OK,result) }
+            catch(e:Throwable) { result.putString("stream","AMAP_RUNTIME_FAIL: ${e.javaClass.simpleName}: ${e.message}");finish(Activity.RESULT_CANCELED,result) }
+            return
+        }
         if(dataProbe) {
             try { result.putString("stream",DataPreservationProbe.run(this,baselineCounts));finish(Activity.RESULT_OK,result) }
             catch(e:Throwable) { result.putString("stream","DATA_PRESERVATION_FAIL: ${e.message}");finish(Activity.RESULT_CANCELED,result) }
@@ -44,7 +51,7 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
             return
         }
         if(fogTrailProbe) {
-            try { result.putString("stream",FogTrailProbe.run(this,fogTrailReset));finish(Activity.RESULT_OK,result) }
+            try { result.putString("stream",FogTrailProbe.run(this,fogTrailReset,fogFixtureRegion));finish(Activity.RESULT_OK,result) }
             catch(e:Throwable) { result.putString("stream","FOG_TRAIL_PROBE_FAIL: ${e.javaClass.simpleName}: ${e.message}");finish(Activity.RESULT_CANCELED,result) }
             return
         }
@@ -326,5 +333,5 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
         // finish() can terminate the instrumented process immediately; cleanup must precede it.
         finish(resultCode,result)
     }
-    override fun onCreate(arguments:Bundle?) { baselineCounts=arguments?.getString("baselineCounts");dataProbe=arguments?.getString("dataProbe")=="true"; recoveryProbe=arguments?.getString("recoveryProbe")=="true"; fogPixelProbe=arguments?.getString("fogPixelProbe")=="true";fogTrailReset=arguments?.getString("fogTrailReset")=="true";fogTrailProbe=arguments?.getString("fogTrailProbe")=="true";directTrailProbe=arguments?.getString("directTrailProbe")=="true"; updateLogoutProbe=arguments?.getString("updateLogoutProbe")=="true";candidateSha=arguments?.getString("candidateSha");privateUpdateProbe=arguments?.getString("privateUpdateProbe")=="true";roadColorProbe=arguments?.getString("roadColorProbe")=="true"; cameraProbe=arguments?.getString("cameraProbe")=="true"; fixtureProbe=arguments?.getString("fixtureProbe")=="true"; catalogProbe=arguments?.getString("catalogProbe")=="true"; networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments); start() }
+    override fun onCreate(arguments:Bundle?) { amapRuntimeProbe=arguments?.getString("amapRuntimeProbe")=="true"; fogFixtureRegion=arguments?.getString("fogFixtureRegion") ?: "paris"; baselineCounts=arguments?.getString("baselineCounts");dataProbe=arguments?.getString("dataProbe")=="true"; recoveryProbe=arguments?.getString("recoveryProbe")=="true"; fogPixelProbe=arguments?.getString("fogPixelProbe")=="true";fogTrailReset=arguments?.getString("fogTrailReset")=="true";fogTrailProbe=arguments?.getString("fogTrailProbe")=="true";directTrailProbe=arguments?.getString("directTrailProbe")=="true"; updateLogoutProbe=arguments?.getString("updateLogoutProbe")=="true";candidateSha=arguments?.getString("candidateSha");privateUpdateProbe=arguments?.getString("privateUpdateProbe")=="true";roadColorProbe=arguments?.getString("roadColorProbe")=="true"; cameraProbe=arguments?.getString("cameraProbe")=="true"; fixtureProbe=arguments?.getString("fixtureProbe")=="true"; catalogProbe=arguments?.getString("catalogProbe")=="true"; networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments); start() }
 }

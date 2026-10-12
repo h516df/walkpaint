@@ -1,7 +1,12 @@
 package cn.walkpaint
 
-/** AMap 10+ ships native libraries only for ARM. Match the actual process ABI. */
+/** ARM-only artifacts can use an advertised ARM64 native bridge. Universal artifacts still
+ * choose the primary ABI and must not enable AMap in an x86 process without its ARM library.
+ * Runtime consent, key, map-loaded state and actual JNI mapping are verified separately.
+ */
 object AmapPlatform {
-    fun supported(abis: List<String>): Boolean =
-        abis.firstOrNull() in setOf("arm64-v8a", "armeabi-v7a")
+    private val ARM_ABIS = setOf("arm64-v8a", "armeabi-v7a")
+
+    fun supported(abis: List<String>, arm64Only: Boolean = false): Boolean =
+        if (arm64Only) "arm64-v8a" in abis else abis.firstOrNull() in ARM_ABIS
 }
