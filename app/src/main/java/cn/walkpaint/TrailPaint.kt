@@ -367,9 +367,11 @@ internal class TrailPainter {
         val transparent = TrailPaint.FOG_COLOR and 0x00FFFFFF
         eraseFill.shader = LinearGradient(0f, 0f, fade.toFloat(), 0f, opaque, transparent, Shader.TileMode.CLAMP)
         canvas.drawRect(0f, 0f, fade.toFloat(), target.heightPx.toFloat(), eraseFill)
+        eraseFill.shader = LinearGradient((target.widthPx - fade).toFloat(), 0f, target.widthPx.toFloat(), 0f, transparent, opaque, Shader.TileMode.CLAMP)
         canvas.drawRect((target.widthPx - fade).toFloat(), 0f, target.widthPx.toFloat(), target.heightPx.toFloat(), eraseFill)
         eraseFill.shader = LinearGradient(0f, 0f, 0f, fade.toFloat(), opaque, transparent, Shader.TileMode.CLAMP)
         canvas.drawRect(0f, 0f, target.widthPx.toFloat(), fade.toFloat(), eraseFill)
+        eraseFill.shader = LinearGradient(0f, (target.heightPx - fade).toFloat(), 0f, target.heightPx.toFloat(), transparent, opaque, Shader.TileMode.CLAMP)
         canvas.drawRect(0f, (target.heightPx - fade).toFloat(), target.widthPx.toFloat(), target.heightPx.toFloat(), eraseFill)
         eraseFill.shader = null
     }

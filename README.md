@@ -1,3 +1,15 @@
+# 足迹涂色 · v0.38
+
+自动记录步行、骑行和驾车足迹，沿已保存路线连续显露地图。无需准备道路包，数据保存在本机。
+
+本版修复快速暂停恢复导致的断录、“定位我”误缩到全部历史范围，以及迷雾两侧边缘未渐隐；应用内更新兼容正式包和旧版本命名。我的 → 检查更新可查看中文说明并通过本人 GitHub 设备授权获取私有更新，校验后交给系统确认覆盖安装。
+
+[私有发布页](https://github.com/h516df/walkpaint/releases/tag/v0.38) · [手机 ARM64 正式包](https://github.com/h516df/walkpaint/releases/download/v0.38/WalkPaint-v0.38-arm64.apk) · [测试与限制](docs/evidence/V038.md)。同签名/code40/schema2，覆盖安装保留旧足迹，请勿卸载或清除数据。
+
+292 项单元测试、专用 Android 36 模拟器记录/地图/正式包覆盖安装已验收；vivo 真机高德、长时间户外后台及本人账号的本轮授权下载安装仍未验收。历史版本说明在下方，不代表当前分发状态。
+
+---
+
 # 当前版本：v0.16 高德联网直接轨迹涂色
 
 无需准备地图；已保存GPS直接涂色，步行、骑行和正常驾车共用记录。186 JVM/7 guard及Google真实直接轨迹、历史、换色、联网备用底图、重开、320dp和旧数据保留通过；code18/schema2/原签名手机候选已生成。[证据与手机验收限制](docs/evidence/V016_DIRECT_TRAILS.md)。**私有预览已发布，手机是否安装未核实，新ARM高德/真实驾车和长期后台仍未验收。** [发布页](https://github.com/h516df/walkpaint/releases/tag/v0.16) · [手机APK（约70MB）](https://github.com/h516df/walkpaint/releases/download/v0.16/WalkPaint-v0.16-arm64-debug.apk)。服务器与实际下载SHA一致，覆盖安装保留旧数据；已有版本从“我的→更多设置→检查更新”进入。旧v0.15下载保留。

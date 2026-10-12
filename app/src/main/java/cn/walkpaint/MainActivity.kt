@@ -163,14 +163,14 @@ class MainActivity : ComponentActivity() {
     private var roadAreaHint by mutableStateOf("")
     private var boundaryCatalog: RoadCatalog?=null
     private var boundaryRoads: List<RoadSegment>?=null
-    private fun clearDaySelection() {
+    private fun clearDaySelection(showExtent: Boolean = true) {
         selectedDay=null;pendingTripFocus=null;follow.locate();lastCameraPoint=null
         lastRevision=-1;updateUi()
         // "Back to all exploration" shows what has actually been explored. Following the person at
         // street zoom cannot do that once the history is bigger than a few streets: ground walked
         // days ago is kilometres away, and dragging there by hand at street zoom is not something a
         // person can do. The person's own position is one tap away with 定位我.
-        if (!showExploredExtent()) syncFollowCamera(force=true)
+        if (!showExtent || !showExploredExtent()) syncFollowCamera(force=true)
     }
 
     /**
@@ -407,7 +407,7 @@ class MainActivity : ComponentActivity() {
                     mapRoadState = mapRoadState,
                     roadAreaHint = roadAreaHint,
                     onShowAll = { clearDaySelection() },
-                    onLocate = { clearDaySelection(); centerUser() },
+                    onLocate = { clearDaySelection(showExtent=false); centerUser() },
                     onToggleTracking = { requested ->
                         if (requested) beginEnable()
                         else {

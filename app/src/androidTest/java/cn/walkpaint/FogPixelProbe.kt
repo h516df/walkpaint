@@ -86,8 +86,8 @@ internal object FogPixelProbe {
         //    as it was: no darker band, no second corridor, no growing edge.
         val samples = (0..12).map { step -> minOf(frame.widthPx - 1, midX + step * 4) to midY }
         val firstPass = samples.map { (x, y) -> bitmap.getPixel(x, y) }
-        painter.update(listOf(street, street.reversed()), PIGMENT, null, view)
-        val secondPass = samples.map { (x, y) -> bitmap.getPixel(x, y) }
+        val repeated = painter.update(listOf(street, street.reversed()), PIGMENT, null, view)!!
+        val secondPass = samples.map { (x, y) -> repeated.getPixel(x, y) }
         val worst = firstPass.indices.maxOf { index ->
             val a = firstPass[index]; val b = secondPass[index]
             maxOf(
@@ -150,6 +150,13 @@ internal object FogPixelProbe {
         check(wideFrame.contains(wideView.latMin, wideView.lonMin) &&
             wideFrame.contains(wideView.latMax, wideView.lonMax),
             "a view thirty kilometres across is not fully covered by the veil frame")
+
+        // Check every edge, rather than only the left one. A gradient at the wrong origin leaves
+        // the right/bottom edges opaque and produces a visible rectangular seam while panning.
+        val edgeImage=TrailPainter().update(listOf(street),PIGMENT,null,view)!!
+        val edgeY=edgeImage.height/3
+        check(alpha(edgeImage.getPixel(edgeImage.width-1,edgeY))<=8,"right fog border is not faded")
+        check(alpha(edgeImage.getPixel(edgeImage.width/3,edgeImage.height-1))<=8,"bottom fog border is not faded")
 
         return if (failures.isEmpty()) "FOG_PIXEL_PROBE_PASS"
         else "FOG_PIXEL_PROBE_FAIL: " + failures.joinToString(" | ")
