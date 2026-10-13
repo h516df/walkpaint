@@ -4,6 +4,7 @@ Install the same-signature instrumentation separately with adb install -r. This 
 installs, uninstalls, clears data, changes consent or targets a phone. Fallback is a failure.
 """
 import argparse
+import os
 import hashlib
 import json
 import re
@@ -14,7 +15,7 @@ from pathlib import Path
 from google_avd_guard import require_walkpaint_google_avd
 
 ADB = r'D:\Apps\Android\sdk\platform-tools\adb.exe'
-SERIAL = 'emulator-5556'
+SERIAL = os.environ.get('WALKPAINT_AVD_SERIAL', 'emulator-5560')
 
 
 def mapped_amap_libraries(apk, offsets):
@@ -78,3 +79,4 @@ def main():
 
 if __name__ == '__main__':
     raise SystemExit(main())
+
