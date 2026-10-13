@@ -51,9 +51,16 @@ PREFS = '/data/user/0/cn.walkpaint/shared_prefs/ui_onboarding.xml'
 # conversion, and one below it would fail a correct one, so it sits between: the viewport centre
 # must land on the fixture, and a raw-coordinate leak lands half a kilometre away.
 CHINA_FIXTURE_TOLERANCE_M = 400.0
+# The overlay is placed from the frame, so it should land on the fixture's display datum to within
+# the frame's own padding; 120 m is far tighter than the ~500 m datum shift and far looser than GPS.
+OVERLAY_DATUM_TOLERANCE_M = 120.0
 
 PROBLEMS: list[str] = []
 NOTES: list[str] = []
+# Things this run could not measure, as opposed to things that were measured and are wrong. They
+# exit non-zero too, but they must never be reported as a failing app: that distinction is the
+# difference between "the fog is broken" and "the checker did not get far enough to say".
+BLOCKED: list[str] = []
 
 
 def metres(a, b) -> float:
@@ -66,6 +73,33 @@ def metres(a, b) -> float:
     dl = math.radians(lon2 - lon1)
     h = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
     return 2 * 6371008.8 * math.asin(math.sqrt(h))
+
+
+def gcj_forward(lat: float, lon: float):
+    """WGS84 -> GCJ-02, the published algorithm, recomputed here as an independent reference.
+
+    Deliberately a second implementation rather than a call into the app: the question this answers
+    is "is the shipped artifact's frame where the datum says it should be", and a checker that
+    borrowed the app's own transform could not answer it.
+    """
+    import math
+    if not (72.004 <= lon <= 137.8347 and 0.8293 <= lat <= 55.8271):
+        return lat, lon
+    a, ee = 6378245.0, 0.00669342162296594323
+    pi = math.pi
+    x, y = lon - 105.0, lat - 35.0
+    dlat = (-100.0 + 2.0 * x + 3.0 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * math.sqrt(abs(x))
+            + (20.0 * math.sin(6.0 * x * pi) + 20.0 * math.sin(2.0 * x * pi)) * 2.0 / 3.0
+            + (20.0 * math.sin(y * pi) + 40.0 * math.sin(y / 3.0 * pi)) * 2.0 / 3.0
+            + (160.0 * math.sin(y / 12.0 * pi) + 320.0 * math.sin(y * pi / 30.0)) * 2.0 / 3.0)
+    dlon = (300.0 + x + 2.0 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * math.sqrt(abs(x))
+            + (20.0 * math.sin(6.0 * x * pi) + 20.0 * math.sin(2.0 * x * pi)) * 2.0 / 3.0
+            + (20.0 * math.sin(x * pi) + 40.0 * math.sin(x / 3.0 * pi)) * 2.0 / 3.0
+            + (150.0 * math.sin(x / 12.0 * pi) + 300.0 * math.sin(x / 30.0 * pi)) * 2.0 / 3.0)
+    rad = lat / 180.0 * pi
+    magic = 1 - ee * math.sin(rad) ** 2
+    return (lat + (dlat * 180.0) / ((a * (1 - ee)) / (magic * math.sqrt(magic)) * pi),
+            lon + (dlon * 180.0) / (a / math.sqrt(magic) * math.cos(rad) * pi))
 
 
 def note(text: str) -> None:
@@ -94,6 +128,14 @@ def main() -> int:
                         help='anonymous fixture latitude for the datum check (0 disables it)')
     parser.add_argument('--china-lon', type=float, default=121.4737,
                         help='anonymous fixture longitude for the datum check (0 disables it)')
+    parser.add_argument('--debug-consent-apk', default=None,
+                        help='an arm64 *debuggable* build of the same app, installed first only so '
+                             'the AMap consent switch can be written with run-as. A release build '
+                             'is deliberately not debuggable, so its own consent can only be given '
+                             'through the UI, which a person does on their own phone. The candidate '
+                             'APK is then installed over it with -r, keeping that data.')
+    parser.add_argument('--keep-data', action='store_true',
+                        help='do not uninstall before installing the candidate')
     args = parser.parse_args()
 
     serial = args.serial
@@ -133,8 +175,42 @@ def main() -> int:
 
     # ---- install cleanly, then make the app willing to use AMap ------------------------------
     adb(serial, 'shell', 'am', 'force-stop', PACKAGE)
-    adb(serial, 'uninstall', PACKAGE)
-    installed = subprocess.run([str(ADB), '-s', serial, 'install', str(apk)],
+    if not args.keep_data:
+        adb(serial, 'uninstall', PACKAGE)
+    if args.debug_consent_apk:
+        ready = subprocess.run([str(ADB), '-s', serial, 'install', '-r', str(args.debug_consent_apk)],
+                              capture_output=True, text=True, timeout=600)
+        note('debuggable build installed first for the consent switch: %s'
+             % (ready.stdout.strip().splitlines() or ['?'])[-1])
+        adb(serial, 'shell', 'pm', 'grant', PACKAGE, 'android.permission.ACCESS_FINE_LOCATION')
+        adb(serial, 'shell', 'run-as', PACKAGE, 'mkdir', '-p', 'shared_prefs')
+        prefs = ('<?xml version=\'1.0\' encoding=\'utf-8\' standalone=\'yes\' ?>\n<map>\n'
+                 '    <boolean name="amap_sdk_consent" value="true" />\n'
+                 '    <boolean name="amap_sdk_decision_seen" value="true" />\n'
+                 '    <boolean name="auto_notice_v3_seen" value="true" />\n</map>\n')
+        (out / 'prefs.xml').write_text(prefs, encoding='utf-8')
+        subprocess.run([str(ADB), '-s', serial, 'push', str(out / 'prefs.xml'), '/data/local/tmp/wp.xml'],
+                       capture_output=True, timeout=120)
+        adb(serial, 'shell', 'run-as', PACKAGE, 'cp', '/data/local/tmp/wp.xml', PREFS)
+        readback = adb(serial, 'shell', 'run-as', PACKAGE, 'cat', PREFS)
+        note('AMap consent written before the candidate: %s'
+             % ('yes' if 'amap_sdk_consent' in readback else 'NO'))
+        # Auto-record on, so the map follows the person. Without it this app deliberately leaves the
+        # camera wherever the person put it, and a checker that moves the fake fix would be
+        # measuring a camera that never went there.
+        auto = ('<?xml version=\'1.0\' encoding=\'utf-8\' standalone=\'yes\' ?>\n<map>\n'
+                '    <boolean name="automatic_enabled" value="true" />\n</map>\n')
+        (out / 'auto-record.xml').write_text(auto, encoding='utf-8')
+        subprocess.run([str(ADB), '-s', serial, 'push', str(out / 'auto-record.xml'),
+                        '/data/local/tmp/wp-auto.xml'], capture_output=True, timeout=120)
+        adb(serial, 'shell', 'run-as', PACKAGE, 'cp', '/data/local/tmp/wp-auto.xml',
+            '/data/user/0/cn.walkpaint/shared_prefs/footprint_preferences.xml')
+        note('auto-record switch written: %s'
+             % ('yes' if 'automatic_enabled' in adb(
+                 serial, 'shell', 'run-as', PACKAGE, 'cat',
+                 '/data/user/0/cn.walkpaint/shared_prefs/footprint_preferences.xml') else 'NO'))
+        adb(serial, 'shell', 'pm', 'grant', PACKAGE, 'android.permission.ACCESS_BACKGROUND_LOCATION')
+    installed = subprocess.run([str(ADB), '-s', serial, 'install', '-r', str(apk)],
                                capture_output=True, text=True, timeout=600)
     (out / 'install.txt').write_text(installed.stdout + installed.stderr, encoding='utf-8')
     note('install: %s' % (installed.stdout.strip().splitlines() or ['?'])[-1])
@@ -164,17 +240,23 @@ def main() -> int:
         adb(serial, 'shell', 'pm', 'grant', PACKAGE, permission)
 
     # Consent is the person's switch, so the probe sets exactly the two keys the UI would set, and
-    # only on this disposable dedicated AVD.
-    prefs = ('<?xml version=\'1.0\' encoding=\'utf-8\' standalone=\'yes\' ?>\n<map>\n'
-             '    <boolean name="amap_sdk_consent" value="true" />\n'
-             '    <boolean name="amap_sdk_decision_seen" value="true" />\n</map>\n')
-    (out / 'prefs.xml').write_text(prefs, encoding='utf-8')
-    subprocess.run([str(ADB), '-s', serial, 'push', str(out / 'prefs.xml'), '/data/local/tmp/wp.xml'],
-                   capture_output=True, timeout=120)
-    adb(serial, 'shell', 'run-as', PACKAGE, 'mkdir', '-p', 'shared_prefs')
-    copied = adb(serial, 'shell', 'run-as', PACKAGE, 'cp', '/data/local/tmp/wp.xml', PREFS)
-    readback = adb(serial, 'shell', 'run-as', PACKAGE, 'cat', PREFS)
-    note('AMap consent written: %s' % ('yes' if 'amap_sdk_consent' in readback else 'NO (%s)' % copied))
+    # only on this disposable dedicated AVD. A non-debuggable candidate cannot be written to with
+    # run-as; for those the switch was already written through a debuggable build installed over the
+    # same data (--debug-consent-apk), and the release artifact is installed after it with -r.
+    if args.debug_consent_apk:
+        note('consent switch was prepared by the debuggable build; the candidate is installed over it')
+    else:
+        prefs = ('<?xml version=\'1.0\' encoding=\'utf-8\' standalone=\'yes\' ?>\n<map>\n'
+                 '    <boolean name="amap_sdk_consent" value="true" />\n'
+                 '    <boolean name="amap_sdk_decision_seen" value="true" />\n</map>\n')
+        (out / 'prefs.xml').write_text(prefs, encoding='utf-8')
+        subprocess.run([str(ADB), '-s', serial, 'push', str(out / 'prefs.xml'), '/data/local/tmp/wp.xml'],
+                       capture_output=True, timeout=120)
+        adb(serial, 'shell', 'run-as', PACKAGE, 'mkdir', '-p', 'shared_prefs')
+        copied = adb(serial, 'shell', 'run-as', PACKAGE, 'cp', '/data/local/tmp/wp.xml', PREFS)
+        readback = adb(serial, 'shell', 'run-as', PACKAGE, 'cat', PREFS)
+        note('AMap consent written: %s'
+             % ('yes' if 'amap_sdk_consent' in readback else 'NO (%s)' % copied))
 
     # ---- launch it and look ---------------------------------------------------------------------
     adb(serial, 'shell', 'logcat', '-c')
@@ -288,30 +370,83 @@ def main() -> int:
                     note('china report | ' + line)
             wgs = re.search(r'可见中心\(WGS84\)=(-?[\d.]+),(-?[\d.]+)', china)
             gcj = re.search(r'中心=(-?[\d.]+),(-?[\d.]+)', china)
-            if not wgs:
-                problem('the export carries no WGS84 viewport centre, so the datum cannot be judged')
+            overlay = re.search(r'边界=(-?[\d.]+),(-?[\d.]+)~(-?[\d.]+),(-?[\d.]+)', china)
+            if not wgs and not overlay:
+                problem('the export carries neither a WGS84 viewport centre nor the ground '
+                        'overlay bounds, so the datum cannot be judged at all')
             elif not gcj:
                 problem('the engine reported no camera target, so the two datums cannot be compared')
             else:
-                wgs_lat, wgs_lon = float(wgs.group(1)), float(wgs.group(2))
                 gcj_lat, gcj_lon = float(gcj.group(1)), float(gcj.group(2))
-                to_fixture = metres(fixture, (wgs_lat, wgs_lon))
-                between = metres((wgs_lat, wgs_lon), (gcj_lat, gcj_lon))
-                note('WGS84 viewport centre is %.0f m from the fixture; the engine target differs '
-                     'from it by %.0f m' % (to_fixture, between))
-                if to_fixture > CHINA_FIXTURE_TOLERANCE_M:
-                    problem('the WGS84 viewport centre is %.0f m from the fixture (> %.0f m): the '
-                            'frame is not being placed on the ground the person is standing on'
-                            % (to_fixture, CHINA_FIXTURE_TOLERANCE_M))
-                if between < 100.0:
-                    problem('the engine target and the WGS84 centre are only %.0f m apart, so no '
-                            'datum conversion reached the map in China: the app is handing raw '
-                            'WGS84 coordinates to an engine that draws in GCJ-02' % between)
-                elif between > 900.0:
-                    problem('the two centres are %.0f m apart, far more than a datum shift, which '
-                            'is what a doubled conversion looks like' % between)
+                if wgs:
+                    # The build reports the viewport centre in WGS84 itself: compare it with the
+                    # fixture and with the engine's own (display-datum) target.
+                    wgs_lat, wgs_lon = float(wgs.group(1)), float(wgs.group(2))
+                    to_fixture = metres(fixture, (wgs_lat, wgs_lon))
+                    between = metres((wgs_lat, wgs_lon), (gcj_lat, gcj_lon))
+                    note('WGS84 viewport centre is %.0f m from the fixture; the engine target '
+                         'differs from it by %.0f m' % (to_fixture, between))
+                    if to_fixture > CHINA_FIXTURE_TOLERANCE_M:
+                        problem('the WGS84 viewport centre is %.0f m from the fixture (> %.0f m): '
+                                'the frame is not placed on the ground the person is standing on'
+                                % (to_fixture, CHINA_FIXTURE_TOLERANCE_M))
+                    if between < 100.0:
+                        problem('the engine target and the WGS84 centre are only %.0f m apart, so '
+                                'no datum conversion reached the map in China' % between)
+                    elif between > 900.0:
+                        problem('the two centres are %.0f m apart, far more than a datum shift, '
+                                'which is what a doubled conversion looks like' % between)
+                elif overlay:
+                    # The shipped export has no WGS84 centre line, so the check is made on the
+                    # ground overlay's own bounds: where the veil was actually placed.
+                    #
+                    # Careful: the field report's contract is not fixed across builds. This probe was
+                    # first calibrated against a build whose `中心=` printed the engine's raw target
+                    # (the display datum, GCJ-02); the published v0.43 prints that same line converted
+                    # back to WGS84 with fromAmap(). Comparing either value against the wrong datum
+                    # produces a clean 481 m "failure" that is entirely the checker's assumption —
+                    # which is what this run reported before this note existed. The datum the line is
+                    # in is therefore detected, not assumed.
+                    lat1, lon1, lat2, lon2 = (float(overlay.group(i)) for i in (1, 2, 3, 4))
+                    centre = ((lat1 + lat2) / 2, (lon1 + lon2) / 2)
+                    expected = gcj_forward(*fixture)
+                    bounds_to_fixture = metres(centre, fixture)
+                    camera_to_raw = metres((gcj_lat, gcj_lon), fixture)
+                    camera_to_display = metres((gcj_lat, gcj_lon), expected)
+                    datum = 'WGS84' if camera_to_raw < camera_to_display else 'display(GCJ-02)'
+                    note('the report prints the engine centre in %s: %.0f m from the fixture and '
+                         '%.0f m from its display datum; the overlay bounds centre is %.0f m from '
+                         'the fixture' % (datum, camera_to_raw, camera_to_display, bounds_to_fixture))
+                    if min(camera_to_raw, camera_to_display) > 2000.0:
+                        # The map is not looking at the fixture at all, so nothing here describes the
+                        # fixture's placement. This app only follows the person while recording, and
+                        # the switch is written by the debuggable pre-install; if that did not take,
+                        # the camera stays wherever it was. Not a failure, not a measurement.
+                        blocked.append(
+                            'the map is not on the fixture (engine centre is %.0f m away), so the '
+                            'China datum placement was NOT measured on this artifact'
+                            % min(camera_to_raw, camera_to_display))
+                    elif bounds_to_fixture > CHINA_FIXTURE_TOLERANCE_M:
+                        problem('the veil was placed %.0f m from the fixture itself (> %.0f m), which '
+                                'no datum conversion can explain' % (
+                                    bounds_to_fixture, CHINA_FIXTURE_TOLERANCE_M))
+                    elif datum == 'display(GCJ-02)':
+                        # The engine's own centre is at the display datum of the fixture: the
+                        # conversion reached the map. This is the decisive, build-independent case.
+                        note('the engine centre sits on the display datum, so the conversion did '
+                             'reach the map')
+                        if camera_to_display > OVERLAY_DATUM_TOLERANCE_M:
+                            problem('the engine centre is %.0f m from the display datum of the '
+                                    'fixture' % camera_to_display)
+                    else:
+                        blocked.append(
+                            'this build prints the engine centre already converted back to WGS84, so '
+                            'the numbers alone cannot show where the veil landed on the basemap; '
+                            'the report contract changed between builds (fromAmap was added to '
+                            'cameraSummary) and this check needs a raw display-datum value or a '
+                            'renamed field to decide it')
 
-    verdict = 'pass' if not PROBLEMS else 'fail'
+    verdict = 'fail' if PROBLEMS else ('blocked' if BLOCKED else 'pass')
     json.dump({'verdict': verdict, 'apk': str(apk), 'apk_sha256': digest, 'serial': serial,
                'avd': avd, 'abilist': abilist, 'native_bridge_exec': bridge,
                'candidate_abis': abis, 'amap_libs_in_apk': amap_libs,
@@ -319,13 +454,20 @@ def main() -> int:
                'pid': pid, 'arm_libraries_loaded': loaded,
                'engine_amap': bool(report and '引擎判定=正在用高德' in report),
                'ground_overlay': bool(report and re.search(r'地面图层有', report)),
-               'problems': PROBLEMS, 'notes': NOTES},
+               'problems': PROBLEMS, 'not_measured': BLOCKED, 'notes': NOTES},
               open(out / 'verdict.json', 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
-    print('\nVERDICT: %s (%d problem(s))' % (verdict, len(PROBLEMS)), flush=True)
+    print('\nVERDICT: %s (%d problem(s), %d not measured)'
+          % (verdict, len(PROBLEMS), len(BLOCKED)), flush=True)
     for item in PROBLEMS:
-        print('  - ' + item, flush=True)
+        print('  PROBLEM: ' + item, flush=True)
+    for item in BLOCKED:
+        print('  NOT MEASURED: ' + item, flush=True)
     print('evidence: %s' % out, flush=True)
-    return 0 if verdict == 'pass' else 4
+    if verdict == 'fail':
+        return 4
+    if verdict == 'blocked':
+        return 5
+    return 0
 
 
 if __name__ == '__main__':
