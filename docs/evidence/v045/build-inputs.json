@@ -1,0 +1,348 @@
+{
+  "version": "0.45",
+  "versionCode": 47,
+  "base_commit": "706dc98f2ed07aeef3a56818964bc9f40ca1be9a",
+  "production_sha256": "aab4d43068c0d7f7e3d46fdd1ca1965693ef442df4e5066bef051dc28be2494f",
+  "fingerprint_algorithm": "UTF8 sorted relative-path + NUL + sha256 + LF, production app/src/main and listed Gradle inputs; no local properties or credentials",
+  "production_files": [
+    {
+      "file": "app/build.gradle.kts",
+      "sha256": "2807543f8c00914c122d659d13920ac5cd32e1441a2c5cfed4b6b7d453452b33"
+    },
+    {
+      "file": "app/src/main/AndroidManifest.xml",
+      "sha256": "9a07577553795e9c8d121aa48ce97a10e22d68280b2fbde104a0dd9836dc2308"
+    },
+    {
+      "file": "app/src/main/assets/release-notes.json",
+      "sha256": "7e8e1ba59e0ccc27c4d0701ae0d93f1328677492199e2e64846be09d2495c76e"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/AmapMapController.kt",
+      "sha256": "5826f3a8ceeb0b9b3dc38e75abfe43024444bbde6ece865417e8132b903dca7a"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/AmapPlatform.kt",
+      "sha256": "27b8358eaaf1b2de1a960ee784a38d04f19b341e28a21252cdb6a65cd7486937"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/CoordinateInverse.kt",
+      "sha256": "486a4dadae68f93ecb217bb37179c15263d3c3f35bb274b430fc7e8741d1973a"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/DailyFootprints.kt",
+      "sha256": "304db6d0f4d4e4ec69c585592bb8ca2289f0bbea567cbad1ace3a0f15f6fbe08"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/DailyRoadCache.kt",
+      "sha256": "de3298e0367f38c52cc7437757844ddf1154ef2c35b733ce58810b405eeb0785"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/Diagnosis.kt",
+      "sha256": "7b0df48cd1b1f1a1cb346edab1c9e1c550a8b59a24b076a2a330e7dd5426149d"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/DiagnosticBuffer.kt",
+      "sha256": "6e7d7a1cf993dedb92bd13672549f0ac3ca927b80f0e812ac652f046038e246e"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/Exploration.kt",
+      "sha256": "1bbe60b253a965ea0255ea825fcd1cc90ba95dedd279893c65c2b6ad90c19451"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/FeedbackPage.kt",
+      "sha256": "8e14f378b9837b8b7766d32558ff41c4f7f6a7c74b981db4720ad8e7577a0b62"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/FeedbackReport.kt",
+      "sha256": "28d216e864b1f0eb727a5ae06aab2b1805d45ca70ccf0127965cb0e147cc3c81"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/FieldReport.kt",
+      "sha256": "b3d89d2002ca760a5fa5764d768c5959d6181ca85136823986edbb4374dda26c"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/FootprintDatabase.kt",
+      "sha256": "ad45f52898130314e306452487ba0c9a9fdbca86e44ec398730ad686c49de3d3"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/GpsFilterDiagnostics.kt",
+      "sha256": "11cc676337a90afc9f262de0108d79426b6ab580514e6a885a64e3fecc906397"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/HeadingFilter.kt",
+      "sha256": "942359f5c99402a6a501c7363f67666ffedd52fe9fc227d64416964ab50acef9"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/HeadingSensor.kt",
+      "sha256": "cd15b164c303631b9182df830231eb30469e007a2854ad17f03ea1e86723fa89"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/HealthCheckLoop.kt",
+      "sha256": "3ac6919a45f98a7b46990ed13232f21b8112926379d67fb9a740f27b8c6bea93"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/MainActivity.kt",
+      "sha256": "76825c234678544ddf98d3fd36e6766dd480a86a03986dfd43363c63c9624459"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/MapFixChoice.kt",
+      "sha256": "01d4fc266518b18df8917ac12f213ee520c1b28e7ab6188f1aa0488ff154a7c0"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/MapFollowState.kt",
+      "sha256": "6c276edf0fa5bfd6e6ac6f718b6fd8247ed256fb8159d52ff5b7a99ef8744543"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/MapNotice.kt",
+      "sha256": "2f66f531b629667035fab30af85ae1f996613309c3ed32d07140cf2032e02151"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/MobileDesign.kt",
+      "sha256": "ab9996e463441105b9cee766339990a58aa7c3bd2085545320c7dc411f861720"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/MovementCue.kt",
+      "sha256": "a6e13c5c76c559b5ef3741c7c8800df0df3575c2738b21be76785ca0f05ea804"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/PerfTrace.kt",
+      "sha256": "273c58ab2a9c56d30cee65d97a01ff336e5d3f5690167a8a0312d4e7310d87f8"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/PlaceName.kt",
+      "sha256": "671eb5b18bbf98548e0d2ddc9a602edc788b2781b5956e9ff00b142c376c91c0"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/PlaceNameRequest.kt",
+      "sha256": "1405541b7346fef5c55c67636e4a5cc7a89b2e28293b6e031b6018df90f2a8ad"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/PlaceProgress.kt",
+      "sha256": "b731e32f5f42a931f6cfa2a64550a51d4146595b2e32ddf4fa1d3e7935b9a80e"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/PrivateUpdatePolicy.kt",
+      "sha256": "fe5673dfddd895e4f3e6b9aaac949590462647570c5d43e2f9a7dd84e3760028"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/PrivateUpdater.kt",
+      "sha256": "b7cd7732ac283a450b035d4022ffb4eb7f67e72347cac22caed73ed733982015"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/ProblemHistory.kt",
+      "sha256": "8f0e75010c8f1bc3c1ffe1afe63faffb0017be4bb662c8dac50efa71395ed662"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/RecordedTrail.kt",
+      "sha256": "8b8faeb3c560705ded688e987eb6a333a7f2599a8a68a625c488848b87464b67"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/RecordingDiagnostics.kt",
+      "sha256": "42b5bece96837126651a2447992519fc40abc8d5edadfd3018c6ee85985de744"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/RecordingHealth.kt",
+      "sha256": "62bc9c5eb699a32820ea50c85e6d5b7311c2417053a5ffb4b8f5435d9dc97811"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/RecordingService.kt",
+      "sha256": "ffaf926b3222a04d332249d1ceff69289839a5f903117dad67abf5bf0b1011c5"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/RecordingSession.kt",
+      "sha256": "bde4195ff3c0bd0d7d2b55ce027bfea00eaa1b6f76155d1961774124a075b301"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/RecordingStatus.kt",
+      "sha256": "34803387123b30130b34eb206b241b6ec1bddd95647a34f0274cdde7e02dd43f"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/RoadAppearance.kt",
+      "sha256": "32540acee25009a2ad5fa2b8abefc210576e1a4378b92f7051a84b42fd47ce32"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/RoadColorDialog.kt",
+      "sha256": "3c9b9e2f1e3254c1c22882e10fe0a6b65eb3bc31b30bb9ec4feae01086244c90"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/RoadDownload.kt",
+      "sha256": "f3e6c74e8379c948f51456d7b56fbf2bb348201f61d10a5aa436e91fe2a70d7d"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/RoadMapFocus.kt",
+      "sha256": "039840ad343c9332a6bdc8955ec963e0ff2bb80f02c6a87dd15bc95b50312d3d"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/RoadMatchDiagnostics.kt",
+      "sha256": "ea016ba83cebf680ebd20d51d526d84ee2d10cda399d003104b89152a1395273"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/RoadPack.kt",
+      "sha256": "8b05b7532118e372fee27d086ed85d4352e1a7b3f91a9b80051af0d38f90aaad"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/RoadPaint.kt",
+      "sha256": "96a3f5d819f7799e997705811665af5899ec7e01c8fbca18013dc716342da6a4"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/RoadPaintColor.kt",
+      "sha256": "812dca9cd9e9b7b3c7307b2026f793b20452cbdfb74a9408361e557396051b0b"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/Screens.kt",
+      "sha256": "75a246f522dccf6073dc2f40dd8c91273e86023442f14a33a1bbe7d7d13cffa4"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/StepZoomTarget.kt",
+      "sha256": "923c06c22bd9f82fb2177bafab0ea94a0e0ff0196f3885d40b6092a778504ec5"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/Theme.kt",
+      "sha256": "b6aff79da5e060ad52ea61a9c67c86a5c65ecb6382347a4ded34355c55d3a9e5"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/TrackingSetup.kt",
+      "sha256": "99b213e63c450c0255efaefeb7e7b5771af637bb9858ed5ff73af2cf22197d69"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/TrackMapJson.kt",
+      "sha256": "1ba292f663e1ca2e06af971007fd1db573654aeb33301f4bde5f79ef10a42a2a"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/Tracks.kt",
+      "sha256": "36f9aae8f0ec6a21c80df02afcdd20f64382607b2f7e78626f48d6a6840ef889"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/TrailPaint.kt",
+      "sha256": "ca3a4dd80f0d90fc19e82ef2f440560fdb197aa09e5d90aae0e675ead8887553"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/TrailShape.kt",
+      "sha256": "e0ec32bb2fa3cf12b682c9851b2b4132d04bed8a3045e68fb9f308498e7dac56"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/UiPresentation.kt",
+      "sha256": "a91e92c39f05f072eec73f87d65b2897dbe7a956b95ab81fbf1a09fec85a6d35"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/UiTokens.kt",
+      "sha256": "42ff1157b4d0adc6d3831c4a0cda3e203abeea0bf2d5c11164565c4983055fd6"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/UpdateApkVerifier.kt",
+      "sha256": "fef33875dd4fc400451f458d1537ee9f8e6a3f8011db064208b1afd1a9a30f30"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/UpdateAuthorization.kt",
+      "sha256": "0e1f8d7e685969f52f14eff2ebe99b245ac53870b4d3aecc40e2d0f41b363205"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/UpdateCatalog.kt",
+      "sha256": "874d563d8f3edd299164e20c750855746d27f908721a05e875677e529ec46899"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/UpdateDeviceFlow.kt",
+      "sha256": "2b38dcda1124bb85b03885a9560109cdd614624541dd9d6c54f6c34901f2173d"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/UpdateFileDownload.kt",
+      "sha256": "c3fb8d16f795322ec6eee7f3c95f88c3489551e15e38bf612bc6753651cd65ad"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/UpdateInfo.kt",
+      "sha256": "ffe23ea71980669ed02a7e69a76ff18b57bfcddd8ec9783af00a3daf2ae6c5b3"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/UpdatesPage.kt",
+      "sha256": "ad9573a0cc27c3e40fff0dc7625422a374bce0d200d9b2168e2ab5c68fca041d"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/UpdateTransport.kt",
+      "sha256": "4ec04e63b88fdb5a7f50cfe2c59d250290363bcb35370c58a8086c5c8962c801"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/VeilReport.kt",
+      "sha256": "27956bf14f051b9a232f3ed4a0cb0307594d56b5b2f4feab1622e82dbe23c901"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/WalkPaintApp.kt",
+      "sha256": "aaccf7eceba66354418c62dda47ac06e8fab40d86f915171fa489a2d43f76ac3"
+    },
+    {
+      "file": "app/src/main/java/cn/walkpaint/YearHeatmap.kt",
+      "sha256": "151b8b4a28ad6cf79c958c365914bbb711031c783d1ee4b84517da42e4f8112f"
+    },
+    {
+      "file": "app/src/main/res/drawable/ic_back.xml",
+      "sha256": "456de94607001dc2d9818a7ce9da04126285e254e1290c381500117952810085"
+    },
+    {
+      "file": "app/src/main/res/drawable/ic_export.xml",
+      "sha256": "c59d4c6abaa85758cbceab2ac3acd98786aa71b274f12bbd05f52311ef89bbce"
+    },
+    {
+      "file": "app/src/main/res/drawable/ic_footprint.xml",
+      "sha256": "ccc88cc5c3c101cdfc66fac382262a64340488411855b89640d343add7e9d1b4"
+    },
+    {
+      "file": "app/src/main/res/drawable/ic_location.xml",
+      "sha256": "4475da0d407ea24fcddadfeaeeff5257ef20cc286407076ef012bcf2877386f7"
+    },
+    {
+      "file": "app/src/main/res/drawable/ic_lock.xml",
+      "sha256": "32a92d903cc3d6e2cf0f7b936b7fd6be5360bfcbcae0f9c8e55f2b80e9025a05"
+    },
+    {
+      "file": "app/src/main/res/drawable/ic_map.xml",
+      "sha256": "e806679a74d8e2b3e213f7fd64ddf1a2e125589bca74069efc1256e6f562c9fe"
+    },
+    {
+      "file": "app/src/main/res/drawable/ic_notification.xml",
+      "sha256": "8e9b7daf48958cda5252a756a1484be4d114b41fe6cb68542facde369d9798b2"
+    },
+    {
+      "file": "app/src/main/res/drawable/ic_person.xml",
+      "sha256": "7ed937d1dc61c14a67442f71c68bdd9aefeee26700d0b78e122017509fd6a457"
+    },
+    {
+      "file": "app/src/main/res/drawable/ic_route.xml",
+      "sha256": "71dda51efb8ad24138905de2c189e0e278f4a514fa203d0851714e15590cc69d"
+    },
+    {
+      "file": "app/src/main/res/values/styles.xml",
+      "sha256": "bbc6f1a5191c1440b6ff2ac106260923f2c5f1106099afe26c37b322b8f3de5b"
+    },
+    {
+      "file": "app/src/main/res/xml/update_paths.xml",
+      "sha256": "8dbbf94bfdf253c87dbe3ab2be51bf13dc417ef8533e5f505ee241878be7809d"
+    },
+    {
+      "file": "build.gradle.kts",
+      "sha256": "62be1758eb3aa3fd5a8dff06dd7ddbcf6c120fcccfffcccacb36e927fc103bff"
+    },
+    {
+      "file": "gradle/wrapper/gradle-wrapper.jar",
+      "sha256": "381dff8aa434499aa93bc25572b049c8c586a67faff2c02f375e4f23e17e49de"
+    },
+    {
+      "file": "gradle/wrapper/gradle-wrapper.properties",
+      "sha256": "bfd4d0f4a087cabd7fc4b8980942cfb557327fda1dc481b18a7571f127de27e7"
+    },
+    {
+      "file": "gradle.properties",
+      "sha256": "0fc3d15a0fef8077614fe5415a0aa540b2c35e7fb79e4f77b96829edc48de3dd"
+    },
+    {
+      "file": "settings.gradle.kts",
+      "sha256": "a0e2b84d9656bf2dc06784919fd59504fca9c787b35cf9250a78f1c11e9deda8"
+    }
+  ],
+  "apk_sha256": "2089cbdb54691f1b16324e2dde6e9cde42bd2f68fc03d628b59ac03e23c0841f",
+  "apk_bytes": 65972091,
+  "instrumentation_sha256": "712539fc0ef41bab43c689ce3f6290f175965cca0e322224d00cdfc77091842e",
+  "jvm_tests": 327,
+  "jvm_failures": 0,
+  "phone_path": "not_verified",
+  "code_commit": "3231f2d05eb45981f2840c44294e2759591f3de9"
+}

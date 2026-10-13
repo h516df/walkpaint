@@ -1,0 +1,1 @@
+AMAP_RAPID_ZOOM_FAIL: Lost rapid zoom-out increments: {"start_zoom":17,"four_out_zoom":16,"four_in_zoom":20,"gap_ms":45,"actual_sdk":true}

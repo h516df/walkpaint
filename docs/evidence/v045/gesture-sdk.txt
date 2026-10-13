@@ -1,0 +1,1 @@
+AMAP_GESTURE_PASS: {"street_zoom":17,"wide_zoom":11.45,"returned_zoom":17,"transient_samples":24,"minimum_unknown_black":1}

@@ -38,8 +38,8 @@ import kotlin.math.cos
 @Composable
 internal fun DesignStat(value: String, label: String, modifier: Modifier = Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(value, color = Ink, fontSize = 21.sp, fontWeight = FontWeight.SemiBold,
-            fontFamily = FontFamily.Monospace, style = TabularFigures)
+        Text(value, color = Ink, fontSize = 20.sp, fontWeight = FontWeight.SemiBold,
+            fontFamily = FontFamily.Serif, style = TabularFigures)
         Text(label, color = Muted, fontSize = 12.sp)
     }
 }
@@ -47,16 +47,12 @@ internal fun DesignStat(value: String, label: String, modifier: Modifier = Modif
 @Composable
 internal fun DesignSummary(state: TrackState) {
     Surface(color = Canvas, shape = CardShape, border = BorderStroke(1.dp, Line)) {
-        Column(Modifier.fillMaxWidth().padding(20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            Text("累计里程", color = Muted, fontSize = 13.sp)
-            Text(exploredDistance(state.totalMeters), color = Ink, fontSize = 36.sp,
-                fontWeight = FontWeight.Bold, style = TabularFigures)
-            HorizontalDivider(color = Line)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                DesignStat("${state.dayCount}", "探索天数", Modifier.weight(1f))
-                DesignStat("${state.realPointCount}", "足迹点", Modifier.weight(1f))
-                DesignStat("${state.realTracks.size}", "记录次数", Modifier.weight(1f))
-            }
+        Row(Modifier.fillMaxWidth().padding(vertical=16.dp),verticalAlignment=Alignment.CenterVertically) {
+            DesignStat(exploredDistance(state.totalMeters),"累计里程",Modifier.weight(1f).padding(horizontal=12.dp))
+            VerticalDivider(Modifier.height(44.dp),color=Line)
+            DesignStat("${state.dayCount}","探索天数",Modifier.weight(1f).padding(horizontal=12.dp))
+            VerticalDivider(Modifier.height(44.dp),color=Line)
+            DesignStat("${state.realPointCount}","足迹点",Modifier.weight(1f).padding(horizontal=12.dp))
         }
     }
 }
@@ -70,17 +66,22 @@ internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolea
     Box(Modifier.fillMaxSize()) {
         mapContent()
         if (day != null) Surface(onClick = onShowAll, color = Canvas, shape = ChipShape,
-            modifier = Modifier.align(Alignment.TopCenter).padding(12.dp)) {
+            modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top=12.dp)) {
             Text("$day · 返回全部探索", color = Pigment, fontSize = 13.sp, modifier = Modifier.padding(12.dp))
         }
-        Column(Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 42.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if(notice!=null && day==null) Surface(onClick=onSettings,color=Canvas,shape=PanelShape,
+            border=BorderStroke(1.dp,Line),shadowElevation=1.dp,
+            modifier=Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top=12.dp,start=16.dp,end=16.dp)) {
+            Text("$notice  ›",color=Ink,fontSize=13.sp,modifier=Modifier.padding(horizontal=14.dp,vertical=12.dp))
+        }
+        Column(Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(end = 16.dp, bottom = 104.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("放大地图" to { onZoom(1) }, "缩小地图" to { onZoom(-1) }, "定位我" to onLocate).forEach { (label, action) ->
-                Surface(onClick = action, color = Canvas, shape = RoundedCornerShape(16.dp),
+                Surface(onClick = action, color = Canvas.copy(alpha=.97f), shape = RoundedCornerShape(13.dp),
                     border = BorderStroke(1.dp, Line), shadowElevation = 2.dp, modifier = Modifier.size(48.dp)) {
                     Box(Modifier.semantics { contentDescription = label }, contentAlignment = Alignment.Center) {
-                        if (label == "定位我") Icon(painterResource(R.drawable.ic_location), null, tint = Pigment, modifier = Modifier.size(23.dp))
-                        else Text(if (label == "放大地图") "+" else "−", color = Pigment, fontSize = 28.sp)
+                        if (label == "定位我") Icon(painterResource(R.drawable.ic_location), null, tint = Ink, modifier = Modifier.size(21.dp))
+                        else Text(if (label == "放大地图") "+" else "−", color = Ink, fontSize = 24.sp,fontWeight=FontWeight.Normal)
                     }
                 }
             }
@@ -140,7 +141,7 @@ internal fun DesignTripsPage(state: TrackState, roadColor: Int, onTrip: (Track) 
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("足迹", color = Ink, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                    Text("足迹", color = Ink, fontSize = 25.sp, fontWeight = FontWeight.SemiBold,fontFamily=FontFamily.Serif)
                     Text("共 ${exploredDistance(state.totalMeters)} · ${days.size} 个探索日", color = Muted, fontSize = 13.sp,
                         modifier = Modifier.padding(top = 6.dp))
                 }
@@ -172,7 +173,7 @@ private fun DesignTripDetail(day: DailyFootprint, color: Int, onBack: () -> Unit
                 Text(day.key, color = Muted, fontSize = 13.sp)
             }
         }
-        RouteThumbnail(day.focusTrack(), Modifier.fillMaxWidth().height(240.dp), color)
+        RouteThumbnail(day.focusTrack(), Modifier.fillMaxWidth().height(190.dp), color)
         Surface(color = Canvas, shape = CardShape, border = BorderStroke(1.dp, Line)) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
                 Row(Modifier.fillMaxWidth()) {
