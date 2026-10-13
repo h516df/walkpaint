@@ -51,8 +51,6 @@ internal fun DesignSummary(state: TrackState) {
             DesignStat(exploredDistance(state.totalMeters),"累计里程",Modifier.weight(1f).padding(horizontal=12.dp))
             VerticalDivider(Modifier.height(44.dp),color=Line)
             DesignStat("${state.dayCount}","探索天数",Modifier.weight(1f).padding(horizontal=12.dp))
-            VerticalDivider(Modifier.height(44.dp),color=Line)
-            DesignStat("${state.realPointCount}","足迹点",Modifier.weight(1f).padding(horizontal=12.dp))
         }
     }
 }

@@ -523,8 +523,8 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
     updatesContent: @Composable (onBack:()->Unit)->Unit) {
     var page by rememberSaveable { mutableStateOf("我的") }
     var revokeConfirm by rememberSaveable { mutableStateOf(false) }
-    if(page=="问题反馈") { feedbackContent { page="更多设置" };return }
-    if(page=="检查更新") { updatesContent { page="更多设置" };return }
+    if(page=="问题反馈") { feedbackContent { page="我的" };return }
+    if(page=="检查更新") { updatesContent { page="我的" };return }
     BackHandler(enabled=page!="我的") { page=if(page=="更多设置") "我的" else "更多设置" }
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
         if(page!="我的") item {
@@ -546,39 +546,27 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
                             modifier=Modifier.semantics { contentDescription="自动记录" })
                     }
                     if(automatic && notice!=null) SettingRow(notice,"查看权限与记录状态",onResolve)
-                    SettingRow("定位与后台权限","由 Android 系统管理",onPermissions)
                 } }
-                item { Section("地图与涂色") {
-                    SettingRow("地图服务与隐私",provider,onAmap)
+                item { Section("涂色") {
                     SettingRow("涂色颜色",RoadPaintColor.name(roadColor),onAppearance)
                 } }
-                item { Section("数据与备份") {
-                    SettingRow("导出足迹 JSON","保存到你选择的位置",onExport)
-                    SettingRow("导入 JSON 备份","合并去重，保留历史足迹",onImport)
-                    SettingRow("诊断与反馈","预览报告或导出记录现场") { page="问题反馈" }
-                } }
-                item { Section("外观与关于") {
-                    Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                        listOf("跟随系统","浅色","深色").forEachIndexed { mode,label ->
-                            FilterChip(selected=appearanceMode==mode,onClick={onAppearanceMode(mode)},label={Text(label)})
-                        }
-                    }
+                item { Section("帮助") {
+                    SettingRow("问题反馈","查看记录状态与反馈问题") { page="问题反馈" }
                     SettingRow("检查更新","当前版本 ${BuildConfig.VERSION_NAME}") { page="检查更新" }
-                    SettingRow("首次使用引导","查看自动记录与隐私说明",onShowIntro)
-                    SettingRow("更多设置","权限、电池、完整诊断与关于") { page="更多设置" }
                 } }
+                item { SettingRow("更多设置","备份、隐私与外观") { page="更多设置" } }
                 item { Text("足迹涂色  ${BuildConfig.VERSION_NAME} · 数据保存在本机",color=Muted,fontSize=12.sp) }
             }
             "更多设置" -> item { Section("设置") {
                 SettingRow("备份与恢复","保存或找回你的足迹") { page="备份与恢复" }
                 SettingRow("隐私与权限","管理授权与后台运行") { page="隐私与权限" }
-                SettingRow("检查更新","当前版本 ${BuildConfig.VERSION_NAME}") { page="检查更新" }
-                // The full page, not only the read-only dialog: this is where a problem is described,
-                // where the same diagnosis is previewed, and where the raw field material — the fixes
-                // themselves, the dropped ones and why — is exported. The dialog stays for anyone who
-                // only wants the text to copy.
-                SettingRow("诊断与反馈","预览报告，或导出记录现场") { page="问题反馈" }
                 SettingRow("完整诊断文本","原始计数与道路复算，可复制",onDiagnostics)
+                Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                    listOf("跟随系统","浅色","深色").forEachIndexed { mode,label ->
+                        FilterChip(selected=appearanceMode==mode,onClick={onAppearanceMode(mode)},label={Text(label)})
+                    }
+                }
+                SettingRow("首次使用引导","查看自动记录与隐私说明",onShowIntro)
                 SettingRow("关于","版本与地图来源") { page="关于" }
             } }
             "备份与恢复" -> item { Section("保护足迹") {
