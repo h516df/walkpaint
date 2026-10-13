@@ -1,0 +1,32 @@
+{
+  "trips": {
+    "count": 8,
+    "sha256": "f937ce0c99c166388db5cdb0890086275c31f293ed948cb40607a79ed9910664",
+    "baselineCount": 8,
+    "baselineSha256": "f937ce0c99c166388db5cdb0890086275c31f293ed948cb40607a79ed9910664"
+  },
+  "points": {
+    "count": 4999,
+    "sha256": "c25314f1a230102f46b71d812e868f68cc21e7d8d1778a95bedbeefac24826c4",
+    "baselineCount": 4980,
+    "baselineSha256": "be99cee7f711f2640f5861f52533cfb72764cfca488861f3228dcbb322e3d403"
+  },
+  "roads": {
+    "count": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "baselineCount": 0,
+    "baselineSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "road_matches": {
+    "count": 133,
+    "sha256": "ac432fed15fffed101aef9c78679b4e0f7782e5a8e604dda880b87e6a401d901",
+    "baselineCount": 114,
+    "baselineSha256": "691e5eaab3f75c1efa0dff4365fb48d49869f5ee1ed2e4e817d0ceb85f3d2d72"
+  },
+  "coverage": {
+    "count": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "baselineCount": 0,
+    "baselineSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

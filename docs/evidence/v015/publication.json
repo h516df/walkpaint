@@ -1,0 +1,30 @@
+{
+  "phase": "published",
+  "release_id": 408754022,
+  "private": true,
+  "draft": false,
+  "prerelease": true,
+  "source_sha": "d5f33de2cb109ee697f443d010cd7936e5f78c90",
+  "business_sha": "b9e8a2b4fd28338bbc4101c6ff21719769098baa",
+  "url": "https://github.com/h516df/walkpaint/releases/tag/v0.15",
+  "server_assets_match": [
+    {
+      "name": "WalkPaint-v0.15-arm64-debug.apk",
+      "bytes": 70288416,
+      "sha256": "2b18acd1917b7d199cb9405fb97d0df5b321687c3c1c2e571b9166afeecfec89"
+    },
+    {
+      "name": "WalkPaint-v0.15-release-notes.json",
+      "bytes": 1143,
+      "sha256": "c165cc4c46434bec6d7f27ec900c9a1fadd6f5064b3fa01f95073a37a230be9c"
+    },
+    {
+      "name": "WalkPaint-v0.15-SHA256.txt",
+      "bytes": 99,
+      "sha256": "b7c0b865ae51daccc50a7f1683e24f34dd3c6515e93fd491d9672b0364e64793"
+    }
+  ],
+  "actual_published_phone_download_matches": true,
+  "phone_installation_verified": false,
+  "tag_sha_verified": true
+}

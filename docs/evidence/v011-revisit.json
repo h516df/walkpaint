@@ -1,0 +1,37 @@
+{
+  "public_revisit_0": {
+    "before": 235,
+    "after": 236,
+    "pass": true
+  },
+  "public_revisit_1": {
+    "before": 236,
+    "after": 237,
+    "pass": true
+  },
+  "public_revisit_2": {
+    "before": 237,
+    "after": 238,
+    "pass": true
+  },
+  "public_revisit_3": {
+    "before": 238,
+    "after": 239,
+    "pass": true
+  },
+  "public_revisit_4": {
+    "before": 239,
+    "after": 240,
+    "pass": true
+  },
+  "coverage_before_meters": 109.99992743301601,
+  "coverage_after_meters": 109.99992743301601,
+  "deduplicated_forward_and_reverse_walk": true,
+  "original_rows_retained": true,
+  "initial_points": 235,
+  "final_points": 240,
+  "matched_total": 116,
+  "apk_sha256": "ec5066db7c0424327597d1ca67105ced83cccaf82648e03f74492757fe0f5994",
+  "pass": true,
+  "cleanup_errors": []
+}

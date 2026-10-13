@@ -1,22 +1,9 @@
 package cn.walkpaint
 
-import android.Manifest
-import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
 import android.location.Location
-import android.location.LocationListener
-import android.location.LocationManager
-import android.os.Build
-import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.provider.Settings
-import android.net.Uri
-import android.widget.Toast
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,465 +12,596 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import org.json.JSONArray
-import org.json.JSONObject
-import org.maplibre.android.MapLibre
-import org.maplibre.android.camera.CameraUpdateFactory
-import org.maplibre.android.geometry.LatLng
-import org.maplibre.android.maps.MapLibreMap
-import org.maplibre.android.maps.MapView
-import org.maplibre.android.style.layers.CircleLayer
-import org.maplibre.android.style.layers.LineLayer
-import org.maplibre.android.style.layers.Property
-import org.maplibre.android.style.layers.PropertyFactory
-import org.maplibre.android.style.sources.GeoJsonSource
-import java.io.ByteArrayOutputStream
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 
-private val Ink = Color(0xFF193D40)
-private val Muted = Color(0xFF758C89)
-private val Accent = Color(0xFF187F78)
-private val AccentSoft = Color(0xFFDFF2ED)
-private val Lilac = Color(0xFF8271C7)
-private val PageBackground = Color(0xFFF4F8F6)
+internal fun exploredDistance(meters: Double): String = if(meters < 1000)
+    "%.0f 米".format(Locale.CHINA,meters) else "%.2f 公里".format(Locale.CHINA,meters/1000)
 
 @Composable
 internal fun AppShell(
-    selectedTab: Int,
-    onTab: (Int) -> Unit,
-    state: TrackState,
-    fix: Location?,
-    automatic: Boolean,
-    running: Boolean,
-    trackingStatus: String,
-    needsBackground: Boolean,
-    onLocate: () -> Unit,
-    onToggleTracking: (Boolean) -> Unit,
-    onDemo: () -> Unit,
-    onTrip: (Track) -> Unit,
-    onExport: () -> Unit,
-    onImport: () -> Unit,
-    onBackgroundSettings: () -> Unit,
-    onCopyDiagnostics: () -> Unit,
-    internalBackupCount: Int,
-    mapProviderLabel: String,
-    onChooseAmap: () -> Unit,
-    mapContent: @Composable () -> Unit
+    selectedTab: Int, onTab: (Int) -> Unit, state: TrackState, fix: Location?, placeName: String? = null,
+    automatic: Boolean, running: Boolean, trackingStatus: String, recordingTitle: String,
+    recordingHealthy: Boolean, profileNotice: String?, onResolveTracking: () -> Unit, mapNotice: String?, selectedDay: String?, mapRoadState: RoadState,
+    dailyRoads: Map<String,RoadState>, roadAreaHint: String, onShowAll: () -> Unit,
+    needsBackground: Boolean, onLocate: () -> Unit, onToggleTracking: (Boolean) -> Unit,
+    onDemo: () -> Unit, onTrip: (Track) -> Unit, onExport: () -> Unit, onImport: () -> Unit,
+    onBackgroundSettings: () -> Unit, onPowerSettings: () -> Unit, onRevoke: () -> Unit,
+    onCopyDiagnostics: () -> Unit, internalBackupCount: Int, mapProviderLabel: String,
+    onChooseAmap: () -> Unit, onOnlineMap: () -> Unit, roadState: RoadState,
+    onRoadPack: () -> Unit, roadColor:Int, onRoadAppearance:()->Unit,
+    appearanceMode:Int, onAppearanceMode:(Int)->Unit, onShowIntro:()->Unit,
+    feedbackContent: @Composable (onBack:()->Unit)->Unit,
+    updatesContent: @Composable (onBack:()->Unit)->Unit, mapContent: @Composable () -> Unit
 ) {
-    Scaffold(
-        containerColor = PageBackground,
-        bottomBar = {
-            NavigationBar(containerColor = Color.White, tonalElevation = 10.dp) {
-                listOf("地图", "足迹", "我的").forEachIndexed { index, tab ->
-                    NavigationBarItem(
-                        selected = selectedTab == index,
-                        onClick = { onTab(index) },
-                        icon = {
-                            Icon(painterResource(when (index) { 0 -> R.drawable.ic_map; 1 -> R.drawable.ic_route; else -> R.drawable.ic_person }),
-                                contentDescription = tab, tint = if (selectedTab == index) Accent else Muted)
-                        },
-                        label = { Text(tab, fontWeight = if (selectedTab == index) FontWeight.SemiBold else FontWeight.Normal) }
-                    )
+    // The share is anchored to the last place the person was, so the number carries a name instead
+    // of being an abstract count of cells.
+    val lastPoint=state.realTracks.lastOrNull()?.points?.lastOrNull()
+    val anchorLat=fix?.latitude ?: lastPoint?.lat
+    val anchorLon=fix?.longitude ?: lastPoint?.lon
+    val share=remember(state,anchorLat,anchorLon) {
+        if(anchorLat==null||anchorLon==null) PlaceShare(0,0,0)
+        else PlaceProgress.of(state,anchorLat,anchorLon)
+    }
+    val explored=remember(state) {
+        Explorer.of(state,java.time.LocalDate.now().atStartOfDay(java.time.ZoneId.systemDefault())
+            .toInstant().toEpochMilli())
+    }
+    Scaffold(containerColor=PageBackground, bottomBar={
+        Surface(color=Canvas, shadowElevation=2.dp) {
+            Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal=8.dp,vertical=6.dp).height(58.dp),
+                horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                listOf("地图","足迹","我的").forEachIndexed { index,label ->
+                    val chosen=index==selectedTab
+                    Column(Modifier.weight(1f).fillMaxHeight()
+                        .background(if(chosen) PigmentSoft else androidx.compose.ui.graphics.Color.Transparent,ChipShape)
+                        .clickable { onTab(index) }, horizontalAlignment=Alignment.CenterHorizontally,
+                        verticalArrangement=Arrangement.Center) {
+                        Icon(painterResource(when(index) { 0->R.drawable.ic_map;1->R.drawable.ic_route;else->R.drawable.ic_person }),
+                            contentDescription=label,tint=if(chosen) Pigment else Muted,modifier=Modifier.size(22.dp))
+                        Spacer(Modifier.height(4.dp))
+                        Text(label,color=if(chosen) Pigment else Muted,fontSize=12.sp,
+                            fontWeight=if(chosen) FontWeight.SemiBold else FontWeight.Normal)
+                    }
                 }
             }
         }
-    ) { padding ->
+    }) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
-            when (selectedTab) {
-                0 -> MapPage(
-                    state, fix, automatic, running, trackingStatus,
-                    onLocate, onToggleTracking, onDemo, mapProviderLabel, mapContent
-                )
-                1 -> TripsPage(state, onTrip)
-                else -> ProfilePage(
-                    state, automatic, running, trackingStatus, needsBackground,
-                    internalBackupCount, onToggleTracking, onExport, onImport, onBackgroundSettings,
-                    onCopyDiagnostics, mapProviderLabel, onChooseAmap
-                )
+            when(selectedTab) {
+                0 -> DesignMapOverlay(state,selectedDay,automatic,recordingTitle,recordingHealthy,mapNotice,
+                    mapProviderLabel,{onTab(2)},onToggleTracking,onLocate,onShowAll,
+                    mapProviderLabel.contains("OpenFreeMap"),mapContent)
+                1 -> DesignTripsPage(state,roadColor,onTrip,onExport) {
+                    Column(verticalArrangement=Arrangement.spacedBy(16.dp)) {
+                        PlaceCard(placeName ?: PlaceProgress.UNKNOWN_PLACE,share,
+                            Explorer.streak(DailyFootprints.days(state).map { it.key },DailyFootprints.key(System.currentTimeMillis())))
+                        RecapCard(RecapMaker.of(DailyFootprints.days(state),DailyFootprints.key(System.currentTimeMillis()).take(7)),
+                            RecapMaker.of(DailyFootprints.days(state),DailyFootprints.key(System.currentTimeMillis()).take(4)))
+                        FootprintCalendar(DailyFootprints.days(state),DailyFootprints.key(System.currentTimeMillis()),onTrip)
+                    }
+                }
+                else -> ProfilePage(state,appearanceMode,onAppearanceMode,onShowIntro,automatic,profileNotice,onResolveTracking,
+                    onToggleTracking,onRevoke,onBackgroundSettings,onPowerSettings,onCopyDiagnostics,
+                    roadState,roadAreaHint,onRoadPack,onExport,onImport,internalBackupCount,
+                    mapProviderLabel,onChooseAmap,onOnlineMap,roadColor,onRoadAppearance,feedbackContent,updatesContent)
             }
         }
     }
 }
 
 @Composable
-private fun MapPage(
-    state: TrackState,
-    fix: Location?,
-    automatic: Boolean,
-    running: Boolean,
-    status: String,
-    onLocate: () -> Unit,
-    onToggle: (Boolean) -> Unit,
-    onDemo: () -> Unit,
-    mapProviderLabel: String,
-    mapContent: @Composable () -> Unit
-) {
-    var detailsExpanded by remember { mutableStateOf(false) }
-    val statusParts = status.lines()
-    val statusHint = statusParts.firstOrNull().orEmpty()
-    val statusNumbers = statusParts.drop(1).firstOrNull().orEmpty()
+private fun MapPage(notice: String?,day: String?,onShowAll: ()->Unit,onLocate: ()->Unit,
+    onSettings: ()->Unit,place:String,share:PlaceShare,showOsmCredit:Boolean,mapContent: @Composable ()->Unit) {
+    val uriHandler=LocalUriHandler.current
     Box(Modifier.fillMaxSize()) {
         mapContent()
-
-        Column(
-            Modifier.align(Alignment.TopCenter).fillMaxWidth()
-                .padding(start = 12.dp, end = 12.dp, top = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Surface(
-                color = Color.White.copy(alpha = 0.96f),
-                shadowElevation = 3.dp,
-                shape = RoundedCornerShape(20.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text("足迹涂色", color = Ink, fontSize = 19.sp, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(3.dp))
-                        Text("走过的路，慢慢染上颜色", color = Muted, fontSize = 11.sp)
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        val distanceLabel = when {
-                            state.totalMeters < 1.0 && state.realPointCount > 0 -> "已记录起点"
-                            state.totalMeters < 1000 -> "%.0f 米".format(Locale.CHINA, state.totalMeters)
-                            else -> "%.2f km".format(Locale.CHINA, state.totalMeters / 1000)
-                        }
-                        Text(distanceLabel, color = Accent, fontWeight = FontWeight.Bold, fontSize = 19.sp)
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            FootprintInsights.traveledDays(state).toString() + " 天 · " +
-                                FootprintInsights.exploredCells(state).toString() + " 格",
-                            color = Muted, fontSize = 11.sp
-                        )
-                    }
-                }
+        Column(Modifier.align(Alignment.TopCenter).padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+            // One line only: a problem when there is one, otherwise the progress. Stacking both was
+            // half of what made the map look like a mess. An opaque pill, because a ten percent tint
+            // over a basemap full of labels is not a background at all.
+            if(notice!=null) Surface(onClick=onSettings,color=Canvas,shape=ChipShape,
+                border=BorderStroke(1.dp,Line),shadowElevation=1.dp) {
+                Text("$notice  ›",color=Ink,fontSize=CaptionSize,modifier=Modifier.padding(horizontal=12.dp,vertical=10.dp))
+            } else Surface(color=Canvas,shape=ChipShape,border=BorderStroke(1.dp,Line),shadowElevation=1.dp) {
+                Text("$place · 解锁 ${share.percent}%",color=Ink,fontSize=CaptionSize,
+                    fontWeight=FontWeight.Medium,modifier=Modifier.padding(horizontal=12.dp,vertical=10.dp))
             }
-            if (fix == null) {
-                Surface(
-                    color = Color.White.copy(alpha = 0.94f),
-                    shape = RoundedCornerShape(13.dp), shadowElevation = 1.dp
-                ) {
-                    Text("正在等候当前位置 · 点击右下角定位按钮",
-                        fontSize = 12.sp, color = Muted,
-                        modifier = Modifier.fillMaxWidth().padding(10.dp))
-                }
+            if(day!=null) Surface(onClick=onShowAll,color=Canvas,shape=ChipShape,border=BorderStroke(1.dp,Line)) {
+                Text("$day · 返回全部探索  ›",color=Accent,fontSize=CaptionSize,
+                    modifier=Modifier.padding(horizontal=12.dp,vertical=10.dp))
             }
         }
+        Surface(onClick=onLocate,shape=CircleShape,color=PageBackground.copy(alpha=0.96f),
+            shadowElevation=1.dp,modifier=Modifier.align(Alignment.BottomEnd).padding(end=16.dp,bottom=36.dp).size(48.dp)) {
+            Box(contentAlignment=Alignment.Center) {
+                Icon(painterResource(R.drawable.ic_location),"定位我",tint=Accent,modifier=Modifier.size(23.dp))
+            }
+        }
+        // Only when OSM tiles are actually on screen: crediting OSM over an AMap basemap is
+        // noise, and the licence only asks for the credit where its data is shown.
+        if(showOsmCredit) Text("© OpenStreetMap contributors · ODbL 1.0",color=Ink.copy(alpha=0.8f),fontSize=10.sp,
+            modifier=Modifier.align(Alignment.BottomStart).padding(start=8.dp,bottom=28.dp)
+                .background(PageBackground.copy(alpha=0.80f),RoundedCornerShape(3.dp))
+                .clickable { uriHandler.openUri("https://www.openstreetmap.org/copyright") }
+                .padding(horizontal=4.dp,vertical=2.dp))
+    }
+}
 
-        Column(
-            Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                .padding(start = 12.dp, end = 12.dp, bottom = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                Surface(
-                    onClick = onLocate,
-                    shape = CircleShape,
-                    color = Color.White,
-                    shadowElevation = 4.dp,
-                    modifier = Modifier.size(51.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(painterResource(R.drawable.ic_location), "定位我",
-                            tint = Accent, modifier = Modifier.size(26.dp))
-                    }
-                }
-            }
-            Surface(
-                color = Color.White.copy(alpha = 0.97f),
-                shape = RoundedCornerShape(20.dp),
-                shadowElevation = 4.dp
-            ) {
-                Column(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(8.dp).background(
-                            if (running) Accent else Color(0xFFD7A663), CircleShape))
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            if (running && statusHint.startsWith("刚刚保存")) "新足迹已保存"
-                            else if (running) "自动监测已开启"
-                            else if (automatic) "等待系统允许恢复"
-                            else "自动足迹已暂停",
-                            color = Ink, fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Switch(checked = automatic, onCheckedChange = onToggle,
-                            modifier = Modifier.height(34.dp))
-                    }
-                    if (statusHint.isNotBlank()) {
-                        Text(statusHint, color = Muted, fontSize = 11.sp, maxLines = 1,
-                            overflow = TextOverflow.Ellipsis)
-                    }
-                    if (statusNumbers.isNotBlank()) {
-                        Spacer(Modifier.height(2.dp))
-                        Text(statusNumbers, color = Muted, fontSize = 11.sp, maxLines = 2,
-                            overflow = TextOverflow.Ellipsis)
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("地图 · " + mapProviderLabel, color = Muted, fontSize = 10.sp,
-                            modifier = Modifier.weight(1f))
-                        TextButton(onClick = { detailsExpanded = !detailsExpanded }) {
-                            Text(if (detailsExpanded) "收起详情" else "查看详情",
-                                color = Accent, fontSize = 11.sp)
-                        }
-                    }
-                    if (detailsExpanded) {
-                        HorizontalDivider(color = PageBackground)
-                        Spacer(Modifier.height(7.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(onClick = onDemo, color = Color(0xFFF1EFFF),
-                                shape = RoundedCornerShape(12.dp)) {
-                                Text(
-                                    if (state.tracks.any { it.demo }) "清除演示路线" else "试看涂色效果",
-                                    color = Lilac, fontSize = 12.sp,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp)
-                                )
-                            }
-                            Spacer(Modifier.width(9.dp))
-                            Text("蓝绿=真实 · 紫色=演示", color = Muted, fontSize = 10.sp)
-                        }
-                        Spacer(Modifier.height(7.dp))
-                        Text(
-                            if (mapProviderLabel == "高德地图") "© 高德"
-                            else "OpenFreeMap · © OpenStreetMap contributors",
-                            color = Muted, fontSize = 10.sp
-                        )
-                    }
-                }
-            }
+@Composable
+private fun Heading(title:String,subtitle:String) {
+    Column(Modifier.padding(top=4.dp,bottom=18.dp)) {
+        Text(title,color=Ink,fontSize=TitleSize,fontWeight=FontWeight.Bold,letterSpacing=(-0.6).sp)
+        Spacer(Modifier.height(8.dp))
+        Text(subtitle,color=Muted,fontSize=CaptionSize,lineHeight=20.sp)
+    }
+}
+
+/**
+ * A real card: white on the paper background, a hairline border and a soft edge. The previous
+ * version tinted the panel three percent away from the page, which read as nothing at all.
+ */
+@Composable
+private fun Section(title:String,content:@Composable ColumnScope.()->Unit) {
+    Surface(color=Canvas,shape=CardShape,border=BorderStroke(1.dp,Line),shadowElevation=2.dp,
+        modifier=Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().padding(20.dp)) {
+            Text(title,color=Ink,fontSize=SectionSize,fontWeight=FontWeight.SemiBold)
+            Spacer(Modifier.height(14.dp))
+            content()
         }
     }
 }
 
 @Composable
-private fun TinyStat(value: String, title: String, modifier: Modifier = Modifier) {
-    Column(modifier) {
-        Text(value, color = Ink, fontWeight = FontWeight.Bold, fontSize = 21.sp)
-        Spacer(Modifier.height(2.dp))
-        Text(title, color = Muted, fontSize = 11.sp)
+private fun SettingRow(title:String,detail:String="",onClick:()->Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick=onClick).heightIn(min=56.dp).padding(vertical=10.dp),
+        verticalAlignment=Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title,color=Ink,fontSize=BodySize,fontWeight=FontWeight.Medium)
+            if(detail.isNotEmpty()) { Spacer(Modifier.height(4.dp));Text(detail,color=Muted,fontSize=CaptionSize,lineHeight=18.sp) }
+        }
+        Text("›",color=Faint,fontSize=20.sp,modifier=Modifier.padding(start=12.dp))
     }
 }
 
 @Composable
-private fun PageHeading(eyebrow: String, title: String, desc: String) {
-    Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 19.dp)) {
-        Text(eyebrow.uppercase(Locale.ROOT), color = Accent, fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold, letterSpacing = 2.sp)
-        Spacer(Modifier.height(6.dp))
-        Text(title, color = Ink, fontSize = 29.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(7.dp))
-        Text(desc, color = Muted, fontSize = 13.sp)
+private fun TripsPage(state:TrackState,onTrip:(Track)->Unit,place:String,share:PlaceShare,streak:Int) {
+    val days=remember(state) { DailyFootprints.days(state) }
+    val today=DailyFootprints.key(System.currentTimeMillis())
+    val todayDay=days.firstOrNull { it.key==today }
+    val byMonth=remember(days) { days.groupBy { it.key.take(7) } }
+   val exploration=remember(state) {
+        Explorer.of(state,java.time.LocalDate.now().atStartOfDay(java.time.ZoneId.systemDefault())
+            .toInstant().toEpochMilli())
     }
-}
-
-@Composable
-private fun WhiteCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Surface(modifier = modifier, color = Color.White, shape = RoundedCornerShape(22.dp),
-        shadowElevation = 2.dp) {
-        Column(Modifier.fillMaxWidth().padding(17.dp), content = content)
-    }
-}
-
-@Composable
-private fun TripsPage(state: TrackState, onTrip: (Track) -> Unit) {
-    val recent = FootprintInsights.lastVisited(state, 250)
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
+    LazyColumn(Modifier.fillMaxSize(),
+        contentPadding=PaddingValues(start=20.dp,end=20.dp,top=20.dp,bottom=32.dp),
+        verticalArrangement=Arrangement.spacedBy(16.dp)) {
+        item { Heading("足迹","走过哪里，就在地图上留下颜色。") }
         item {
-            PageHeading("EXPLORE", "我的足迹", "走过的时间与路线，都在这里慢慢积累。")
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                WhiteCard(Modifier.weight(1f)) {
-                    Text("已走距离", color = Muted, fontSize = 12.sp)
-                    Spacer(Modifier.height(7.dp))
-                    Text("%.2f km".format(Locale.CHINA, state.totalMeters / 1000),
-                        color = Accent, fontWeight = FontWeight.Bold, fontSize = 23.sp)
-                }
-                WhiteCard(Modifier.weight(1f)) {
-                    Text("记录的天数", color = Muted, fontSize = 12.sp)
-                    Spacer(Modifier.height(7.dp))
-                    Text("${FootprintInsights.traveledDays(state)} 天",
-                        color = Accent, fontWeight = FontWeight.Bold, fontSize = 23.sp)
+            Column(Modifier.fillMaxWidth()) {
+                Text("累计记录里程",color=Muted,fontSize=CaptionSize)
+                Spacer(Modifier.height(10.dp))
+                Text(exploredDistance(state.totalMeters),color=Pigment,fontSize=DisplaySize,
+                    fontWeight=FontWeight.Bold,style=TabularFigures)
+                Spacer(Modifier.height(16.dp))
+                Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                    // Short labels: the three chips used to wrap onto a second line on a phone.
+                    StatChip("今天 ${exploredDistance(todayDay?.meters ?: 0.0)}")
+                   StatChip("${days.size} 天")
                 }
             }
-            Spacer(Modifier.height(15.dp))
-            Text("最近去过的路线", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Ink)
-            Spacer(Modifier.height(2.dp))
-            Text("按日期整理，点击任意路线回地图查看", color = Muted, fontSize = 12.sp)
         }
-        if (recent.isEmpty()) {
-            item {
-                WhiteCard {
-                    Text("还没有真实足迹", fontSize = 17.sp, color = Ink, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(8.dp))
-                    Text("打开地图，首次授权自动记录后，日常走路会在这里留下彩色记录。", color = Muted, fontSize = 13.sp)
-                }
-            }
+        item { PlaceCard(place,share,streak) }
+        item { RecapCard(RecapMaker.of(days,today.take(7)),RecapMaker.of(days,today.take(4))) }
+        item { FootprintCalendar(days,today,onTrip) }
+       if(days.isEmpty()) {
+            item { Text("开启自动记录后，走过的地方会在地图上留下颜色。",color=Muted,fontSize=BodySize) }
         } else {
-            items(recent, key = { it.id }) { trip ->
-                Surface(onClick = { onTrip(trip) }, color = Color.White,
-                    shape = RoundedCornerShape(20.dp), shadowElevation = 1.dp) {
-                    Row(Modifier.fillMaxWidth().padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        Surface(color = AccentSoft, shape = RoundedCornerShape(15.dp),
-                            modifier = Modifier.size(49.dp)) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(painterResource(R.drawable.ic_route), "足迹路线", tint = Accent)
-                            }
-                        }
-                        Spacer(Modifier.width(13.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(SimpleDateFormat("MM月dd日  EEEE", Locale.CHINA).format(Date(trip.started)),
-                                color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                            Spacer(Modifier.height(5.dp))
-                            Text("${trip.points.size} 个定位点 · %.2f km".format(Locale.CHINA, Geo.distance(trip.points) / 1000),
-                                color = Muted, fontSize = 12.sp)
-                        }
-                        Text("›", color = Accent, fontSize = 26.sp)
-                    }
+            byMonth.forEach { (month,tracks) ->
+                item(key="m:$month") {
+                    Text(monthLabel(month),color=Ink,fontSize=SectionSize,fontWeight=FontWeight.SemiBold,
+                        modifier=Modifier.padding(top=6.dp))
                 }
+                items(tracks,key={it.key}) { day -> DayRow(day,today,onTrip) }
             }
         }
-        item { Spacer(Modifier.height(16.dp)) }
+    }
+}
+
+private fun monthLabel(month:String):String = "${month.take(4)} 年 ${month.substring(5).toInt()} 月"
+
+/**
+ * The progress reading, anchored to a named place.
+ *
+ * "已点亮 78 块" told the person nothing, because 78 of what, and where. A place name and a share of
+ * a stated radius says something: this is where you were, and this is how much of the two
+ * kilometres around it you have covered. The denominator is printed underneath, because a
+ * percentage without its denominator is not a fact, which is why the earlier attempt at a
+ * percentage was dropped rather than shipped.
+ */
+/**
+ * The month and the year in the person's own terms, not a chart.
+ *
+ * Numbers people actually say out loud: how far, how many days, the longest run, and the one day
+ * they went furthest. Everything comes from the stored days, so it needs no server and cannot drift
+ * from the calendar below it.
+ */
+@Composable
+private fun RecapCard(month:Recap?,year:Recap?) {
+    if(month==null && year==null) return
+    Section("回顾") {
+        month?.let { RecapRow("本月", it) }
+        if(year!=null && year.period!=month?.period) {
+            Spacer(Modifier.height(14.dp))
+            RecapRow("今年", year)
+        }
     }
 }
 
 @Composable
-private fun ProfilePage(
-    state: TrackState,
-    automatic: Boolean,
-    running: Boolean,
-    status: String,
-    needsBackground: Boolean,
-    internalBackupCount: Int,
-    onToggle: (Boolean) -> Unit,
-    onExport: () -> Unit,
-    onImport: () -> Unit,
-    onBackgroundSettings: () -> Unit,
-    onCopyDiagnostics: () -> Unit,
-    mapProviderLabel: String,
-    onChooseAmap: () -> Unit
-) {
-    LazyColumn(
-        Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 28.dp),
-        verticalArrangement = Arrangement.spacedBy(13.dp)
-    ) {
-        item {
-            PageHeading("MY JOURNEY", "我的", "属于自己的城市探索档案，不需要账号。")
-            WhiteCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(color = AccentSoft, shape = CircleShape, modifier = Modifier.size(64.dp)) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(painterResource(R.drawable.ic_person), "个人资料", tint = Accent, modifier = Modifier.size(36.dp))
-                        }
-                    }
-                    Spacer(Modifier.width(14.dp))
-                    Column {
-                        Text("自由探索者", color = Ink, fontWeight = FontWeight.Bold, fontSize = 19.sp)
-                        Spacer(Modifier.height(5.dp))
-                        Text("你的足迹由自己保管", color = Muted, fontSize = 12.sp)
-                    }
-                }
-                Spacer(Modifier.height(22.dp))
-                Row {
-                    TinyStat(
-                        if (state.totalMeters < 1000) "%.0f 米".format(Locale.CHINA, state.totalMeters)
-                        else "%.2f km".format(Locale.CHINA, state.totalMeters / 1000),
-                        "总里程", Modifier.weight(1f)
-                    )
-                    TinyStat("${FootprintInsights.traveledDays(state)}", "足迹天数", Modifier.weight(1f))
-                    TinyStat("${FootprintInsights.exploredCells(state)}", "探索网格", Modifier.weight(1f))
-                }
+private fun RecapRow(label:String,recap:Recap) {
+    Column(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.Bottom) {
+            Text(label,color=Muted,fontSize=CaptionSize,modifier=Modifier.padding(bottom=3.dp))
+            Spacer(Modifier.weight(1f))
+            Text(exploredDistance(recap.meters),color=Ink,fontSize=TitleSize,
+                fontWeight=FontWeight.Bold,style=TabularFigures)
+        }
+        Spacer(Modifier.height(6.dp))
+        Text("${recap.days} 天有足迹 · 连续最多 ${recap.longestStreak} 天 · 最远的一天 " +
+            "${recap.bestDay.replace('-','/')} 走了 ${exploredDistance(recap.bestDayMeters)}",
+            color=Muted,fontSize=MicroSize,lineHeight=17.sp)
+    }
+}
+
+@Composable
+private fun PlaceCard(place:String,share:PlaceShare,streak:Int) {
+    Section("探索") {
+        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.Bottom) {
+            Column(Modifier.weight(1f)) {
+                Text(place,color=Ink,fontSize=SectionSize,fontWeight=FontWeight.SemiBold)
+                Spacer(Modifier.height(4.dp))
+                Text("附近 ${PlaceProgress.RADIUS_KM} 公里",color=Muted,fontSize=CaptionSize)
                 Spacer(Modifier.height(10.dp))
-                Text("探索网格约为半公里级估算，不代表真实道路覆盖率。", color = Muted, fontSize = 11.sp)
+                Row(verticalAlignment=Alignment.Bottom) {
+                    Text("解锁 ",color=Muted,fontSize=CaptionSize,modifier=Modifier.padding(bottom=6.dp))
+                    Text("${share.percent}",color=Pigment,fontSize=36.sp,
+                        fontWeight=FontWeight.Bold,style=TabularFigures)
+                    Text(" %",color=Pigment,fontSize=17.sp,fontWeight=FontWeight.Bold,
+                        modifier=Modifier.padding(bottom=4.dp))
+                }
             }
-        }
-        item {
-            WhiteCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("自动足迹", color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                        Text(if (running) "运行中 · 外出自动尝试记录" else if (automatic) "系统已暂停，打开 App 可尝试恢复" else "启用一次，平时不用手动开始",
-                            color = Muted, fontSize = 12.sp)
-                    }
-                    Switch(checked = automatic, onCheckedChange = onToggle)
-                }
-                Spacer(Modifier.height(8.dp))
-                Text(status, color = Muted, fontSize = 11.sp)
-                Spacer(Modifier.height(7.dp))
-                TextButton(onClick = onCopyDiagnostics) {
-                    Text("复制无位置坐标的诊断信息", fontSize = 12.sp)
-                }
-                if (needsBackground) {
-                    Spacer(Modifier.height(12.dp))
-                    HorizontalDivider(color = PageBackground)
-                    Spacer(Modifier.height(10.dp))
-                    Text("为了重启后尽量自动恢复，在系统定位权限中设置“始终允许”。即使授权，系统省电策略仍可能打断。", color = Muted, fontSize = 12.sp)
-                    Spacer(Modifier.height(10.dp))
-                    OutlinedButton(onClick = onBackgroundSettings, shape = RoundedCornerShape(13.dp)) {
-                        Text("打开后台定位权限设置")
+            Column(horizontalAlignment=Alignment.End) {
+                // A run of one is not a run; today's chip already covers that case.
+                if(streak>=2) {
+                    Spacer(Modifier.height(6.dp))
+                    Surface(color=CanvasSoft,shape=ChipShape) {
+                        Text("连续 $streak 天",color=Ink,fontSize=CaptionSize,fontWeight=FontWeight.Medium,
+                            modifier=Modifier.padding(horizontal=12.dp,vertical=8.dp))
                     }
                 }
             }
         }
-        item {
-            WhiteCard {
-                Text("备份与恢复", color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                Spacer(Modifier.height(6.dp))
-                Text("备份文件可保存到手机或云盘。恢复采用合并方式，不清空现有足迹。",
-                    color = Muted, fontSize = 12.sp)
-                Spacer(Modifier.height(15.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(onClick = onExport, modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(14.dp)) { Text("导出备份") }
-                    OutlinedButton(onClick = onImport, modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(14.dp)) { Text("导入备份") }
+        Spacer(Modifier.height(12.dp))
+        Box(Modifier.fillMaxWidth().height(8.dp).background(Line,CircleShape)) {
+            if(share.percent>0) Box(Modifier.fillMaxWidth(share.percent/100f)
+                .height(8.dp).background(Pigment,CircleShape))
+        }
+        Spacer(Modifier.height(10.dp))
+        Text("以你所在位置为圆心 ${PlaceProgress.RADIUS_KM} 公里的范围里，你走过了 ${share.litCells} / ${share.totalCells} 块（一块约 550 米见方）。",
+            color=Muted,fontSize=MicroSize,lineHeight=17.sp)
+    }
+}
+
+@Composable
+private fun StatChip(text:String) {
+    Surface(color=CanvasSoft,shape=ChipShape) {
+        Text(text,color=Ink,fontSize=CaptionSize,modifier=Modifier.padding(horizontal=12.dp,vertical=7.dp))
+    }
+}
+
+/** One line per day. The bar that used to sit here compared every day with the single best day,
+ * so most rows stayed near empty forever, and it repeated a number printed right beside it. */
+@Composable
+private fun DayRow(day:DailyFootprint,today:String,onTrip:(Track)->Unit) {
+    Row(Modifier.fillMaxWidth().clickable { onTrip(day.focusTrack()) }.padding(vertical=14.dp),
+        verticalAlignment=Alignment.CenterVertically) {
+        Text(if(day.key==today) "今天" else day.key.replace('-','/'),color=Ink,
+            fontSize=BodySize,fontWeight=FontWeight.Medium,modifier=Modifier.weight(1f))
+        Text(exploredDistance(day.meters),color=Ink,fontSize=BodySize,style=TabularFigures)
+        Text("›",color=Faint,fontSize=18.sp,modifier=Modifier.padding(start=8.dp))
+    }
+}
+
+/**
+ * A rolling year of footprints. Months and years tile continuously, the newest week is scrolled
+ * into view, and tapping a day opens it, so "where did I walk last spring" is one glance away
+ * instead of a list you have to read date by date.
+ */
+/** Day, month and year, drilled one into the other. */
+private enum class CalendarMode { DAY, MONTH, YEAR }
+
+@Composable
+private fun heatFill(level:Int) = when {
+    level<0 -> androidx.compose.ui.graphics.Color.Transparent
+    level==0 -> Line
+    else -> Pigment.copy(alpha=0.22f+0.195f*(level-1))
+}
+
+/** White text only where the tint is dark enough to need it. */
+@Composable
+private fun heatInk(level:Int) = if(level>=3) androidx.compose.ui.graphics.Color.White else Ink
+
+/**
+ * The three levels of the same picture.
+ *
+ * A year grid answers "did I keep it up" but cannot show which day of this week was skipped, and a
+ * single day cannot show a habit. So the year is the overview, the month is the page you actually
+ * read, and the day answers the one question neither can: when during the day did I walk. All three
+ * share [YearHeatmap] banding, so a shade means the same thing wherever you are.
+ */
+@Composable
+private fun FootprintCalendar(days:List<DailyFootprint>,todayKey:String,onTrip:(Track)->Unit) {
+    val today=remember { java.time.LocalDate.now() }
+    val byKey=remember(days) { days.associateBy { it.key } }
+    val meters=remember(days) { byKey.mapValues { it.value.meters } }
+    var modeName by rememberSaveable { mutableStateOf(CalendarMode.MONTH.name) }
+    var monthKey by rememberSaveable { mutableStateOf(todayKey.take(7)) }
+    var dayKey by rememberSaveable { mutableStateOf(todayKey) }
+    val mode=runCatching { CalendarMode.valueOf(modeName) }.getOrDefault(CalendarMode.MONTH)
+    Section("足迹日历") {
+        Row(Modifier.fillMaxWidth().background(CanvasSoft,ChipShape).padding(3.dp)) {
+            CalendarMode.entries.forEach { entry ->
+                val selected=entry==mode
+                Surface(onClick={ modeName=entry.name },
+                    color=if(selected) Canvas else androidx.compose.ui.graphics.Color.Transparent,
+                    shape=ChipShape, shadowElevation=if(selected) 1.dp else 0.dp,
+                    modifier=Modifier.weight(1f)) {
+                    Text(calendarName(entry),color=if(selected) Ink else Muted,fontSize=CaptionSize,
+                        fontWeight=if(selected) FontWeight.SemiBold else FontWeight.Normal,
+                        textAlign=TextAlign.Center,modifier=Modifier.fillMaxWidth().padding(vertical=8.dp))
                 }
-                Spacer(Modifier.height(10.dp))
-                Text("本地每日快照：$internalBackupCount 份 · 卸载 App 会一起删除；请定期导出到云盘。",
-                    color = Muted, fontSize = 11.sp)
             }
         }
-        item {
-            WhiteCard {
-                Text("地图与功能扩展", color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                Spacer(Modifier.height(8.dp))
-                Text("当前底图：$mapProviderLabel", color = Accent, fontWeight = FontWeight.Medium, fontSize = 13.sp)
-                Spacer(Modifier.height(5.dp))
-                Text("高德需配置专属开发者 Key 并同意隐私政策。目前使用开放地图，历史轨迹仍保存在本机。", color = Muted, fontSize = 12.sp)
-                if (BuildConfig.AMAP_KEY.isNotBlank() && mapProviderLabel != "高德地图") {
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedButton(onClick = onChooseAmap) { Text("切换到高德地图") }
-                }
-                Spacer(Modifier.height(11.dp))
-                HorizontalDivider(color = PageBackground)
-                Spacer(Modifier.height(9.dp))
-                Text("当前展示真实 GPS 轨迹，并非精确的道路覆盖率。", color = Muted, fontSize = 12.sp)
-            }
-        }
-        item {
-            Text("V0.3.1 预览版 · 精度受 GPS 和电池策略影响 · 定位点只存本机，地图瓦片在线请求第三方服务。",
-                color = Muted, fontSize = 11.sp, modifier = Modifier.padding(6.dp))
+        Spacer(Modifier.height(16.dp))
+        when(mode) {
+            CalendarMode.YEAR -> YearStrip(today,meters) { date ->
+                monthKey=date.toString().take(7); modeName=CalendarMode.MONTH.name }
+            CalendarMode.MONTH -> MonthPage(monthKey,today,meters,byKey,dayKey,
+                onShiftMonth={ monthKey=it }, onPickDay={ dayKey=it; modeName=CalendarMode.DAY.name })
+            CalendarMode.DAY -> DayPage(dayKey,byKey,today,todayKey,onTrip)
         }
     }
 }
+
+private fun calendarName(mode:CalendarMode)=when(mode) {
+    CalendarMode.DAY -> "日"; CalendarMode.MONTH -> "月"; CalendarMode.YEAR -> "年"
+}
+
+/** The rolling year, still the overview: tapping a cell opens that month. */
+@Composable
+private fun YearStrip(today:java.time.LocalDate,meters:Map<String,Double>,onPickMonth:(java.time.LocalDate)->Unit) {
+    val grid=remember(meters) { YearHeatmap.build(today,meters) }
+    val scroll=rememberScrollState()
+    LaunchedEffect(grid) { scroll.scrollTo(scroll.maxValue) }
+    Column {
+        Row(Modifier.horizontalScroll(scroll)) {
+            grid.forEach { week ->
+                Column(Modifier.padding(end=3.dp),horizontalAlignment=Alignment.CenterHorizontally) {
+                    week.cells.forEach { cell ->
+                        Box(Modifier.size(13.dp)
+                            .background(heatFill(cell.level),RoundedCornerShape(3.dp))
+                            .then(if(cell.level>=0) Modifier.clickable { onPickMonth(cell.date) } else Modifier))
+                        Spacer(Modifier.height(3.dp))
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text(week.monthLabel ?: "",color=Muted,fontSize=9.sp,maxLines=1)
+                }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Text("一格是一天，点一格看那个月",color=Muted,fontSize=MicroSize)
+    }
+}
+
+/** A real calendar page: the day number plus its shade, so a skipped day is obvious. */
+@Composable
+private fun MonthPage(monthKey:String,today:java.time.LocalDate,meters:Map<String,Double>,
+    byKey:Map<String,DailyFootprint>,selectedKey:String,
+    onShiftMonth:(String)->Unit,onPickDay:(String)->Unit) {
+    val ym=runCatching { java.time.YearMonth.parse(monthKey) }
+        .getOrDefault(java.time.YearMonth.from(today))
+    val grid=remember(ym,meters) { YearHeatmap.monthGrid(ym.year,ym.monthValue,today,meters) }
+    Column {
+        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+            TextButton(onClick={ onShiftMonth(ym.minusMonths(1).toString()) }) { Text("‹",fontSize=20.sp) }
+            Text(grid.label,color=Ink,fontSize=SectionSize,fontWeight=FontWeight.SemiBold,
+                textAlign=TextAlign.Center,modifier=Modifier.weight(1f))
+            TextButton(onClick={ onShiftMonth(ym.plusMonths(1).toString()) }) { Text("›",fontSize=20.sp) }
+        }
+        Spacer(Modifier.height(6.dp))
+        Row(Modifier.fillMaxWidth()) {
+            listOf("一","二","三","四","五","六","日").forEach { label ->
+                Text(label,color=Muted,fontSize=MicroSize,textAlign=TextAlign.Center,modifier=Modifier.weight(1f))
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        grid.weeks.forEach { week ->
+            Row(Modifier.fillMaxWidth()) {
+                week.forEach { cell ->
+                    Box(Modifier.weight(1f).padding(2.dp)) {
+                        if(cell!=null) {
+                            val key=cell.date.toString()
+                            val hasData=byKey.containsKey(key)
+                            Box(Modifier.fillMaxWidth().aspectRatio(1f)
+                                .background(heatFill(cell.level),RoundedCornerShape(9.dp))
+                                .then(if(hasData) Modifier.clickable { onPickDay(key) } else Modifier),
+                                contentAlignment=Alignment.Center) {
+                                Text(cell.date.dayOfMonth.toString(),
+                                    color=if(hasData) heatInk(cell.level) else Faint,
+                                    fontSize=CaptionSize,
+                                    fontWeight=if(key==selectedKey) FontWeight.Bold else FontWeight.Normal)
+                            }
+                        } else Box(Modifier.fillMaxWidth().aspectRatio(1f))
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Text("颜色越深，那天走得越多",color=Muted,fontSize=MicroSize)
+    }
+}
+
+/** One day: how far, and when during the day. */
+@Composable
+private fun DayPage(dayKey:String,byKey:Map<String,DailyFootprint>,today:java.time.LocalDate,
+    todayKey:String,onTrip:(Track)->Unit) {
+    val day=byKey[dayKey]
+    val hours=remember(dayKey) { YearHeatmap.hourStrip(day?.tracks.orEmpty()) }
+    val peak=hours.maxOrNull() ?: 0.0
+    Column {
+        Text(if(dayKey==todayKey) "今天" else dayKey.replace('-','/'),color=Muted,fontSize=CaptionSize)
+        Spacer(Modifier.height(8.dp))
+        Text(exploredDistance(day?.meters ?: 0.0),color=Pigment,fontSize=27.sp,
+            fontWeight=FontWeight.Bold,style=TabularFigures)
+        Spacer(Modifier.height(4.dp))
+        Text(if(day==null) "这一天没有记录" else "记下 ${day.points} 个点 · ${hourRange(hours)}",
+            color=Muted,fontSize=CaptionSize)
+        Spacer(Modifier.height(16.dp))
+        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(3.dp),
+            verticalAlignment=Alignment.Bottom) {
+            hours.forEachIndexed { hour, meters ->
+                val fraction=if(peak<=0.0) 0f else (meters/peak).coerceIn(0.0,1.0).toFloat()
+                Column(Modifier.weight(1f),horizontalAlignment=Alignment.CenterHorizontally) {
+                    Box(Modifier.fillMaxWidth().height(40.dp),contentAlignment=Alignment.BottomCenter) {
+                        Box(Modifier.fillMaxWidth().height((maxOf(fraction,0.04f)*40f).dp)
+                            .background(if(fraction>0f) Pigment else Line,RoundedCornerShape(2.dp)))
+                    }
+                    if(hour%6==0) Text(hour.toString(),color=Muted,fontSize=9.sp) else Text("",fontSize=9.sp)
+                }
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        if(day!=null) SettingRow("在地图上查看这一天",onClick={ onTrip(day.focusTrack()) })
+    }
+}
+
+/** "9 点到 11 点" style summary of when the day's walking happened. */
+private fun hourRange(hours:List<Double>):String {
+    val active=hours.withIndex().filter { it.value>0.0 }.map { it.index }
+    if(active.isEmpty()) return "无活动时段"
+    return "${active.first()} 点到 ${active.last()+1} 点"
+}
+
+private val ExploredRoadColor=androidx.compose.ui.graphics.Color(ExploredRoadArgb)
+
+@Composable
+private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(Int)->Unit,onShowIntro:()->Unit,automatic:Boolean,notice:String?,onResolve:()->Unit,
+    onToggle:(Boolean)->Unit,onRevoke:()->Unit,onPermissions:()->Unit,onPower:()->Unit,onDiagnostics:()->Unit,
+    roads:RoadState,areaHint:String,onRoadPack:()->Unit,onExport:()->Unit,onImport:()->Unit,backupCount:Int,
+    provider:String,onAmap:()->Unit,onOnline:()->Unit,roadColor:Int,onAppearance:()->Unit,
+    feedbackContent: @Composable (onBack:()->Unit)->Unit,
+    updatesContent: @Composable (onBack:()->Unit)->Unit) {
+    var page by rememberSaveable { mutableStateOf("我的") }
+    var revokeConfirm by rememberSaveable { mutableStateOf(false) }
+    if(page=="问题反馈") { feedbackContent { page="更多设置" };return }
+    if(page=="检查更新") { updatesContent { page="更多设置" };return }
+    BackHandler(enabled=page!="我的") { page=if(page=="更多设置") "我的" else "更多设置" }
+    LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
+        if(page!="我的") item {
+            TextButton(onClick={ page=if(page=="更多设置") "我的" else "更多设置" }) { Text("返回") }
+        }
+        item { Heading(page,if(page=="我的") "放心探索，足迹由自己保管。" else "按需设置，历史足迹始终保留。") }
+        when(page) {
+            "我的" -> {
+                item { DesignSummary(state) }
+                item { Section("记录") {
+                    Row(Modifier.fillMaxWidth().heightIn(min=56.dp),verticalAlignment=Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("自动记录",color=Ink,fontSize=BodySize,fontWeight=FontWeight.Medium)
+                            Text("授权后自动累积足迹",color=Muted,fontSize=CaptionSize,modifier=Modifier.padding(top=4.dp))
+                        }
+                        Switch(checked=automatic,onCheckedChange=onToggle,
+                            modifier=Modifier.semantics { contentDescription="自动记录" })
+                    }
+                    if(automatic && notice!=null) SettingRow(notice,"查看权限与记录状态",onResolve)
+                    SettingRow("定位与后台权限","由 Android 系统管理",onPermissions)
+                } }
+                item { Section("地图与涂色") {
+                    SettingRow("地图服务与隐私",provider,onAmap)
+                    SettingRow("联网备用地图","单独同意后使用 OpenFreeMap",onOnline)
+                    SettingRow("涂色颜色",RoadPaintColor.name(roadColor),onAppearance)
+                } }
+                item { Section("数据与备份") {
+                    SettingRow("导出足迹 JSON","保存到你选择的位置",onExport)
+                    SettingRow("导入 JSON 备份","合并去重，保留历史足迹",onImport)
+                    SettingRow("诊断与反馈","预览报告或导出记录现场") { page="问题反馈" }
+                } }
+                item { Section("外观与关于") {
+                    Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                        listOf("跟随系统","浅色","深色").forEachIndexed { mode,label ->
+                            FilterChip(selected=appearanceMode==mode,onClick={onAppearanceMode(mode)},label={Text(label)})
+                        }
+                    }
+                    SettingRow("检查更新","当前版本 ${BuildConfig.VERSION_NAME}") { page="检查更新" }
+                    SettingRow("首次使用引导","查看自动记录与隐私说明",onShowIntro)
+                    SettingRow("更多设置","权限、电池、完整诊断与关于") { page="更多设置" }
+                } }
+                item { Text("足迹涂色  ${BuildConfig.VERSION_NAME} · 数据保存在本机",color=Muted,fontSize=12.sp) }
+            }
+            "更多设置" -> item { Section("设置") {
+                SettingRow("备份与恢复","保存或找回你的足迹") { page="备份与恢复" }
+                SettingRow("隐私与权限","管理授权与后台运行") { page="隐私与权限" }
+                SettingRow("检查更新","当前版本 ${BuildConfig.VERSION_NAME}") { page="检查更新" }
+                // The full page, not only the read-only dialog: this is where a problem is described,
+                // where the same diagnosis is previewed, and where the raw field material — the fixes
+                // themselves, the dropped ones and why — is exported. The dialog stays for anyone who
+                // only wants the text to copy.
+                SettingRow("诊断与反馈","预览报告，或导出记录现场") { page="问题反馈" }
+                SettingRow("完整诊断文本","原始计数与道路复算，可复制",onDiagnostics)
+                SettingRow("关于","版本与地图来源") { page="关于" }
+            } }
+            "备份与恢复" -> item { Section("保护足迹") {
+                SettingRow("导出备份","保存到你选择的位置",onExport)
+                SettingRow("恢复备份","合并已有数据，不清空历史足迹",onImport)
+                Text("本机自动快照 $backupCount 份，建议定期导出备份。",color=Muted,fontSize=13.sp,lineHeight=20.sp)
+            } }
+            "隐私与权限" -> {
+                item { Section("记录授权") {
+                    Text("关闭自动记录只会停止后续记录，不删除历史，也不会撤销系统权限。",color=Muted,fontSize=13.sp,lineHeight=20.sp)
+                    SettingRow("定位权限","在系统设置中管理位置授权",onPermissions)
+                    SettingRow("提高后台记录稳定性","按需查看系统电池设置",onPower)
+                    SettingRow("撤回自动记录授权","停止记录与自动恢复，保留历史") { revokeConfirm=true }
+                } }
+                item { Section("地图与隐私") {
+                    SettingRow("地图服务与隐私",provider,onAmap)
+                        Text("高德地图联网显示底图，足迹直接画在地图上，无需准备地图。原始足迹保存在本机，首次使用地图服务需同意其隐私说明。",color=Muted,fontSize=13.sp,lineHeight=20.sp)
+                } }
+            }
+            "关于" -> item { Section("足迹涂色") {
+                Text("版本 ${BuildConfig.VERSION_NAME}",color=Ink,fontSize=15.sp)
+                Text("当前地图：$provider",color=Muted,fontSize=13.sp)
+                Text("© OpenStreetMap contributors · ODbL 1.0\n高德等联网地图按各自授权和署名使用。",color=Muted,fontSize=13.sp,lineHeight=20.sp)
+            } }
+        }
+    }
+    if(revokeConfirm) AlertDialog(onDismissRequest={revokeConfirm=false},title={Text("撤回自动记录授权？")},
+        text={Text("将停止记录并关闭自动恢复，历史足迹全部保留。系统位置权限仍由你在系统设置中管理。")},
+        confirmButton={TextButton(onClick={revokeConfirm=false;onRevoke()}) {Text("撤回授权")}},
+        dismissButton={TextButton(onClick={revokeConfirm=false}) {Text("取消")}})
+}
+
+
+
+

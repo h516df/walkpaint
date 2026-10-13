@@ -8,10 +8,10 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.location.Location
+import android.location.GnssStatus
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.*
-import android.provider.Settings
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -50,13 +50,14 @@ object AmbientTracking {
         } catch (e: Exception) {
             running = false
             status = "系统暂时不允许自动恢复，请打开应用重新启用"
+            RecordingDiagnostics.event(context, "failure", "START_BLOCKED_" + e.javaClass.simpleName)
         }
     }
 
     fun stop(context: Context) {
         setEnabled(context, false)
         try {
-            context.startService(Intent(context, RecordingService::class.java).setAction("STOP"))
+            context.startService(Intent(context, RecordingService::class.java).setAction("STOP_FROM_APP"))
         } catch (_: Exception) {
             context.stopService(Intent(context, RecordingService::class.java))
         }
@@ -65,7 +66,8 @@ object AmbientTracking {
 
 /**
  * Started once by the user and stays visible via an ongoing notification.
- * Adaptive GPS: after idle, keep passive/network providers and briefly probe GPS.
+ * Continuous GPS subscription through the location foreground service. No CPU wake lock.
+ * Watchdog retries failed/stalled registrations without claiming a fix exists.
  * This is not an OS bypass; force-stop, power saving, and background limits still apply.
  */
 class RecordingService : Service(), LocationListener {
@@ -74,12 +76,70 @@ class RecordingService : Service(), LocationListener {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val storeExecutor = Executors.newSingleThreadExecutor()
     private val isClosing = AtomicBoolean(false)
+    private val session = RecordingSession()
+    private var latestStartId = 0
     private var gpsEnabled = false
-    private var idle = false
-    private var lastMovementElapsed = 0L
+    private var lastCallbackElapsed = 0L
+    private var lastRegistrationElapsed = 0L
+    private var health = RecordingHealth()
     private var lastNotificationAt = 0L
     private var rawFixBeforeLast: Location? = null
     private var lastRawFix: Location? = null
+    private var gnssRegistered = false
+    private val gnssCallback = object : GnssStatus.Callback() {
+        override fun onStarted() = gnssEvent("系统GNSS已启动")
+        override fun onStopped() = gnssEvent("系统GNSS已停止")
+        override fun onFirstFix(ttffMillis: Int) {
+            if (isClosing.get()) return
+            RecordingDiagnostics.event(this@RecordingService, "gnss_first", "GNSS_FIRST_FIX", ttffMillis.coerceAtLeast(0).toLong())
+        }
+        override fun onSatelliteStatusChanged(status: GnssStatus) {
+            if (isClosing.get()) return
+            val used = (0 until status.satelliteCount).count { status.usedInFix(it) }
+            RecordingDiagnostics.satellites(this@RecordingService, status.satelliteCount, used)
+        }
+    }
+    private fun gnssEvent(reason: String) {
+        if (!isClosing.get()) RecordingDiagnostics.event(this, "gnss", reason)
+    }
+    private fun ensureGnss() {
+        if (gnssRegistered || isClosing.get() || !AmbientTracking.hasFineLocation(this)) return
+        try {
+            // Metadata only: no NMEA, raw measurements, satellite IDs or coordinates.
+            gnssRegistered = locations.registerGnssStatusCallback(gnssCallback, mainHandler)
+            gnssEvent(if (gnssRegistered) "已订阅，等待系统GNSS状态" else "系统未接受GNSS状态订阅")
+        } catch (e: Exception) { gnssEvent("GNSS状态不可读_${e.javaClass.simpleName}") }
+    }
+    private fun releaseGnss() {
+        if (gnssRegistered) runCatching { locations.unregisterGnssStatusCallback(gnssCallback) }
+        gnssRegistered = false
+    }
+    private var powerReceiverRegistered = false
+    private val powerReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) { recordPowerState() }
+    }
+    private fun recordPowerState() {
+        val power = getSystemService(PowerManager::class.java)
+        RecordingDiagnostics.event(this, "power",
+            "SCREEN_${if(power.isInteractive) "ON" else "OFF"}_IDLE_${power.isDeviceIdleMode}_SAVER_${power.isPowerSaveMode}")
+    }
+    private fun recordRecoveryEvidence() {
+        val prior = RecordingDiagnostics.snapshot(this)
+        fun priorTime(key: String) = (prior[key] as? Number)?.toLong() ?: 0L
+        if (priorTime("service_start_at") > priorTime("service_stop_at"))
+            RecordingDiagnostics.event(this, "recovery", "PREVIOUS_SESSION_WITHOUT_STOP_REASON")
+        if (Build.VERSION.SDK_INT >= 30) {
+            try {
+                val exit = getSystemService(ActivityManager::class.java)
+                    .getHistoricalProcessExitReasons(packageName, 0, 1).firstOrNull()
+                if (exit != null && exit.timestamp > priorTime("process_exit_at"))
+                    RecordingDiagnostics.event(this, "exit", "ANDROID_REASON_${exit.reason}", occurredAt=exit.timestamp)
+            } catch (_: Exception) { RecordingDiagnostics.event(this, "recovery", "SYSTEM_EXIT_INFO_UNAVAILABLE") }
+        }
+    }
+    private fun unregisterPowerReceiver() {
+        if (powerReceiverRegistered) { runCatching { unregisterReceiver(powerReceiver) }; powerReceiverRegistered=false }
+    }
 
     override fun onBind(intent: Intent?) = null
 
@@ -92,6 +152,14 @@ class RecordingService : Service(), LocationListener {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        latestStartId = startId
+        // The preference already contains the user's most recent UI choice. An older queued
+        // pause must not overwrite a resume that happened before Android delivered this intent.
+        if (intent?.action == "STOP_FROM_APP") {
+            if (AmbientTracking.enabled(this)) return START_STICKY
+            endService("已暂停自动足迹")
+            return START_NOT_STICKY
+        }
         if (intent?.action == "STOP") {
             AmbientTracking.setEnabled(this, false)
             endService("已暂停自动足迹")
@@ -107,85 +175,115 @@ class RecordingService : Service(), LocationListener {
             return START_NOT_STICKY
         }
         try {
-            val ongoing = notification("自动足迹已开启 · GPS 智能采样")
+            isClosing.set(false)
+            session.start()
+            rawFixBeforeLast = null
+            lastRawFix = null
+            lastNotificationAt = 0L
+            val ongoing = notification("持续 GPS 记录 · 可能增加电耗")
             if (Build.VERSION.SDK_INT >= 29) {
                 startForeground(17, ongoing, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
             } else startForeground(17, ongoing)
 
             AmbientTracking.running = true
             AmbientTracking.status = "自动足迹运行中 · 正在定位"
-            lastMovementElapsed = SystemClock.elapsedRealtime()
-            startGps()
-            if (!locations.isProviderEnabled(LocationManager.GPS_PROVIDER))
-                AmbientTracking.status = "GPS 已关闭 · 等待系统位置服务开启"
-            if (locations.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                locations.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 60_000, 25f, this, Looper.getMainLooper())
+            val elapsed = SystemClock.elapsedRealtime()
+            lastCallbackElapsed = elapsed
+            val priorGps = getSharedPreferences("recording_diagnostics", MODE_PRIVATE).getLong("gps_callback_at", 0)
+            val age = System.currentTimeMillis() - priorGps
+            health = RecordingHealth(if (priorGps > 0 && age in 0..elapsed) elapsed - age else null)
+            recordRecoveryEvidence()
+            RecordingDiagnostics.event(this, "start", if (intent == null) "STICKY_RESTART" else "USER_OR_BOOT_START")
+            val filter = android.content.IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_ON); addAction(Intent.ACTION_SCREEN_OFF)
+                addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED); addAction(PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED)
             }
-            locations.requestLocationUpdates(LocationManager.PASSIVE_PROVIDER, 10_000, 0f, this, Looper.getMainLooper())
-            mainHandler.postDelayed(checkIdle, 60_000)
+            if (Build.VERSION.SDK_INT >= 33) registerReceiver(powerReceiver,filter,Context.RECEIVER_NOT_EXPORTED)
+            else registerReceiver(powerReceiver,filter)
+            powerReceiverRegistered=true
+            recordPowerState()
+            ensureGnss()
+            ensureGps()
+            // Continuous GPS needs no passive subscription: passive also forwards GPS
+            // and would double-count callbacks / disturb the movement evidence window.
+            mainHandler.post(checkHealth)
         } catch (e: Exception) {
-            endService("定位服务启动失败，请确认定位权限")
+            RecordingDiagnostics.event(this, "failure", "FOREGROUND_START_" + e.javaClass.simpleName)
+            endService("定位服务启动失败，请确认定位权限和系统位置开关")
             return START_NOT_STICKY
         }
         return START_STICKY
     }
 
-    private val checkIdle = object : Runnable {
-        override fun run() {
-            if (!AmbientTracking.running || isClosing.get()) return
-            val shouldIdle = SystemClock.elapsedRealtime() - lastMovementElapsed > 4 * 60_000
-            if (shouldIdle != idle) {
-                idle = shouldIdle
-                // Keep GPS subscribed even at rest; no eight-minute blind window on a short walk.
-                pauseGps()
-                runCatching { startGps() }
-            }
-            if (!AmbientTracking.hasFineLocation(this@RecordingService)) {
-                endService("精确定位权限已撤回 · 记录停止")
-                return
-            }
-            if (!locations.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                AmbientTracking.status = "GPS 已关闭 · 等待开启"
-            } else if (AmbientTracking.lastGps == null) {
-                AmbientTracking.status = "等待 GPS 首次定位 · 请到室外开阔处"
-            } else if (System.currentTimeMillis() - AmbientTracking.lastGps!!.time > 45_000) {
-                AmbientTracking.status = "GPS 信号暂时丢失 · 正在等待新定位"
-            }
-            mainHandler.postDelayed(this, 10_000)
+    private val checkHealth = HealthCheckLoop(
+        active = { AmbientTracking.running && !isClosing.get() },
+        check = { checkRecordingHealth() },
+        failed = { e -> RecordingDiagnostics.event(this, "failure", "HEALTH_CHECK_${e.javaClass.simpleName}") },
+        schedule = { mainHandler.postDelayed(it, 30_000) }
+    )
+
+    private fun checkRecordingHealth() {
+        if (!AmbientTracking.hasFineLocation(this@RecordingService)) {
+            endService("精确定位权限已撤回 · 记录停止")
+            return
+        }
+        RecordingDiagnostics.event(this@RecordingService, "heartbeat", "SERVICE_ALIVE")
+        val elapsed = SystemClock.elapsedRealtime()
+        val provider = locations.isProviderEnabled(LocationManager.GPS_PROVIDER)
+        ensureGnss()
+        RecordingDiagnostics.event(this, "provider", "${if(provider) "系统GPS已开启" else "系统GPS已关闭"} / ${if(gpsEnabled) "App已订阅" else "App未订阅"}")
+        if (RecordingHealth.shouldRetry(gpsEnabled, provider,
+                elapsed - lastCallbackElapsed, elapsed - lastRegistrationElapsed)) {
+            // Never swallow registration failures or leave GPS unsubscribed after a retry.
+            ensureGps(replace = gpsEnabled)
+        }
+        if (!provider) AmbientTracking.status = "GPS 已关闭 · 等待开启"
+        else if (elapsed - lastCallbackElapsed > 45_000L)
+            AmbientTracking.status = "GPS 回调已中断 · 正在监听/限频重试，尚未恢复记录"
+        val status=RecordingStatus.assess(RecordingDiagnostics.signals(this@RecordingService,app.repository.lastError))
+        // Title only. The hint is a diagnostic sentence and belongs in the app, not in the shade:
+        // "收不到定位信号 · 监听还开着，但没有新的定位进来" is not something a person wants to read
+        // while walking.
+        updateNotification(status.title)
+    }
+
+    private fun ensureGps(replace: Boolean = false) {
+        if (isClosing.get() || !AmbientTracking.hasFineLocation(this)) return
+        try {
+            // Subscribe even while disabled, so an enable callback can recover GPS.
+            if (gpsEnabled && !replace) return
+            if (replace) locations.removeUpdates(gpsListener)
+            gpsEnabled = false
+            locations.requestLocationUpdates(LocationManager.GPS_PROVIDER, 2_000L, 0f,
+                gpsListener, Looper.getMainLooper())
+            gpsEnabled = true
+            lastRegistrationElapsed = SystemClock.elapsedRealtime()
+            RecordingDiagnostics.event(this, "register", if (replace) "GPS_RETRY_REGISTERED" else "GPS_REGISTERED")
+        } catch (e: Exception) {
+            gpsEnabled = false
+            AmbientTracking.status = "GPS 注册失败 · 将重试，请查看诊断"
+            RecordingDiagnostics.event(this, "failure", "GPS_REGISTER_" + e.javaClass.simpleName)
         }
     }
 
-    private fun startGps() {
-        if (gpsEnabled) return
-        if (!AmbientTracking.hasFineLocation(this) || !locations.isProviderEnabled(LocationManager.GPS_PROVIDER)) return
-        locations.requestLocationUpdates(LocationManager.GPS_PROVIDER, if (idle) 10_000L else 2_000L, 0f, gpsListener, Looper.getMainLooper())
-        gpsEnabled = true
-    }
-
-    private fun pauseGps() {
-        if (!gpsEnabled) return
-        // Remove only GPS listener registration using a dedicated listener.
-        locations.removeUpdates(gpsListener)
-        gpsEnabled = false
+    private fun filtered(reason: String, accuracy: Float = -1f) {
+        AmbientTracking.status = reason
+        RecordingDiagnostics.event(this, "filtered", reason)
+        // Recorded with the accuracy that was on the fix, because "which reason" alone never
+        // explained a walk that produced no record.
+        FieldRecorder.reject(System.currentTimeMillis(), reason, accuracy)
     }
 
     private fun isConfidentMovement(fix: Location): Boolean {
         // Provider-reported speed is a good walking cue when reasonably accurate.
-        if (fix.hasSpeed() && fix.speed in 0.55f..3.5f &&
-            (!fix.hasSpeedAccuracy() || fix.speedAccuracyMetersPerSecond < 1.3f)) return true
+        if (MovementCue.fromProviderSpeed(fix.hasSpeed(), fix.speed,
+                fix.hasSpeedAccuracy(), fix.speedAccuracyMetersPerSecond)) return true
         val a = rawFixBeforeLast ?: return false
         val b = lastRawFix ?: return false
-        if (a.accuracy > 15f || b.accuracy > 15f || fix.accuracy > 15f ||
-            fix.time <= b.time || b.time <= a.time || fix.time - a.time > 30_000) return false
-        val d1 = a.distanceTo(b)
-        val d2 = b.distanceTo(fix)
-        val direct = a.distanceTo(fix)
-        val speed = direct / ((fix.time - a.time) / 1000f)
-        val turn = kotlin.math.abs((b.bearingTo(fix) - a.bearingTo(b) + 540f) % 360f - 180f)
-        return d1 >= 2.5f && d2 >= 2.5f && turn <= 50f &&
-            speed in 0.5f..3.5f &&
-            direct > maxOf(7f, maxOf(a.accuracy, b.accuracy, fix.accuracy) * 0.75f)
+        return MovementCue.fromGeometry(a.toMotionFix(), b.toMotionFix(), fix.toMotionFix())
     }
+
+    private fun Location.toMotionFix() = MotionFix(latitude, longitude, time, accuracy)
 
     private val gpsListener = object : LocationListener {
         override fun onLocationChanged(fix: Location) = this@RecordingService.onLocationChanged(fix)
@@ -194,37 +292,39 @@ class RecordingService : Service(), LocationListener {
     }
 
     override fun onLocationChanged(location: Location) {
-        if (isClosing.get() || !AmbientTracking.running || !location.hasAccuracy()) return
-        val ageMillis = (SystemClock.elapsedRealtimeNanos() -
-            location.elapsedRealtimeNanos) / 1_000_000L
-        if (!location.latitude.isFinite() || !location.longitude.isFinite()) return
-        val now = System.currentTimeMillis()
-        val normalized = Geo.normalizedFixTime(location.time, now, ageMillis)
-        if (normalized == null) {
-            AmbientTracking.status = "定位点过期，等待新 GPS"
-            return
+        if (isClosing.get() || !AmbientTracking.running) return
+        val elapsed = SystemClock.elapsedRealtime()
+        if (location.provider == LocationManager.GPS_PROVIDER) {
+            lastCallbackElapsed = elapsed
+            RecordingDiagnostics.event(this, "gps", "GPS_CALLBACK", health.callback(elapsed))
         }
+        if (location.hasAccuracy()) {
+            // Kept for the on-demand field export only: nothing here is written to disk.
+            FieldRecorder.fix(location.time, location.latitude, location.longitude,
+                location.accuracy, location.provider ?: "?")
+        }
+        if (!location.hasAccuracy()) { filtered("MISSING_ACCURACY"); return }
+        val ageMillis = (SystemClock.elapsedRealtimeNanos() - location.elapsedRealtimeNanos) / 1_000_000L
+        if (!location.latitude.isFinite() || !location.longitude.isFinite() ||
+            location.latitude !in -90.0..90.0 || location.longitude !in -180.0..180.0) {
+            filtered("INVALID_COORDINATE", location.accuracy); return
+        }
+        val normalized = Geo.normalizedFixTime(location.time, System.currentTimeMillis(), ageMillis)
+        if (normalized == null) { filtered("STALE_FIX", location.accuracy); return }
         val reliableFix = Location(location).apply { time = normalized }
-        val previousFix = AmbientTracking.lastFix
-        if (reliableFix.accuracy <= 250f) {
-            AmbientTracking.lastFix = reliableFix
-        }
-
-        if (idle && reliableFix.provider != LocationManager.GPS_PROVIDER) {
-            val old = previousFix
-            if (old != null && reliableFix.accuracy < 110f &&
-                old !== reliableFix && old.distanceTo(reliableFix) >
-                    maxOf(90f, reliableFix.accuracy * 1.7f)) {
-                idle = false
-                lastMovementElapsed = SystemClock.elapsedRealtime()
-                pauseGps()
-                runCatching { startGps() }
-            }
-        }
+        if (reliableFix.accuracy <= 250f) AmbientTracking.lastFix = reliableFix
 
         if (reliableFix.provider != LocationManager.GPS_PROVIDER) return
         AmbientTracking.lastGps = reliableFix
+        if (!reliableFix.accuracy.isFinite() || reliableFix.accuracy !in 1f..35f) {
+            rawFixBeforeLast = null
+            lastRawFix = null
+            filtered("UNRELIABLE_ACCURACY", reliableFix.accuracy); return
+        }
+        RecordingDiagnostics.event(this, "valid_gps", "VALID_GPS_RECEIVED")
         val inferredMovement = isConfidentMovement(reliableFix)
+        // Recorded so the diagnosis can tell a desk-bound phone from a broken recorder.
+        if (inferredMovement) RecordingDiagnostics.event(this, "moving", "CONFIDENT_MOVEMENT")
         if (reliableFix.accuracy <= 20f) {
             rawFixBeforeLast = lastRawFix
             lastRawFix = reliableFix
@@ -232,33 +332,27 @@ class RecordingService : Service(), LocationListener {
             rawFixBeforeLast = null
             lastRawFix = null
         }
-        if (reliableFix.accuracy < 1f || reliableFix.accuracy > 35f) {
-            AmbientTracking.status = if (reliableFix.accuracy < 1f)
-                "GPS 未提供可信的精度，等待新信号"
-            else "GPS精度 ${reliableFix.accuracy.toInt()} 米 · 等待更准确定位（需≤35米）"
-            return
-        }
+        val ticket = session.ticket()
         storeExecutor.execute {
-            if (isClosing.get() || !AmbientTracking.enabled(this)) return@execute
-            val accepted = runCatching {
-                app.repository.addPosition(reliableFix, inferredMovement)
-            }.getOrDefault(false)
-            if (isClosing.get() || !AmbientTracking.enabled(this)) return@execute
-            if (accepted) {
-                AmbientTracking.lastSaved = System.currentTimeMillis()
-                mainHandler.post {
-                    lastMovementElapsed = SystemClock.elapsedRealtime()
-                    if (idle) {
-                        idle = false
-                        // Re-register faster GPS updates as soon as movement resumes.
-                        pauseGps()
-                        runCatching { startGps() }
+            if (!session.accepts(ticket) || !AmbientTracking.enabled(this)) return@execute
+            try {
+                val accepted = app.repository.addPosition(reliableFix, inferredMovement)
+                if (accepted) {
+                    AmbientTracking.lastSaved = System.currentTimeMillis()
+                    RecordingDiagnostics.event(this, "saved", "SQLITE_SAVED")
+                    FieldRecorder.stored()
+                    mainHandler.post {
+                        if (!session.accepts(ticket)) return@post
+                        AmbientTracking.status = "刚刚保存 GPS 足迹 · 精度 ${reliableFix.accuracy.toInt()} 米"
+                        updateNotification("刚刚记下新足迹")
                     }
-                    AmbientTracking.status = "正在自动染色 · GPS 精度 ${location.accuracy.toInt()} 米"
-                    updateNotification("刚刚记录新足迹 · 锁屏后仍尝试继续")
-                }
-            } else {
-                AmbientTracking.status = app.repository.lastError ?: "GPS已收到 · 静止、位移不足或跳点已过滤"
+                } else if (app.repository.lastError != null) {
+                    AmbientTracking.status = app.repository.lastError!!
+                    RecordingDiagnostics.event(this, "failure", "DATABASE_WRITE_FAILED")
+                } else filtered(app.repository.lastFilterReason, reliableFix.accuracy)
+            } catch (e: Exception) {
+                AmbientTracking.status = "足迹保存失败 · 请查看诊断，原数据保留"
+                RecordingDiagnostics.event(this, "failure", "DATABASE_" + e.javaClass.simpleName)
             }
         }
     }
@@ -278,7 +372,7 @@ class RecordingService : Service(), LocationListener {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         return Notification.Builder(this, "ambient-footprints")
             .setSmallIcon(R.drawable.ic_footprint)
-            .setContentTitle("足迹涂色 · 自动记录已开启")
+            .setContentTitle("足迹涂色 · 记录中")
             .setContentText(text)
             .setContentIntent(open)
             .setOngoing(true)
@@ -289,34 +383,43 @@ class RecordingService : Service(), LocationListener {
 
     override fun onProviderDisabled(provider: String) {
         if (provider == LocationManager.GPS_PROVIDER) {
-            gpsEnabled = false
+            RecordingDiagnostics.event(this, "register", "GPS_PROVIDER_DISABLED")
             AmbientTracking.status = "GPS 已关闭 · 等待开启，不会绘制假足迹"
         }
     }
     override fun onProviderEnabled(provider: String) {
         if (provider == LocationManager.GPS_PROVIDER) {
             AmbientTracking.status = "位置服务已打开，正在恢复定位"
-            runCatching { startGps() }
+            ensureGps(replace = true)
         }
     }
 
     private fun endService(status: String) {
+        session.stop()
         isClosing.set(true)
         AmbientTracking.running = false
         AmbientTracking.status = status
+        RecordingDiagnostics.event(this, "stop", status)
         mainHandler.removeCallbacksAndMessages(null)
-        runCatching { locations.removeUpdates(this) }
+        unregisterPowerReceiver()
+        releaseGnss()
         runCatching { locations.removeUpdates(gpsListener) }
+        gpsEnabled = false
         runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
-        stopSelf()
+        // Do not destroy an instance that already has a newer start command queued by Android.
+        stopSelf(latestStartId)
     }
 
     override fun onDestroy() {
-        isClosing.set(true)
+        session.stop()
+        val wasClosing = isClosing.getAndSet(true)
         AmbientTracking.running = false
         mainHandler.removeCallbacksAndMessages(null)
-        runCatching { locations.removeUpdates(this) }
+        unregisterPowerReceiver()
+        releaseGnss()
         runCatching { locations.removeUpdates(gpsListener) }
+        if (!wasClosing) RecordingDiagnostics.event(this, "stop",
+            if (AmbientTracking.enabled(this)) "SERVICE_DESTROYED_ENABLED" else "USER_PAUSED")
         storeExecutor.shutdown()
         super.onDestroy()
     }
@@ -329,6 +432,7 @@ class FootprintBootReceiver : BroadcastReceiver() {
         if (!AmbientTracking.enabled(context)) return
         if (!AmbientTracking.hasBackgroundLocation(context)) {
             AmbientTracking.status = "重启后需要在应用里恢复自动足迹，请授权始终允许定位"
+            RecordingDiagnostics.event(context, "failure", "BOOT_MISSING_BACKGROUND_PERMISSION")
             return
         }
         AmbientTracking.start(context)

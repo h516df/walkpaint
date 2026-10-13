@@ -10,6 +10,9 @@ rootProject.file("local.properties").takeIf { it.isFile }?.inputStream()?.use { 
 val amapKey = (mapProperties.getProperty("walkpaintAmapKey")
     ?: providers.gradleProperty("walkpaintAmapKey").orNull).orEmpty().trim()
 require(amapKey.matches(Regex("[A-Za-z0-9]*"))) { "Invalid AMap Android Key" }
+// Public GitHub App client id only. Never put a client secret or a PC token here.
+val updateClientId = (providers.gradleProperty("walkpaintUpdateClientId").orNull ?: "Iv23liQM3N2avCTc0QAd").trim()
+require(updateClientId.matches(Regex("[A-Za-z0-9.]*"))) { "Invalid public update client id" }
 
 android {
     namespace = "cn.walkpaint"
@@ -18,13 +21,15 @@ android {
         applicationId = "cn.walkpaint"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.3.1"
+        versionCode = 44
+        versionName = "0.42"
+        testInstrumentationRunner = "cn.walkpaint.RoadAcceptanceInstrumentation"
         // Optional phone-sized APK; the default universal debug APK remains emulator-compatible.
         if (providers.gradleProperty("walkpaintArm64Only").orNull == "true") {
             ndk { abiFilters.add("arm64-v8a") }
         }
         buildConfigField("String", "AMAP_KEY", "\"$amapKey\"")
+        buildConfigField("String", "UPDATE_CLIENT_ID", "\"$updateClientId\"")
         manifestPlaceholders["AMAP_API_KEY"] = amapKey
     }
     compileOptions {
@@ -35,12 +40,19 @@ android {
     signingConfigs {
         getByName("debug") {
             val existing = rootProject.file("${System.getProperty("user.home")}/.android/debug.keystore")
-            if (existing.isFile) {
+            require(existing.isFile) { "Original WalkPaint signing certificate is missing; refusing an incompatible update" }
+            run {
                 storeFile = existing
                 storePassword = "android"
                 keyAlias = "androiddebugkey"
                 keyPassword = "android"
             }
+        }
+    }
+    buildTypes {
+        getByName("release") {
+            // Preserve the identity of every distributed version, without a debuggable release.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     buildFeatures { compose = true; buildConfig = true }
@@ -60,3 +72,11 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20250517")
 }
+
+
+
+
+
+
+
+

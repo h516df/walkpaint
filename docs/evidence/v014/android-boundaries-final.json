@@ -1,0 +1,6 @@
+{
+  "android_boundaries": "PRIVATE_UPDATE_ANDROID_BOUNDARIES_PASS: isolated Keystore roundtrip/tamper/logout; actual APK signatures/ABI; same-version/broken package rejection; narrow FileProvider. No authenticated download or installation claimed.",
+  "installed_apk_sha256": "f2ba1250fe50690b599f1cb286a62427cf923eb0432399e8b3ee3f5e09e8e0f4",
+  "database_exactly_retained": true,
+  "isolated_probe_cleaned": true
+}

@@ -1,19 +1,25 @@
 package cn.walkpaint
 
 import android.content.Context
-import android.location.Location
-import android.os.Bundle
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.location.Location
 import com.amap.api.maps.AMap
 import com.amap.api.maps.CameraUpdateFactory
 import com.amap.api.maps.CoordinateConverter
-import com.amap.api.maps.MapsInitializer
 import com.amap.api.maps.MapView
+import com.amap.api.maps.MapsInitializer
 import com.amap.api.maps.model.BitmapDescriptorFactory
-import com.amap.api.maps.model.CircleOptions
+import com.amap.api.maps.model.CameraPosition
+import com.amap.api.maps.model.GroundOverlay
+import com.amap.api.maps.model.GroundOverlayOptions
 import com.amap.api.maps.model.LatLng
+import com.amap.api.maps.model.LatLngBounds
 import com.amap.api.maps.model.Marker
 import com.amap.api.maps.model.MarkerOptions
+import com.amap.api.maps.model.Polyline
 import com.amap.api.maps.model.PolylineOptions
 
 /**
@@ -21,15 +27,53 @@ import com.amap.api.maps.model.PolylineOptions
  * Conversion is performed exactly once at the display boundary.
  * Do not call create() until the user has explicitly accepted the AMap SDK privacy notice.
  */
-internal class AmapMapController(private val context: Context) {
+internal class AmapMapController(private val context: Context, private val onGesture:()->Unit,
+                                 private val onReady:()->Unit, private val onCamera:()->Unit,
+                                 private val onCameraSettled:()->Unit) {
     private var currentView: MapView? = null
     private var map: AMap? = null
     private var currentMarker: Marker? = null
     private var latestPosition: Location? = null
-    private val accent = Color.rgb(18, 145, 134)
-    private val demo = Color.rgb(133, 104, 197)
+    private var initialFocusPending = true
+    private var exploredColor = ExploredRoadArgb
+    /**
+     * Overlays are kept and their geometry replaced, never cleared and rebuilt. A full rebuild on
+     * every fix recreated every line the person had ever walked; on the phone that is what the
+     * dragging and zooming stutter was.
+     */
+    private val casings = mutableListOf<Polyline>()
+    private val cores = mutableListOf<Polyline>()
+    private var ground: GroundOverlay? = null
+    private var paintedRevision = -1
+    /** Kept only so an exported field report can say what the phone's own engine ended up with. */
+    private var groundPixels: String? = null
+    private var groundFrame: PaintFrame? = null
+    private var mapLoaded = false
+    /** Display coordinates are converted once per point, not once per point per redraw. */
+    private val converted = HashMap<Long, LatLng>()
+    private var retainedCamera: CameraPosition?=null
+    private val density = context.resources.displayMetrics.density
+    private val blueDot by lazy {
+        val bitmap = Bitmap.createBitmap((32*density).toInt(),(32*density).toInt(),Bitmap.Config.ARGB_8888)
+        val canvas=Canvas(bitmap)
+        val paint=Paint(Paint.ANTI_ALIAS_FLAG)
+        val center=bitmap.width/2f
+        paint.color=Color.argb(40,48,139,211); canvas.drawCircle(center,center,14*density,paint)
+        paint.color=Color.WHITE;canvas.drawCircle(center,center,6*density,paint)
+        paint.color=Color.rgb(48,139,211);canvas.drawCircle(center,center,4.5f*density,paint)
+        BitmapDescriptorFactory.fromBitmap(bitmap)
+    }
 
-    fun create(state: TrackState, location: Location?): MapView {
+    private var gestureActive = false
+    private var pendingState: TrackState? = null
+    private var pendingRoads: RoadState? = null
+    private var pendingPaths: List<List<TrackPoint>> = emptyList()
+    private var pendingFog: Bitmap? = null
+    private var pendingFrame: PaintFrame? = null
+    private var pendingRevision = -1
+
+    fun create(state: TrackState, location: Location?, roads: RoadState, color:Int=ExploredRoadArgb): MapView {
+        exploredColor=color
         check(BuildConfig.AMAP_KEY.isNotBlank()) { "高德地图 Key 尚未设置" }
         MapsInitializer.updatePrivacyShow(context.applicationContext, true, true)
         MapsInitializer.updatePrivacyAgree(context.applicationContext, true)
@@ -38,37 +82,138 @@ internal class AmapMapController(private val context: Context) {
         view.onCreate(null)
         currentView = view
         map = view.map
+        casings.clear()
+        cores.clear()
+        ground = null
+        paintedRevision = -1
+        groundPixels = null
+        mapLoaded = false
+        converted.clear()
         map?.uiSettings?.isZoomControlsEnabled = false
+        map?.uiSettings?.isCompassEnabled = false
+        map?.uiSettings?.isRotateGesturesEnabled = true
+        var downX=0f;var downY=0f
+        val slop=android.view.ViewConfiguration.get(context).scaledTouchSlop
+        val taps=android.view.GestureDetector(context,object:android.view.GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(e:android.view.MotionEvent)=true
+            override fun onDoubleTap(e:android.view.MotionEvent):Boolean { onGesture();return false }
+        })
+        map?.setOnMapTouchListener { event ->
+            taps.onTouchEvent(event)
+            when(event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> { downX=event.x;downY=event.y;gestureActive=true }
+                android.view.MotionEvent.ACTION_POINTER_DOWN -> onGesture()
+                android.view.MotionEvent.ACTION_MOVE -> if(kotlin.math.hypot(event.x-downX,event.y-downY)>slop) onGesture()
+                android.view.MotionEvent.ACTION_UP,
+                android.view.MotionEvent.ACTION_CANCEL -> endGesture()
+            }
+        }
+        map?.setOnMapLoadedListener { mapLoaded = true; onReady() }
+        // The veil follows the map: a pan or a zoom asks for a redraw for the new view.
+        map?.setOnCameraChangeListener(object : AMap.OnCameraChangeListener {
+            override fun onCameraChange(position: CameraPosition?) { onCamera() }
+            override fun onCameraChangeFinish(position: CameraPosition?) { onCameraSettled() }
+        })
+        map?.uiSettings?.isTiltGesturesEnabled = false
         latestPosition = location
-        render(state)
-        val p = location?.let { toAmap(it.latitude, it.longitude) }
-            ?: state.realTracks.lastOrNull()?.points?.lastOrNull()?.let { toAmap(it.lat, it.lon) }
-        if (p != null) map?.moveCamera(CameraUpdateFactory.newLatLngZoom(p, 16f))
+        initialFocusPending = true
+        render(state,roads,emptyList(),null,null,-1)
+        retainedCamera?.let { map?.moveCamera(CameraUpdateFactory.newCameraPosition(it));initialFocusPending=false }
         return view
     }
 
-    fun render(state: TrackState) {
+    /**
+     * A replace of every overlay lands in the middle of a pinch or a drag as a visible hitch, so a
+     * request raised during a gesture is held and applied once the finger lifts.
+     */
+    fun render(state: TrackState, roads: RoadState, paths: List<List<TrackPoint>>,
+               fog: Bitmap?, fogFrame: PaintFrame?, fogRevision: Int) {
+        if (gestureActive) {
+            pendingState = state; pendingRoads = roads; pendingPaths = paths
+            pendingFog = fog; pendingFrame = fogFrame; pendingRevision = fogRevision
+            return
+        }
+        renderNow(state, roads, paths, fog, fogFrame, fogRevision)
+    }
+
+    private fun endGesture() {
+        gestureActive = false
+        val state = pendingState
+        val roads = pendingRoads
+        val paths = pendingPaths
+        val fog = pendingFog
+        val frame = pendingFrame
+        val revision = pendingRevision
+        pendingState = null
+        pendingRoads = null
+        pendingPaths = emptyList()
+        pendingFog = null
+        pendingFrame = null
+        pendingRevision = -1
+        if (state != null && roads != null) renderNow(state, roads, paths, fog, frame, revision)
+    }
+
+    private fun renderNow(state: TrackState, roads: RoadState, paths: List<List<TrackPoint>>,
+                          fog: Bitmap?, fogFrame: PaintFrame?, fogRevision: Int) {
         val a = map ?: return
-        a.clear()
-        currentMarker = null
-        fun draw(tracks: List<Track>, color: Int) {
-            tracks.forEach { trip ->
-                trip.points.groupBy { it.segment }.values.forEach { segment ->
-                    if (segment.isEmpty()) return@forEach
-                    val converted = segment.map { toAmap(it.lat, it.lon) }
-                    a.addCircle(
-                        CircleOptions().center(converted.first()).radius(6.0)
-                            .strokeColor(Color.WHITE).strokeWidth(2f).fillColor(color)
-                    )
-                    if (converted.size >= 2) {
-                        a.addPolyline(PolylineOptions().addAll(converted).width(13f).color(color))
-                    }
-                }
+        // The veil paints the corridor; this line is the record of where the person walked, so it
+        // has to survive on top of an opaque veil. The ground overlay carries zIndex 9, so anything
+        // under that would be invisible.
+        syncLines(a, casings, paths, 4f * density, TrailOutlineArgb, 10f)
+        syncLines(a, cores, paths, 2.5f * density,
+            (exploredColor and 0x00FFFFFF) or (0xB0 shl 24), 11f)
+        syncGround(a, fog, fogFrame, fogRevision)
+        updateUser(latestPosition)
+        if(initialFocusPending) {
+            val current=latestPosition?.let { TrackPoint(it.latitude,it.longitude,it.time,it.accuracy) }
+            RoadMapFocus.choose(state,current,RoadState())?.let { point ->
+                a.moveCamera(CameraUpdateFactory.newLatLngZoom(toAmap(point.lat,point.lon),17f))
+                initialFocusPending=false
             }
         }
-        draw(state.realTracks, accent)
-        draw(state.tracks.filter { it.demo }, demo)
-        updateUser(latestPosition)
+    }
+
+    /** Grows or shrinks the overlay list to match, then replaces points in place. */
+    private fun syncLines(a: AMap, target: MutableList<Polyline>, paths: List<List<TrackPoint>>,
+                          width: Float, color: Int, zIndex: Float) {
+        while (target.size > paths.size) target.removeAt(target.size - 1).remove()
+        while (target.size < paths.size) {
+            target.add(a.addPolyline(PolylineOptions().width(width).color(color).zIndex(zIndex)))
+        }
+        paths.forEachIndexed { index, path ->
+            val line = target[index]
+            line.points = path.map { toAmap(it.lat, it.lon) }
+            line.width = width
+            line.color = color
+        }
+    }
+
+    /**
+     * The veil is one overlay for as long as it lives: handing AMap a new five megabyte image on
+     * every fix is what made the map stutter, so it is only replaced when the veil really changed.
+     */
+    private fun syncGround(a: AMap, fog: Bitmap?, frame: PaintFrame?, revision: Int) {
+        if (fog == null || frame == null || revision < 0 || revision == paintedRevision) return
+        paintedRevision = revision
+        val handoverStart = System.nanoTime()
+        val descriptor = BitmapDescriptorFactory.fromBitmap(fog)
+        val bounds = LatLngBounds(toAmap(frame.latMin, frame.lonMin), toAmap(frame.latMax, frame.lonMax))
+        val existing = ground
+        if (existing == null) {
+            ground = a.addGroundOverlay(GroundOverlayOptions().image(descriptor)
+                .positionFromBounds(bounds).zIndex(9f))
+        } else {
+            existing.setImage(descriptor)
+            existing.setPositionFromBounds(bounds)
+        }
+        groundPixels = "${fog.width}x${fog.height}"
+        groundFrame = frame
+        if (BuildConfig.DEBUG) PerfTrace.upload(System.nanoTime() - handoverStart)
+    }
+
+    fun setExploredColor(color:Int) {
+        exploredColor=color
+        cores.forEach { it.color = (color and 0x00FFFFFF) or (0xB0 shl 24) }
     }
 
     fun updateUser(location: Location?) {
@@ -80,8 +225,8 @@ internal class AmapMapController(private val context: Context) {
         if (marker == null) {
             currentMarker = a.addMarker(
                 MarkerOptions().position(coordinate)
-                    .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE))
-                    .anchor(0.5f, 0.85f).title("我的位置")
+                    .icon(blueDot)
+                    .anchor(0.5f, 0.5f)
             )
         } else {
             marker.position = coordinate
@@ -89,13 +234,107 @@ internal class AmapMapController(private val context: Context) {
     }
 
     fun focus(lat: Double, lon: Double, zoom: Double) {
+        initialFocusPending=false
         map?.animateCamera(CameraUpdateFactory.newLatLngZoom(toAmap(lat, lon), zoom.toFloat()))
     }
 
+    /**
+     * [minZoom] is supplied only when the person explicitly asked to be located: it lifts a wide
+     * camera to street level. Following a moving fix leaves the camera's own zoom alone.
+     */
+    fun followCamera(fix: Location, bearing: Float, animate: Boolean, minZoom: Float? = null) {
+        val a=map ?: return
+        val current=a.cameraPosition
+        val zoom=when {
+            minZoom!=null -> maxOf(current.zoom,minZoom)
+            current.zoom<5f -> 18f
+            else -> current.zoom
+        }
+        val target=CameraPosition.builder(current)
+            .target(toAmap(fix.latitude,fix.longitude)).bearing(bearing)
+            .zoom(zoom).build()
+        val update=CameraUpdateFactory.newCameraPosition(target)
+        if(animate) a.animateCamera(update,200,null) else a.moveCamera(update)
+    }
+    fun cancelFollowingAnimation() { map?.stopAnimation() }
+
     fun view(): MapView? = currentView
+
+    /**
+     * Shows a whole walked area, used when the person asks to see all of their exploration.
+     *
+     * The corners arrive in WGS84 and AMap places things in GCJ-02, so they go through the same
+     * conversion as every other coordinate handed to it. Passing them raw put "view all" a few
+     * hundred metres off in China while looking perfect on the Paris fixture.
+     */
+    fun focusBounds(latMin: Double, lonMin: Double, latMax: Double, lonMax: Double) {
+        val bounds = com.amap.api.maps.model.LatLngBounds(
+            toAmap(latMin, lonMin), toAmap(latMax, lonMax))
+        map?.moveCamera(com.amap.api.maps.CameraUpdateFactory.newLatLngBounds(bounds, 80))
+    }
+
+    /** One line describing what the camera is showing, for the on-demand field export. */
+    fun cameraSummary(): String {
+        val camera = map?.cameraPosition ?: return "高德地图尚未就绪"
+        return String.format(java.util.Locale.ROOT, "缩放=%.2f 中心=%.5f,%.5f",
+            camera.zoom, camera.target.latitude, camera.target.longitude)
+    }
+
+    /**
+     * What the AMap view is showing, so the veil can follow it — in WGS84, like every other input
+     * the veil is given.
+     *
+     * AMap reports its visible region in the datum it draws in, GCJ-02, while the stored track, the
+     * distance maths and the frame are all WGS84. Returning the raw corners put the frame a few
+     * hundred metres from the ground it was meant to cover wherever the offset applies — and the
+     * frame's corners were then offset a *second* time by `toAmap()` when the ground overlay was
+     * placed. The project's anonymous fixture sits in Paris, where the shift is the identity, which
+     * is exactly why every local check passed. A fixture in China is what shows it.
+     */
+    fun viewport(): ViewBounds? {
+        val bounds = map?.projection?.visibleRegion?.latLngBounds ?: return null
+        val southWest = CnCoordinate.gcjToWgs(bounds.southwest.latitude, bounds.southwest.longitude)
+        val northEast = CnCoordinate.gcjToWgs(bounds.northeast.latitude, bounds.northeast.longitude)
+        return ViewBounds(southWest[0], southWest[1], northEast[0], northEast[1])
+    }
+
+    /**
+     * What the AMap side of the veil actually ended up doing, for the on-demand field export.
+     *
+     * Reporting it from inside the running app is the only way to tell "the SDK never loaded", "the
+     * SDK loaded but the ground overlay was never created", and "the overlay exists and the map is
+     * drawing the basemap over it" apart. Only the third of those would need a different way of
+     * hiding the map, so guessing between them is what produced a fix that could not be trusted.
+     *
+     * (This header used to claim the AMap SDK could never be exercised from a workstation. That was
+     * wrong: the x86_64 images ship an ARM bridge, so an arm64-only build runs the real engine here.
+     * See scripts/amap_translation_probe.py and docs/evidence/V042.md.)
+     */
+    fun describe(): String {
+        if (map == null) return "高德=视图未创建"
+        val pixels = groundPixels
+        val layer = when {
+            ground != null -> "有(位图=$pixels 图层版本=$paintedRevision 边界=" +
+                (groundFrame?.let { String.format(java.util.Locale.ROOT, "%.5f,%.5f~%.5f,%.5f",
+                    it.latMin, it.lonMin, it.latMax, it.lonMax) } ?: "未记录") + ")"
+            pixels != null -> "没有（位图已交给高德 $pixels，但地面图层没建起来）"
+            else -> "没有（还没有位图）"
+        }
+        return "高德=视图已建 地图加载完成=$mapLoaded 地面图层$layer " +
+            "折线=描边${casings.size}条/芯${cores.size}条(zIndex 10/11，地面图层zIndex 9) " +
+            "坐标换算缓存=${converted.size} 手势挂起=$gestureActive"
+    }
 
     fun release(view: MapView) {
         if (view !== currentView) return
+        retainedCamera=map?.cameraPosition
+        casings.clear()
+        cores.clear()
+        ground = null
+        groundPixels = null
+        groundFrame = null
+        mapLoaded = false
+        paintedRevision = -1
         currentMarker = null
         map = null
         currentView = null
@@ -103,12 +342,22 @@ internal class AmapMapController(private val context: Context) {
         view.onDestroy()
     }
 
+    /**
+     * WGS84 to the display datum, remembered per point. The conversion used to run twice for every
+     * point of every trip on every redraw, which is a large share of the dragging stutter.
+     */
     private fun toAmap(lat: Double, lon: Double): LatLng {
+        val key = (Math.round(lat * 1_000_000.0) shl 32) xor
+            (Math.round(lon * 1_000_000.0) and 0xFFFFFFFFL)
+        converted[key]?.let { return it }
         val point = LatLng(lat, lon)
-        if (!CoordinateConverter.isAMapDataAvailable(lat, lon)) return point
-        return CoordinateConverter(context)
+        val result = if (!CoordinateConverter.isAMapDataAvailable(lat, lon)) point
+        else CoordinateConverter(context)
             .from(CoordinateConverter.CoordType.GPS)
             .coord(point)
             .convert() ?: point
+        if (converted.size > 20_000) converted.clear()
+        converted[key] = result
+        return result
     }
 }

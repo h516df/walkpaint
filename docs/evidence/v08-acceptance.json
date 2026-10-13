@@ -1,0 +1,99 @@
+{
+  "initial_points": 172,
+  "source_diff_sha256": "c0ab281205167c04dd1cd8764d125a4fc686447c18975aa8477e8ae1610fb447",
+  "isolated_database_migration_failure_backup_daily": true,
+  "confirmed_public_movement_0": {
+    "before": 172,
+    "after": 173,
+    "pass": true
+  },
+  "confirmed_public_movement_1": {
+    "before": 173,
+    "after": 174,
+    "pass": true
+  },
+  "confirmed_public_movement_2": {
+    "before": 174,
+    "after": 175,
+    "pass": true
+  },
+  "confirmed_public_movement_3": {
+    "before": 175,
+    "after": 176,
+    "pass": true
+  },
+  "fresh_confirmed_pairs": 3,
+  "colored_road_pixels_on_real_map": 1929,
+  "normal_home_clean_and_amap_rendered": true,
+  "reverse_duplicate_0": {
+    "before": 176,
+    "after": 177,
+    "pass": true
+  },
+  "reverse_duplicate_1": {
+    "before": 177,
+    "after": 178,
+    "pass": true
+  },
+  "reverse_duplicate_2": {
+    "before": 178,
+    "after": 179,
+    "pass": true
+  },
+  "repeat_deduplicated": true,
+  "background_save": {
+    "before": 179,
+    "after": 180,
+    "pass": true
+  },
+  "screen_off_save": {
+    "before": 180,
+    "after": 181,
+    "pass": true
+  },
+  "background_screen_off_save": true,
+  "poor_fix_not_stored": {
+    "before": 181,
+    "after": 181,
+    "pass": true
+  },
+  "no_fix_without_permanent_status_card": true,
+  "road_management_actual_picker_entry": true,
+  "backup_restore_real_picker_entry": true,
+  "coordinate_free_match_diagnosis_real_ui": true,
+  "power_settings_entry": true,
+  "paused_no_write": {
+    "before": 181,
+    "after": 181,
+    "pass": true
+  },
+  "pause_resume_revoke_preserved_history": true,
+  "no_permission_focuses_existing_painted_roads": true,
+  "permission_notice_settings_and_real_grant": true,
+  "after_permission_new_fix": {
+    "before": 181,
+    "after": 182,
+    "pass": true
+  },
+  "interruption_notice_clicks_settings": true,
+  "after_gap_no_false_paint": {
+    "before": 182,
+    "after": 183,
+    "pass": true
+  },
+  "small_320dp_navigation_no_overlap": true,
+  "all_original_rows_retained": true,
+  "final_points": 183,
+  "painted_meters": 41.99997229237135,
+  "apk_sha256": "28dc325e8005a4cab4219a91b45cf74517318be575820589eaab787ad7dcc197",
+  "installed_exact_apk": true,
+  "real_vivo": "NOT_TESTED",
+  "doze_oem_reboot_battery": "NOT_TESTED",
+  "backup_roundtrip": "ISOLATED_DATABASE_PASS; real UI picker opening/cancel only",
+  "pass": true,
+  "cleanup_errors": [],
+  "viewport_restored": true,
+  "mock_restored": true,
+  "source_commit": "f127d0a3f7bd0a5c7131655690bba7e1b57043d4",
+  "provenance": "MuMu API35, fixed public Oxford OSM fixture; not user vivo or private GPS"
+}
