@@ -11,16 +11,9 @@ import com.amap.api.maps.CameraUpdateFactory
 import com.amap.api.maps.CoordinateConverter
 import com.amap.api.maps.MapView
 import com.amap.api.maps.MapsInitializer
-import com.amap.api.maps.model.BitmapDescriptorFactory
 import com.amap.api.maps.model.CameraPosition
-import com.amap.api.maps.model.GroundOverlay
-import com.amap.api.maps.model.GroundOverlayOptions
 import com.amap.api.maps.model.LatLng
 import com.amap.api.maps.model.LatLngBounds
-import com.amap.api.maps.model.Marker
-import com.amap.api.maps.model.MarkerOptions
-import com.amap.api.maps.model.Polyline
-import com.amap.api.maps.model.PolylineOptions
 
 /**
  * Optional official AMap renderer. Native GPS data ALWAYS stays WGS84 in SQLite/backup.
@@ -32,27 +25,58 @@ internal class AmapMapController(private val context: Context, private val onGes
                                  private val onCameraSettled:()->Unit) {
     private var currentView: MapView? = null
     private var map: AMap? = null
-    private var currentMarker: Marker? = null
     private var latestPosition: Location? = null
+    private var latestState=TrackState()
     private var initialFocusPending = true
     private val zoomSteps=StepZoomTarget()
-    private fun nativeGesture() { pendingFocus=null;zoomSteps.reset();onGesture() }
+    private fun nativeGesture() { initialFocusPending=false;pendingFocus=null;zoomSteps.reset();onGesture() }
     private var exploredColor = ExploredRoadArgb
-    /**
-     * Overlays are kept and their geometry replaced, never cleared and rebuilt. A full rebuild on
-     * every fix recreated every line the person had ever walked; on the phone that is what the
-     * dragging and zooming stutter was.
-     */
-    private val casings = mutableListOf<Polyline>()
-    private val cores = mutableListOf<Polyline>()
-    private var ground: GroundOverlay? = null
+    /** Cached route vectors are transformed with the immutable fog in one display list. */
+    private var renderedPaths: List<List<TrackPoint>>?=null
+    private var groundImage:Bitmap?=null
+    private val fogTransform=android.graphics.Matrix()
+    private val fogImagePaint=Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val routePixels=android.graphics.Path()
+    private val routeOnScreen=android.graphics.Path()
+    private var routeFrame:PaintFrame?=null
+    private val routePaint=Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style=Paint.Style.STROKE;strokeCap=Paint.Cap.ROUND;strokeJoin=Paint.Join.ROUND
+    }
+    private var coverageHost:android.view.View?=null
     private var coverageGuard: android.graphics.drawable.Drawable? = null
     private val guardPath = android.graphics.Path()
     private val guardPaint = Paint().apply { color = Color.BLACK }
-    private fun updateCoverageGuard() { coverageGuard?.invalidateSelf() }
+    private var frameQueued=false
+    private var cameraMovingUntil=0L
+    private val choreographer by lazy { android.view.Choreographer.getInstance() }
+    private val fogFrameCallback=object:android.view.Choreographer.FrameCallback {
+        override fun doFrame(frameTimeNanos:Long) {
+            frameQueued=false
+            val view=currentView ?: return
+            if(!view.isShown) return
+            // Read the live SDK projection at Android's drawing cadence, including the gaps
+            // between SDK camera notifications. Reuse the immutable raster and cached Path.
+            coverageGuard?.invalidateSelf()
+            if(gestureActive || android.os.SystemClock.uptimeMillis()<cameraMovingUntil) queueFogFrame()
+        }
+    }
+    private fun queueFogFrame() {
+        if(!frameQueued && currentView?.isShown==true) {
+            frameQueued=true;choreographer.postFrameCallback(fogFrameCallback)
+        }
+    }
+    private fun updateCoverageGuard() { coverageGuard?.invalidateSelf();queueFogFrame() }
+    private fun cameraMotion() {
+        cameraMovingUntil=android.os.SystemClock.uptimeMillis()+250
+        updateCoverageGuard()
+    }
     private fun installCoverageGuard(view: MapView) {
         val guard = object : android.graphics.drawable.Drawable() {
             override fun draw(canvas: Canvas) {
+                canvas.save()
+                val mapOrigin=IntArray(2);val hostOrigin=IntArray(2)
+                view.getLocationOnScreen(mapOrigin);(coverageHost ?: view).getLocationOnScreen(hostOrigin)
+                canvas.translate((mapOrigin[0]-hostOrigin[0]).toFloat(),(mapOrigin[1]-hostOrigin[1]).toFloat())
                 val frame = groundFrame
                 val projection = map?.projection
                 guardPath.reset()
@@ -69,14 +93,53 @@ internal class AmapMapController(private val context: Context, private val onGes
                     }
                 }
                 canvas.drawPath(guardPath,guardPaint)
+                val image=groundImage
+                if(frame!=null && image!=null && projection!=null) {
+                    val src=floatArrayOf(0f,0f,image.width.toFloat(),0f,image.width.toFloat(),image.height.toFloat(),0f,image.height.toFloat())
+                    val corners=listOf(toAmap(frame.latMax,frame.lonMin),toAmap(frame.latMax,frame.lonMax),
+                        toAmap(frame.latMin,frame.lonMax),toAmap(frame.latMin,frame.lonMin)).map {projection.toScreenLocation(it)}
+                    val dst=corners.flatMap {listOf(it.x.toFloat(),it.y.toFloat())}.toFloatArray()
+                    if(fogTransform.setPolyToPoly(src,0,dst,0,4)) {
+                        // Outside coverage and inside raster are recorded in one Android display
+                        // list. AMap cannot render one with the other frame's bounds anymore.
+                        canvas.drawBitmap(image,fogTransform,fogImagePaint)
+                        routeOnScreen.reset();routePixels.transform(fogTransform,routeOnScreen)
+                        // A fixed thick stroke merged close streets into solid blocks when zoomed
+                        // out. Keep the real corridor width, with a one-pixel trace for wide views.
+                        val corridorPixels=(TrailPaint.CORRIDOR_M/(map?.scalePerPixel?.toDouble()?.takeIf {it>0} ?: 1.0)).toFloat().coerceAtLeast(1f)
+                        routePaint.color=TrailOutlineArgb;routePaint.strokeWidth=minOf(4f*density,corridorPixels)
+                        canvas.drawPath(routeOnScreen,routePaint)
+                        routePaint.color=(exploredColor and 0x00FFFFFF) or (0xB0 shl 24);routePaint.strokeWidth=minOf(2.5f*density,corridorPixels)
+                        canvas.drawPath(routeOnScreen,routePaint)
+                    }
+                }
+                latestPosition?.let { fix ->
+                    projection?.toScreenLocation(toAmap(fix.latitude,fix.longitude))?.let { point ->
+                        canvas.drawBitmap(blueDotImage,point.x-blueDotImage.width/2f,point.y-blueDotImage.height/2f,fogImagePaint)
+                    }
+                }
+                canvas.restore()
             }
             override fun setAlpha(alpha: Int) {}
             override fun setColorFilter(filter: android.graphics.ColorFilter?) {}
             @Suppress("DEPRECATION") override fun getOpacity() = android.graphics.PixelFormat.TRANSLUCENT
         }
         coverageGuard=guard
-        view.addOnLayoutChangeListener { _,_,_,_,_,_,_,_,_ -> guard.setBounds(0,0,view.width,view.height);guard.invalidateSelf() }
-        view.overlay.add(guard)
+        fun graphicsSurface(node:android.view.View):android.view.View? {
+            if(node is android.opengl.GLSurfaceView || node is android.view.TextureView) return node
+            if(node is android.view.ViewGroup) for(index in 0 until node.childCount)
+                graphicsSurface(node.getChildAt(index))?.let {return it}
+            return null
+        }
+        fun attach() {
+            // Attach over the rendering surface, below the SDK's own logo/attribution widgets.
+            // Only public Android View types are used; no SDK private names or fields.
+            val host=graphicsSurface(view) ?: view
+            if(host!==coverageHost) {coverageHost?.overlay?.remove(guard);coverageHost=host;host.overlay.add(guard)}
+            guard.setBounds(0,0,host.width,host.height);guard.invalidateSelf()
+        }
+        view.addOnLayoutChangeListener { _,_,_,_,_,_,_,_,_ -> attach() }
+        attach()
     }
     private var paintedRevision = -1
     /** Kept only so an exported field report can say what the phone's own engine ended up with. */
@@ -88,7 +151,7 @@ internal class AmapMapController(private val context: Context, private val onGes
     private var retainedCamera: CameraPosition?=null
     private var pendingFocus: CameraPosition?=null
     private val density = context.resources.displayMetrics.density
-    private val blueDot by lazy {
+    private val blueDotImage by lazy {
         val bitmap = Bitmap.createBitmap((32*density).toInt(),(32*density).toInt(),Bitmap.Config.ARGB_8888)
         val canvas=Canvas(bitmap)
         val paint=Paint(Paint.ANTI_ALIAS_FLAG)
@@ -96,17 +159,10 @@ internal class AmapMapController(private val context: Context, private val onGes
         paint.color=Color.argb(40,48,139,211); canvas.drawCircle(center,center,14*density,paint)
         paint.color=Color.WHITE;canvas.drawCircle(center,center,6*density,paint)
         paint.color=Color.rgb(48,139,211);canvas.drawCircle(center,center,4.5f*density,paint)
-        BitmapDescriptorFactory.fromBitmap(bitmap)
+        bitmap
     }
 
     private var gestureActive = false
-    private var pendingState: TrackState? = null
-    private var pendingRoads: RoadState? = null
-    private var pendingPaths: List<List<TrackPoint>> = emptyList()
-    private var pendingFog: Bitmap? = null
-    private var pendingFrame: PaintFrame? = null
-    private var pendingRevision = -1
-
     fun create(state: TrackState, location: Location?, roads: RoadState, color:Int=ExploredRoadArgb): MapView {
         exploredColor=color
         check(BuildConfig.AMAP_KEY.isNotBlank()) { "高德地图 Key 尚未设置" }
@@ -119,9 +175,8 @@ internal class AmapMapController(private val context: Context, private val onGes
         map = view.map
         groundFrame = null
         installCoverageGuard(view)
-        casings.clear()
-        cores.clear()
-        ground = null
+        renderedPaths=null
+        groundImage=null;routeFrame=null;routePixels.reset()
         paintedRevision = -1
         groundPixels = null
         mapLoaded = false
@@ -139,7 +194,7 @@ internal class AmapMapController(private val context: Context, private val onGes
         map?.setOnMapTouchListener { event ->
             taps.onTouchEvent(event)
             when(event.actionMasked) {
-                android.view.MotionEvent.ACTION_DOWN -> { downX=event.x;downY=event.y;gestureActive=true }
+                android.view.MotionEvent.ACTION_DOWN -> { downX=event.x;downY=event.y;gestureActive=true;cameraMotion() }
                 android.view.MotionEvent.ACTION_POINTER_DOWN -> nativeGesture()
                 android.view.MotionEvent.ACTION_MOVE -> if(kotlin.math.hypot(event.x-downX,event.y-downY)>slop) nativeGesture()
                 android.view.MotionEvent.ACTION_UP,
@@ -156,11 +211,12 @@ internal class AmapMapController(private val context: Context, private val onGes
                 map?.moveCamera(CameraUpdateFactory.newCameraPosition(it))
                 initialFocusPending = false
             }
+            resolveInitialFocus()
             onReady()
         }
         // The veil follows the map: a pan or a zoom asks for a redraw for the new view.
         map?.setOnCameraChangeListener(object : AMap.OnCameraChangeListener {
-            override fun onCameraChange(position: CameraPosition?) { updateCoverageGuard(); onCamera() }
+            override fun onCameraChange(position: CameraPosition?) { cameraMotion(); onCamera() }
             override fun onCameraChangeFinish(position: CameraPosition?) {
                 position?.let { zoomSteps.settled(it.zoom) };updateCoverageGuard();onCameraSettled()
             }
@@ -172,117 +228,69 @@ internal class AmapMapController(private val context: Context, private val onGes
         return view
     }
 
-    /**
-     * A replace of every overlay lands in the middle of a pinch or a drag as a visible hitch, so a
-     * request raised during a gesture is held and applied once the finger lifts.
-     */
+    /** Safe during gestures: bitmap, coverage and route share the same atomic Android draw. */
     fun render(state: TrackState, roads: RoadState, paths: List<List<TrackPoint>>,
                fog: Bitmap?, fogFrame: PaintFrame?, fogRevision: Int) {
-        if (gestureActive) {
-            map?.let { syncGround(it, fog, fogFrame, fogRevision) }
-            pendingState = state; pendingRoads = roads; pendingPaths = paths
-            pendingFog = fog; pendingFrame = fogFrame; pendingRevision = fogRevision
-            return
-        }
-        renderNow(state, roads, paths, fog, fogFrame, fogRevision)
+        renderNow(state,roads,paths,fog,fogFrame,fogRevision)
     }
 
-    private fun endGesture() {
-        gestureActive = false
-        val state = pendingState
-        val roads = pendingRoads
-        val paths = pendingPaths
-        val fog = pendingFog
-        val frame = pendingFrame
-        val revision = pendingRevision
-        pendingState = null
-        pendingRoads = null
-        pendingPaths = emptyList()
-        pendingFog = null
-        pendingFrame = null
-        pendingRevision = -1
-        if (state != null && roads != null) renderNow(state, roads, paths, fog, frame, revision)
-    }
+    private fun endGesture() {gestureActive=false;cameraMotion()}
 
     private fun renderNow(state: TrackState, roads: RoadState, paths: List<List<TrackPoint>>,
                           fog: Bitmap?, fogFrame: PaintFrame?, fogRevision: Int) {
         val a = map ?: return
-        // The veil paints the corridor; this line is the record of where the person walked, so it
-        // has to survive on top of an opaque veil. The ground overlay carries zIndex 9, so anything
-        // under that would be invisible.
-        syncLines(a, casings, paths, 4f * density, TrailOutlineArgb, 10f)
-        syncLines(a, cores, paths, 2.5f * density,
-            (exploredColor and 0x00FFFFFF) or (0xB0 shl 24), 11f)
-        syncGround(a, fog, fogFrame, fogRevision)
+        latestState=state
+        // Route vectors sit above the raster in the same draw, including wide views.
+        syncGround(a,fog,fogFrame,fogRevision)
+        syncCanvasRoutes(paths)
         updateUser(latestPosition)
-        if(initialFocusPending && mapLoaded) {
-            val current=latestPosition?.let { TrackPoint(it.latitude,it.longitude,it.time,it.accuracy) }
-            RoadMapFocus.choose(state,current,RoadState())?.let { point ->
-                a.moveCamera(CameraUpdateFactory.newLatLngZoom(toAmap(point.lat,point.lon),17f))
-                initialFocusPending=false
-            }
+        resolveInitialFocus()
+    }
+
+    /** Loading must resolve the camera even when the raster cache has nothing new to upload. */
+    private fun resolveInitialFocus() {
+        if(!initialFocusPending || !mapLoaded) return
+        val a=map ?: return
+        val current=latestPosition?.let {TrackPoint(it.latitude,it.longitude,it.time,it.accuracy)}
+        RoadMapFocus.choose(latestState,current,RoadState())?.let { point ->
+            initialFocusPending=false
+            a.moveCamera(CameraUpdateFactory.newLatLngZoom(toAmap(point.lat,point.lon),17f))
         }
     }
 
-    /** Grows or shrinks the overlay list to match, then replaces points in place. */
-    private fun syncLines(a: AMap, target: MutableList<Polyline>, paths: List<List<TrackPoint>>,
-                          width: Float, color: Int, zIndex: Float) {
-        while (target.size > paths.size) target.removeAt(target.size - 1).remove()
-        while (target.size < paths.size) {
-            target.add(a.addPolyline(PolylineOptions().width(width).color(color).zIndex(zIndex)))
-        }
-        paths.forEachIndexed { index, path ->
-            val line = target[index]
-            line.points = path.map { toAmap(it.lat, it.lon) }
-            line.width = width
-            line.color = color
-        }
-    }
-
-    /**
-     * The veil is one overlay for as long as it lives: handing AMap a new five megabyte image on
-     * every fix is what made the map stutter, so it is only replaced when the veil really changed.
-     */
-    private fun syncGround(a: AMap, fog: Bitmap?, frame: PaintFrame?, revision: Int) {
-        if (fog == null || frame == null || revision < 0 || revision == paintedRevision) return
-        paintedRevision = revision
-        val handoverStart = System.nanoTime()
-        val descriptor = BitmapDescriptorFactory.fromBitmap(fog)
-        val bounds = LatLngBounds(toAmap(frame.latMin, frame.lonMin), toAmap(frame.latMax, frame.lonMax))
-        val existing = ground
-        if (existing == null) {
-            ground = a.addGroundOverlay(GroundOverlayOptions().image(descriptor)
-                .positionFromBounds(bounds).zIndex(9f))
-        } else {
-            existing.setImage(descriptor)
-            existing.setPositionFromBounds(bounds)
-        }
-        groundPixels = "${fog.width}x${fog.height}"
-        groundFrame = frame
+    /** Build geography only when it or the raster frame changes; camera frames transform one Path. */
+    private fun syncCanvasRoutes(paths:List<List<TrackPoint>>) {
+        val frame=groundFrame ?: return
+        if(renderedPaths==paths && routeFrame==frame) return
+        routePixels.reset()
+        val southwest=toAmap(frame.latMin,frame.lonMin)
+        val northeast=toAmap(frame.latMax,frame.lonMax)
+        paths.forEach { path ->path.forEachIndexed { index,p ->
+            val coordinate=toAmap(p.lat,p.lon)
+            val x=((coordinate.longitude-southwest.longitude)/(northeast.longitude-southwest.longitude)*frame.widthPx).toFloat()
+            val y=MapRenderCoordinates.y(coordinate.latitude,southwest.latitude,northeast.latitude,frame.heightPx)
+            if(index==0) routePixels.moveTo(x,y) else routePixels.lineTo(x,y)
+        } }
+        renderedPaths=paths;routeFrame=frame
         updateCoverageGuard()
-        if (BuildConfig.DEBUG) PerfTrace.upload(System.nanoTime() - handoverStart)
     }
 
-    fun setExploredColor(color:Int) {
-        exploredColor=color
-        cores.forEach { it.color = (color and 0x00FFFFFF) or (0xB0 shl 24) }
+    /** One immutable raster + geographic frame, consumed atomically by the existing coverage view. */
+    private fun syncGround(a:AMap,fog:Bitmap?,frame:PaintFrame?,revision:Int) {
+        if(fog==null || frame==null || revision<0 || revision==paintedRevision) return
+        groundImage=fog;groundFrame=frame;paintedRevision=revision
+        groundPixels="${fog.width}x${fog.height}"
+        updateCoverageGuard()
     }
 
-    fun updateUser(location: Location?) {
-        latestPosition = location
-        val a = map ?: return
-        val fix = location ?: run { currentMarker?.remove(); currentMarker = null; return }
-        val coordinate = toAmap(fix.latitude, fix.longitude)
-        val marker = currentMarker
-        if (marker == null) {
-            currentMarker = a.addMarker(
-                MarkerOptions().position(coordinate)
-                    .icon(blueDot)
-                    .anchor(0.5f, 0.5f)
-            )
-        } else {
-            marker.position = coordinate
-        }
+    fun setExploredColor(color:Int) {exploredColor=color;updateCoverageGuard()}
+
+    fun updateUser(location:Location?) {
+        val previous=latestPosition
+        latestPosition=location
+        resolveInitialFocus()
+        if(previous?.latitude!=location?.latitude || previous?.longitude!=location?.longitude)
+            updateCoverageGuard()
     }
 
     fun zoomBy(delta: Int) {
@@ -291,6 +299,7 @@ internal class AmapMapController(private val context: Context, private val onGes
         val a=map ?: return
         val camera=a.cameraPosition
         val target=zoomSteps.request(camera.zoom,delta,a.minZoomLevel,a.maxZoomLevel)
+        cameraMotion()
         a.animateCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.builder(camera).zoom(target).build()))
     }
 
@@ -375,41 +384,40 @@ internal class AmapMapController(private val context: Context, private val onGes
     /**
      * What the AMap side of the veil actually ended up doing, for the on-demand field export.
      *
-     * Report the actual engine on both the phone and an ARM64 native-bridge AVD. This distinguishes
-     * "the SDK never loaded", "the SDK loaded but the ground overlay was never
-     * created", and "the overlay exists and the map is drawing the basemap over it" apart. Only the
-     * third of those would need a different way of hiding the map, so guessing between them is what
-     * produced a fix that could not be trusted.
+     * Report actual SDK readiness and the foreground raster/vector coverage separately. The
+     * native SDK supplies the basemap/projection; the Android overlay supplies one coherent veil.
      */
     fun describe(): String {
         if (map == null) return "高德=视图未创建"
         val pixels = groundPixels
         val layer = when {
-            ground != null -> "有(位图=$pixels 图层版本=$paintedRevision 边界=" +
+            groundImage != null -> "有(位图=$pixels 图层版本=$paintedRevision 边界=" +
                 (groundFrame?.let { String.format(java.util.Locale.ROOT, "%.5f,%.5f~%.5f,%.5f",
                     it.latMin, it.lonMin, it.latMax, it.lonMax) } ?: "未记录") + ")"
-            pixels != null -> "没有（位图已交给高德 $pixels，但地面图层没建起来）"
+            pixels != null -> "没有（位图尚未显示）"
             else -> "没有（还没有位图）"
         }
         return "高德=视图已建 地图加载完成=$mapLoaded 地面图层$layer " +
-            "折线=描边${casings.size}条/芯${cores.size}条(zIndex 10/11，地面图层zIndex 9) " +
+            "绘制=原生覆盖层整帧迷雾/路线${renderedPaths?.size ?: 0}条/位置，原生高德底图 " +
             "坐标换算缓存=${converted.size} 手势挂起=$gestureActive"
     }
 
     fun release(view: MapView) {
         if (view !== currentView) return
+        choreographer.removeFrameCallback(fogFrameCallback);frameQueued=false;cameraMovingUntil=0L;gestureActive=false
         zoomSteps.target?.let { map?.moveCamera(CameraUpdateFactory.zoomTo(it)) }
         zoomSteps.reset()
         retainedCamera=pendingFocus ?: map?.cameraPosition
         pendingFocus=null
-        casings.clear()
-        cores.clear()
-        ground = null
+        renderedPaths=null
+        latestState=TrackState()
+        coverageGuard?.let {coverageHost?.overlay?.remove(it)}
+        coverageGuard=null;coverageHost=null
+        groundImage=null;routeFrame=null;routePixels.reset()
         groundPixels = null
         groundFrame = null
         mapLoaded = false
         paintedRevision = -1
-        currentMarker = null
         map = null
         currentView = null
         view.onPause()

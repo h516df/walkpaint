@@ -198,6 +198,7 @@ internal class TrailPainter {
     /** The buffer being drawn into next, so the map can keep reading the one it was handed. */
     private var scratch: Bitmap? = null
     private var colour = 0
+    private var paintedPaths:List<List<TrackPoint>>?=null
 
     private val fog = Paint().apply {
         style = Paint.Style.FILL
@@ -243,13 +244,17 @@ internal class TrailPainter {
 
     fun update(paths: List<List<TrackPoint>>, color: Int, anchor: TrackPoint? = null,
                viewport: ViewBounds? = null): Bitmap? {
-        colour = color
         val walked = paths.any { it.isNotEmpty() }
         val current = frame
         // The frame follows the map, so a pan or a zoom is what moves it; the person's own position
         // only matters before the map has reported a projection at all.
         val frameMoved = current == null || viewportMoved(current, viewport) ||
             (viewport == null && anchor != null && !current.contains(anchor.lat, anchor.lon))
+        if(!frameMoved && bitmap!=null && paintedPaths==paths && colour==color) {
+            lastUpdateRebuilt=false
+            return bitmap
+        }
+        colour=color
         // Someone who has not walked anywhere yet still has unknown ground in front of them, so the
         // veil is drawn all black rather than not drawn at all. Skipping it entirely is what showed
         // a brand-new person the whole basemap on the first screen. The skip also requires that the
@@ -280,6 +285,7 @@ internal class TrailPainter {
         // whose corridor has since stopped being justified.
         paintedCorridor = segments.isNotEmpty() && TrailPaint.corridorVisible(next)
         strokeAll(canvas, next, segments)
+        paintedPaths=paths
         revision++
         return target
     }
@@ -304,6 +310,7 @@ internal class TrailPainter {
         bitmap = null
         scratch = null
         paintedCorridor = false
+        paintedPaths=null
         revision++
     }
 
@@ -312,6 +319,7 @@ internal class TrailPainter {
         scratch = null
         frame = null
         paintedCorridor = false
+        paintedPaths=null
     }
 
     /**

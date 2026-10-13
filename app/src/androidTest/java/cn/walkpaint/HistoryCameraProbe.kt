@@ -11,9 +11,8 @@ import org.json.JSONObject
 
 /** Real date -> map path. Reports only alignment error, never saved coordinates. */
 internal object HistoryCameraProbe {
-    fun run(i: Instrumentation): String {
-        val activity=i.startActivitySync(Intent(i.targetContext,MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
+    fun run(i: Instrumentation): String = MapJourneyFixture.withFixture(i) {runJourney(i,it)}
+    private fun runJourney(i: Instrumentation,activity:MainActivity): String {
         fun field(obj:Any,name:String)=obj.javaClass.getDeclaredField(name).apply {isAccessible=true}.get(obj)
         fun <T> main(block:()->T):T {
             var result:Result<T>?=null;i.runOnMainSync {result=runCatching(block)}
@@ -46,7 +45,7 @@ internal object HistoryCameraProbe {
         tap("在地图查看这天的足迹")
         try {
             Thread.sleep(5000)
-            return main {
+            val result=main {
                 val day=(field(activity,"selectedDay\$delegate") as State<*>).value as? String
                 check(day!=null) {"Date selection was lost"}
                 val state=(field(activity,"mapTrackState\$delegate") as State<*>).value as TrackState
@@ -62,8 +61,49 @@ internal object HistoryCameraProbe {
                 val result=JSONObject().put("day_selected",true).put("same_day_data",true)
                     .put("centre_error_metres",error).put("zoom",map.cameraPosition.zoom)
                 check(error<2) {"History camera restored the previous view: $result"}
-                "HISTORY_CAMERA_PASS: $result"
+                val paths=field(activity,"fogPaths") as List<*>
+                val fogPoints=paths.flatMap {it as List<TrackPoint>}
+                check(fogPoints.isNotEmpty() && fogPoints.all {DailyFootprints.key(it.time)==day}) {
+                    "The selected day still reveals another day's ground"
+                }
+                val markerFix=field(controller,"latestPosition") as android.location.Location?
+                check(markerFix?.provider=="history") {"The day map shows today's GPS/network position"}
+                check(Geo.meters(point,TrackPoint(markerFix!!.latitude,markerFix.longitude,markerFix.time,markerFix.accuracy))<.1)
+                result.put("fog_only_selected_day",true).put("marker_is_day_endpoint",true)
+                result.put("day_points",state.realPointCount).put("fixture_total_points",7959)
+                result
             }
+            main {
+                val controller=(field(activity,"amapController\$delegate") as Lazy<*>).value as AmapMapController
+                val map=field(controller,"map") as AMap
+                map.moveCamera(com.amap.api.maps.CameraUpdateFactory.scrollBy(180f,60f))
+                controller.zoomBy(-2)
+            }
+            tap("定位当天")
+            val locateDeadline=android.os.SystemClock.uptimeMillis()+15_000
+            while(true) {
+                try {
+            main {
+                val day=(field(activity,"selectedDay\$delegate") as State<*>).value as? String
+                check(day!=null) {"Day locate returned to live exploration"}
+                val state=(field(activity,"mapTrackState\$delegate") as State<*>).value as TrackState
+                val endpoint=state.realTracks.flatMap {it.points}.maxBy {it.time}
+                val controller=(field(activity,"amapController\$delegate") as Lazy<*>).value as AmapMapController
+                val target=(field(controller,"map") as AMap).cameraPosition
+                val expected=CoordinateConverter(i.targetContext).from(CoordinateConverter.CoordType.GPS)
+                    .coord(LatLng(endpoint.lat,endpoint.lon)).convert()
+                val error=kotlin.math.hypot((target.target.latitude-expected.latitude)*111194.9,
+                    (target.target.longitude-expected.longitude)*111194.9*kotlin.math.cos(Math.toRadians(expected.latitude)))
+                check(error<2 && kotlin.math.abs(target.zoom-17f)<.01f) {"Day locate did not return to the saved day endpoint: error=$error zoom=${target.zoom}"}
+                result.put("locate_keeps_day",true).put("locate_error_metres",error)
+            }
+                    break
+                } catch(e:IllegalStateException) {
+                    if(android.os.SystemClock.uptimeMillis()>=locateDeadline) throw e
+                    Thread.sleep(100)
+                }
+            }
+            return "HISTORY_CAMERA_PASS: $result"
         } finally { tap("返回全部探索",contains=true) }
     }
 }

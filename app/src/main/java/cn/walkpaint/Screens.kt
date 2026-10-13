@@ -22,6 +22,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
 import java.util.Locale
 
 internal fun exploredDistance(meters: Double): String = if(meters < 1000)
@@ -44,18 +46,30 @@ internal fun AppShell(
     updatesContent: @Composable (onBack:()->Unit)->Unit, mapContent: @Composable () -> Unit
 ) {
     Box(Modifier.fillMaxSize().background(PageBackground)) {
+        // Keep the SDK and GL surface alive across bottom-tab journeys. Only the controls/pages
+        // change; disposing a map here recreated every texture, marker and history overlay.
+        Box(Modifier.fillMaxSize()) { mapContent() }
         val body=if(selectedTab==0) Modifier.fillMaxSize()
-            else Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(bottom=80.dp)
+            else Modifier.fillMaxSize().background(PageBackground).pointerInput(Unit) {
+                // Participating in hit testing keeps touches off the lower map sibling.
+                // Do not consume the child scroll detector's events in the Final pass: that
+                // cancels scrolling and turns the end of a swipe into an accidental row click.
+                awaitPointerEventScope { while(true) awaitPointerEvent(PointerEventPass.Final) }
+            }
         Box(body) {
             when(selectedTab) {
                 0 -> DesignMapOverlay(state,selectedDay,automatic,recordingTitle,recordingHealthy,mapNotice,
                     mapProviderLabel,{onTab(2)},onToggleTracking,onLocate,onShowAll,
-                    mapProviderLabel.contains("OpenFreeMap"),onZoom,mapContent)
-                1 -> DesignTripsPage(state,roadColor,onTrip,onExport)
-                else -> ProfilePage(state,appearanceMode,onAppearanceMode,onShowIntro,automatic,profileNotice,onResolveTracking,
+                    mapProviderLabel.contains("OpenFreeMap"),onZoom,{})
+                1 -> Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(bottom=80.dp)) {
+                    DesignTripsPage(state,roadColor,onTrip,onExport)
+                }
+                else -> Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(bottom=80.dp)) {
+                    ProfilePage(state,appearanceMode,onAppearanceMode,onShowIntro,automatic,profileNotice,onResolveTracking,
                     onToggleTracking,onRevoke,onBackgroundSettings,onPowerSettings,onCopyDiagnostics,
                     roadState,roadAreaHint,onRoadPack,onExport,onImport,internalBackupCount,
                     mapProviderLabel,onChooseAmap,onOnlineMap,roadColor,onRoadAppearance,feedbackContent,updatesContent)
+                }
             }
         }
         Surface(color=Canvas.copy(alpha=.97f),shape=RoundedCornerShape(30.dp),

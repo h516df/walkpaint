@@ -8,7 +8,9 @@ internal object MapNotice {
         "SERVICE_STOPPED" -> "足迹记录已中断"
         "SAVE_FAILED" -> "足迹暂时无法保存"
         "REGISTER_FAILED" -> "定位服务暂不可用"
-        "CALLBACK_INTERRUPTED" -> if(currentSessionHasCallback) "未收到新定位，请检查记录" else null
+        // A missing fix is not proof the background stopped. Keep the actual age/recovery and
+        // satellite evidence in 我的/诊断 instead of interrupting the exploration canvas.
+        "CALLBACK_INTERRUPTED" -> null
         else -> null
     }
 }

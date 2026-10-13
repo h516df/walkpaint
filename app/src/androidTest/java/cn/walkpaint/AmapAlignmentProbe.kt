@@ -66,14 +66,17 @@ internal object AmapAlignmentProbe {
                     metres(forward(viewport.latMax,viewport.lonMax),rawBounds.northeast))
                 check(viewportError < 1) { "Viewport was converted zero or two times" }
                 val frame = field(controller!!,"groundFrame") as PaintFrame
-                val overlay = field(controller!!,"ground") as GroundOverlay
-                val bounds = overlay.bounds
-                val overlayError = maxOf(metres(forward(frame.latMin,frame.lonMin),bounds.southwest),
-                    metres(forward(frame.latMax,frame.lonMax),bounds.northeast))
-                check(overlayError < 1) { "Actual SDK ground overlay bounds have the wrong datum" }
+                val transform=field(controller!!,"fogTransform") as android.graphics.Matrix
+                val quad=floatArrayOf(0f,0f,frame.widthPx.toFloat(),frame.heightPx.toFloat())
+                transform.mapPoints(quad)
+                val top=sdk.projection.toScreenLocation(forward(frame.latMax,frame.lonMin))
+                val bottom=sdk.projection.toScreenLocation(forward(frame.latMin,frame.lonMax))
+                val overlayError=maxOf(kotlin.math.hypot(quad[0]-top.x.toDouble(),quad[1]-top.y.toDouble()),
+                    kotlin.math.hypot(quad[2]-bottom.x.toDouble(),quad[3]-bottom.y.toDouble()))
+                check(overlayError<1) {"Actually drawn fog transform differs from native SDK projection"}
                 result = JSONObject().put("public_fixture","Beijing")
                     .put("sdk_coordinate_shift_metres",shiftedMetres).put("screen_centre_error_pixels",centrePixelError)
-                    .put("viewport_display_error_metres",viewportError).put("native_overlay_error_metres",overlayError)
+                    .put("viewport_display_error_metres",viewportError).put("fog_transform_error_pixels",overlayError)
                     .put("raw_sdk_projection_checked",true).put("camera_restored",true)
             }
             return "AMAP_ALIGNMENT_PASS: $result"
