@@ -19,6 +19,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from release_remote import publish_verified
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -98,10 +99,14 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--no-build", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--verify-only", action="store_true", help="只读核对已发布版本，禁止远端写入")
     parser.add_argument("--target", help="已推送的精确提交 SHA，发布时必填")
     parser.add_argument("--prepared-dir", type=Path, help="已验收的两个正式包所在目录")
     parser.add_argument("--phone-only", action="store_true", help="仅分发 ARM64 手机包；通用包仍可用于本机验收")
+    parser.add_argument("--no-legacy-alias", action="store_true", help="仅在已结束旧更新器兼容时省略重复 APK 别名")
     args = parser.parse_args()
+    if args.verify_only and (not args.no_build or args.prepared_dir is None):
+        raise SystemExit("只读核对必须提供 --no-build --prepared-dir")
 
     repo, prefix = config()
     version, code = version_from_gradle()
@@ -137,9 +142,10 @@ def main():
         shutil.copyfile(source, target)
         assets.append(target)
         # v0.37 and older select only this historical name. It is still the signed release bytes.
-        legacy = out / f'{prefix}-v{version}-{variant}-debug.apk'
-        shutil.copyfile(source, legacy)
-        assets.append(legacy)
+        if not args.no_legacy_alias:
+            legacy = out / f'{prefix}-v{version}-{variant}-debug.apk'
+            shutil.copyfile(source, legacy)
+            assets.append(legacy)
     sha = hashlib.sha256(assets[0].read_bytes()).hexdigest()
     notes_out = out / f"{prefix}-v{version}-release-notes.json"
     sha_out = out / f"{prefix}-v{version}-SHA256.txt"
@@ -157,49 +163,12 @@ def main():
 
     if not args.target or not re.fullmatch(r'[a-f0-9]{40}', args.target):
         raise SystemExit('发布必须绑定精确的已推送提交 SHA')
-    if run(['git','rev-parse','HEAD']).strip() != args.target or run(['git','status','--porcelain']).strip():
+    if not args.verify_only and (run(['git','rev-parse','HEAD']).strip() != args.target or run(['git','status','--porcelain']).strip()):
         raise SystemExit('发布只允许当前已提交且干净的工作区')
-    metadata = json.loads(run(['gh','api',f'repos/{repo}']))
-    if not metadata.get('private'):
-        raise SystemExit('只允许向原私有仓库发布')
-    run(['gh','api',f'repos/{repo}/commits/{args.target}'])
-
-    title = f"v{version}｜足迹涂色更新"
-    body = markdown(notes, sha)
-    existing = any(r['tag_name']==f'v{version}' for r in json.loads(run(['gh','api',f'repos/{repo}/releases'])))
-    if existing:
-        raise SystemExit('这个版本已存在，拒绝覆盖；先核对现有发布')
-    tag_sha = run(['gh','api',f'repos/{repo}/git/ref/tags/v{version}','--jq','.object.sha']).strip()
-    if tag_sha != args.target:
-        raise SystemExit('远端标签未固定到当前提交')
-    # The official REST path avoids the high-level CLI's unrelated GraphQL tag lookup.
-    payload = out / 'create-release.json'
-    payload.write_text(json.dumps({'tag_name':f'v{version}','target_commitish':args.target,
-        'name':title,'body':body,'draft':True,'prerelease':False},ensure_ascii=False),encoding='utf-8')
-    remote = json.loads(run(['gh','api',f'repos/{repo}/releases','--method','POST','--input',str(payload)]))
-    release_id = remote['id']
-    endpoint = remote['upload_url'].split('{')[0]
-    if endpoint != f'https://uploads.github.com/repos/{repo}/releases/{release_id}/assets':
-        raise SystemExit('上传地址不符合原仓库，保持草稿不发布')
-    for asset in assets:
-        print('正在上传 '+asset.name,flush=True)
-        # Dedicated uploader supplies replayable file streams and bounded network retries.
-        run(['gh','release','upload',f'v{version}',str(asset),'--repo',repo])
-    remote = json.loads(run(['gh','api',f'repos/{repo}/releases/{release_id}']))
-    for asset in remote['assets']:
-        expected = expected_assets.pop(asset['name'], None)
-        if not expected or asset['state']!='uploaded' or asset['size'] != expected['size'] or asset.get('digest') != 'sha256:'+expected['sha256']:
-            raise SystemExit('草稿资产校验失败，保持草稿不发布')
-    if expected_assets:
-        raise SystemExit('草稿缺少资产，保持草稿不发布')
-    receipt = {'tag':f'v{version}','target':args.target,'assets':remote['assets'],'draft_verified':True}
-    (out/'publication.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2),encoding='utf-8')
-    payload=out/'publish-release.json'
-    payload.write_text(json.dumps({'draft':False,'make_latest':'true'}),encoding='utf-8')
-    final = json.loads(run(['gh','api',f'repos/{repo}/releases/{release_id}','--method','PATCH','--input',str(payload)]))
-    if final['draft'] or not final['published_at']:
-        raise SystemExit('未确认发布状态，请核对发布页')
-    print("已发布 v%s 到 %s" % (version, repo), flush=True)
+    receipt = publish_verified(repo, f'v{version}', args.target,
+        f"v{version}｜足迹涂色更新", markdown(notes, sha), assets, out, run,
+        verify_only=args.verify_only)
+    print(json.dumps(receipt, ensure_ascii=False), flush=True)
     return 0
 
 
