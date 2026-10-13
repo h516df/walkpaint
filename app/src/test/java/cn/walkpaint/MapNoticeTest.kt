@@ -3,7 +3,7 @@ import org.junit.Assert.*
 import org.junit.Test
 class MapNoticeTest {
     @Test fun normalAndNoFixNeverCoverMap() {
-        listOf("PAUSED","STARTING","SAVED","WAITING_MOVEMENT","INVALID_FIX").forEach {
+        listOf("PAUSED","STARTING","SAVED","WAITING_MOVEMENT","INVALID_FIX","CALLBACK_INTERRUPTED").forEach {
             assertNull(MapNotice.from(RecordingStatus(it,"title","hint")))
         }
     }
@@ -11,7 +11,7 @@ class MapNoticeTest {
         assertNull(MapNotice.from(RecordingStatus("CALLBACK_INTERRUPTED","title","hint"),false))
     }
     @Test fun interruptionsHaveActionableNotice() {
-        listOf("PERMISSION","GPS_DISABLED","SERVICE_STOPPED","SAVE_FAILED","REGISTER_FAILED","CALLBACK_INTERRUPTED").forEach {
+        listOf("PERMISSION","GPS_DISABLED","SERVICE_STOPPED","SAVE_FAILED","REGISTER_FAILED").forEach {
             assertFalse(MapNotice.from(RecordingStatus(it,"title","hint")).isNullOrBlank())
         }
     }

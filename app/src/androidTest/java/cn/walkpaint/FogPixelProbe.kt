@@ -47,6 +47,10 @@ internal object FogPixelProbe {
         // 1. The walked corridor keeps only the person's own tint, and ground away from it is
         //    veiled at full strength in black — the map underneath must not show through.
         val centre = bitmap.getPixel(midX, midY)
+        val initialRevision=painter.revision
+        val unchangedImage=painter.update(listOf(street),PIGMENT,null,view)
+        check(unchangedImage===bitmap && painter.revision==initialRevision,
+            "unchanged geometry and viewport re-upload the fog")
         val centreAlpha = alpha(centre)
         check(centreAlpha <= 110, "the walked corridor is still veiled: alpha=$centreAlpha")
         check((centre shr 8 and 0xFF) > (centre shr 16 and 0xFF),

@@ -1,0 +1,32 @@
+{
+  "journeys": [
+    {
+      "from": "我的",
+      "same_map": false,
+      "kept_while_hidden": false,
+      "return_ready_ms": 1705
+    },
+    {
+      "from": "足迹",
+      "same_map": false,
+      "kept_while_hidden": false,
+      "return_ready_ms": 989
+    },
+    {
+      "from": "我的",
+      "same_map": false,
+      "kept_while_hidden": false,
+      "return_ready_ms": 885
+    },
+    {
+      "from": "足迹",
+      "same_map": false,
+      "kept_while_hidden": false,
+      "return_ready_ms": 1002
+    }
+  ],
+  "installed_version": "0.45",
+  "fixture_points": 7959,
+  "fixture_segments": 140,
+  "fixture_distance_metres": 116400.94792842366
+}

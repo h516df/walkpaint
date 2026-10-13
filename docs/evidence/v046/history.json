@@ -1,0 +1,12 @@
+{
+  "day_selected": true,
+  "same_day_data": true,
+  "centre_error_metres": 0.07255652555602704,
+  "zoom": 14.5,
+  "fog_only_selected_day": true,
+  "marker_is_day_endpoint": true,
+  "day_points": 3990,
+  "fixture_total_points": 7959,
+  "locate_keeps_day": true,
+  "locate_error_metres": 0.07255652555602704
+}

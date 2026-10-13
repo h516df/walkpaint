@@ -194,6 +194,7 @@ class MainActivity : ComponentActivity() {
     private var boundaryRoads: List<RoadSegment>?=null
     private fun clearDaySelection(showExtent: Boolean = true) {
         fallbackZoomSteps.reset()
+        mapSceneGeneration++;pendingVeil=null;fogPaths=emptyList()
         selectedDay=null;pendingTripFocus=null;follow.locate();lastCameraPoint=null
         lastRevision=-1;updateUi()
         // "Back to all exploration" shows what has actually been explored. Following the person at
@@ -249,6 +250,7 @@ class MainActivity : ComponentActivity() {
     private var fogSourceRevision = -1
     /** The whole-history geometry the veil is drawn from, reused when only the view moves. */
     private var fogPaths: List<List<TrackPoint>> = emptyList()
+    private var mapSceneGeneration=0L
     /** What was last handed to the map, so an unchanged submission is skipped. */
     private var submittedRoadJson = ""
     private var submittedPaintedJson = ""
@@ -442,7 +444,11 @@ class MainActivity : ComponentActivity() {
                     mapRoadState = mapRoadState,
                     roadAreaHint = roadAreaHint,
                     onShowAll = { clearDaySelection() },
-                    onLocate = { clearDaySelection(showExtent=false); centerUser() },
+                    onLocate = {
+                        val anchor=MapHistory.anchor(mapTrackState,selectedDay)
+                        if(anchor!=null) focusCoordinate(anchor.lat,anchor.lon,17.0)
+                        else { clearDaySelection(showExtent=false);centerUser() }
+                    },
                     onZoom = { delta ->
                         pauseMapFollowing()
                         if(amapActive) amapController.zoomBy(delta)
@@ -470,7 +476,10 @@ class MainActivity : ComponentActivity() {
                     onTrip = { trip ->
                         fallbackZoomSteps.reset()
                         follow.history();syncHeadingLifecycle()
+                        mapSceneGeneration++;pendingVeil=null;fogPaths=emptyList()
                         selectedDay=DailyFootprints.key(trip.started)
+                        mapTrackState=DailyFootprints.select(snapshot,selectedDay)
+                        updateLocationLayer()
                         lastRevision=-1
                         val p = trip.points.lastOrNull()
                         if (p != null) {
@@ -720,6 +729,7 @@ class MainActivity : ComponentActivity() {
         currentViewport = mapViewport()
         if ((lastRevision != repository.revision || dailyRoadDate != DailyFootprints.key(System.currentTimeMillis())) && refreshing.compareAndSet(false, true)) {
             val day=selectedDay
+            val generation=mapSceneGeneration
             // Read on the UI thread: the worker must not race a fix arriving while it paints.
             val fogColour = roadColor
             val fogAnchor = userFix?.let { TrackPoint(it.latitude, it.longitude, it.time, it.accuracy) }
@@ -737,15 +747,13 @@ class MainActivity : ComponentActivity() {
                     val daily = emptyMap<String,RoadState>()
                     val displayedRoad = RoadState()
                     val displayedTrack = DailyFootprints.select(next,day)
-                    // The veil is cumulative, like the explored ground: it shows everything walked,
-                    // never just the selected day, and it is the only thing that paints the ground.
-                    // The veil follows the viewport now, so what it covers is what the person is
-                    // looking at: old ground stays painted wherever it is, and the unknown ground
-                    // in between stays behind fog.
-                    val veilPaths = RecordedTrail.paths(next.realTracks)
-                    fogPaths = veilPaths
+                    // Day review has its own ground, not later exploration or today's GPS dot.
+                    val veilPaths = RecordedTrail.paths(displayedTrack.realTracks)
                     val veilStart = System.nanoTime()
-                    val fogImage = fogPainter.update(veilPaths, fogColour, fogAnchor, fogViewport)
+                    // The painter reuses its two buffers. A deferred handover and the SDK's GL
+                    // thread can still be reading either one after the next paint starts.
+                    val fogImage = fogPainter.update(veilPaths, fogColour, MapHistory.anchor(displayedTrack,day) ?: fogAnchor, fogViewport)
+                        ?.copy(android.graphics.Bitmap.Config.ARGB_8888,false)
                     val veilNanos = System.nanoTime() - veilStart
                     if (BuildConfig.DEBUG) {
                         PerfTrace.update(veilStart - updateStart, veilNanos, fogPainter.lastUpdateRebuilt)
@@ -761,17 +769,18 @@ class MainActivity : ComponentActivity() {
                     // The predicate is TrailPaint's, not a copy of it: the veil leaves the corridor
                     // out exactly when this line is drawn, and the two must not be able to disagree.
                     val veilShowsCorridor = fogBounds?.let { TrailPaint.corridorVisible(it) } == true
-                    val trailPaths = RecordedTrail.paths(displayedTrack.realTracks)
+                    val trailPaths = veilPaths
                     val trail = when {
                         // A chosen day is always drawn: that is the route the person asked to see.
-                        day != null -> TrailShape.network(trailPaths, null)
+                        day != null -> TrailShape.network(trailPaths, fogBounds)
                         veilShowsCorridor -> emptyList()
                         else -> TrailShape.network(trailPaths, fogBounds)
                     }
                     val painted = TrackMapJson.encodePaths(trail)
                     runOnUiThread {
                         try {
-                            if(selectedDay!=day) return@runOnUiThread
+                            if(selectedDay!=day || generation!=mapSceneGeneration) return@runOnUiThread
+                            fogPaths=veilPaths
                             val uiStart = System.nanoTime()
                             snapshot = next; lastRevision = revision
                             dailyRoads=daily; dailyRoadDate=today
@@ -780,6 +789,7 @@ class MainActivity : ComponentActivity() {
                             roadState = road; roadJson = roadBase; paintedJson = painted
                             val assignNanos = System.nanoTime() - uiStart
                             handOverVeil(fogImage, fogBounds, fogStamp)
+                            updateLocationLayer()
                             if (BuildConfig.DEBUG) {
                                 android.util.Log.d("WalkPaintPerf", String.format(java.util.Locale.ROOT,
                                     "UI parts assign_ms=%.1f handover_ms=%.1f total_ms=%.1f",
@@ -1372,7 +1382,10 @@ class MainActivity : ComponentActivity() {
     private fun handOverVeil(image: android.graphics.Bitmap?, frame: PaintFrame?, revision: Int) {
         val now = android.os.SystemClock.uptimeMillis()
         val elapsed = now - lastVeilHandover
-        if (elapsed < VEIL_HANDOVER_MS) {
+        // AMap's immutable Android display list has no asynchronous texture/bounds handover.
+        // Keeping the old SDK texture-upload throttle here delayed already completed fog by 600ms.
+        val handoverGap=if(amapActive) 0L else VEIL_HANDOVER_MS
+        if (elapsed < handoverGap) {
             pendingVeil = Triple(image, frame, revision)
             if (!veilHandoverPending) {
                 veilHandoverPending = true
@@ -1381,7 +1394,7 @@ class MainActivity : ComponentActivity() {
                     val pending = pendingVeil
                     pendingVeil = null
                     if (pending != null) handOverVeil(pending.first, pending.second, pending.third)
-                }, VEIL_HANDOVER_MS - elapsed)
+                }, handoverGap - elapsed)
             }
             return
         }
@@ -1430,18 +1443,21 @@ class MainActivity : ComponentActivity() {
         val viewport = currentViewport
         val colour = roadColor
         val handOver = true
-        val anchor = userFix?.let { TrackPoint(it.latitude, it.longitude, it.time, it.accuracy) }
         val day = selectedDay
-        val displayed = mapTrackState
+        val generation=mapSceneGeneration
+        val anchor = MapHistory.anchor(mapTrackState,day) ?: userFix?.let { TrackPoint(it.latitude, it.longitude, it.time, it.accuracy) }
+        val previousFogRevision=fogRevision
         refreshExecutor.execute {
             try {
                 val start = System.nanoTime()
-                val image = fogPainter.update(paths, colour, anchor, viewport)
+                val paintedImage = fogPainter.update(paths, colour, anchor, viewport)
                 val nanos = System.nanoTime() - start
                 if (BuildConfig.DEBUG) PerfTrace.pan(nanos)
                 val frame = fogPainter.frame()
                 val revision = fogPainter.revision
-                val linePaths = RecordedTrail.paths(displayed.realTracks)
+                if(revision==previousFogRevision) { runOnUiThread {refreshing.set(false)};return@execute }
+                val image=paintedImage?.copy(android.graphics.Bitmap.Config.ARGB_8888,false)
+                val linePaths = paths
                 val route = if (day == null && frame?.let { TrailPaint.corridorVisible(it) } == true)
                     emptyList() else TrailShape.network(linePaths, frame)
                 val routeJson = TrackMapJson.encodePaths(route)
@@ -1449,7 +1465,7 @@ class MainActivity : ComponentActivity() {
                     try {
                         // The cheap coverage mask remains in place until this actual ground
                         // frame is handed over, including during an active pinch.
-                        if (handOver && day == selectedDay) {
+                        if (handOver && day == selectedDay && generation==mapSceneGeneration) {
                             mapTrailPaths = route
                             paintedJson = routeJson
                             handOverVeil(image, frame, revision)
@@ -1490,7 +1506,7 @@ class MainActivity : ComponentActivity() {
                 else Style.Builder().fromJson("""{"version":8,"sources":{},"layers":[{"id":"local-background","type":"background","paint":{"background-color":"#F4F7F5"}}]}""")
             loaded.setStyle(builder) { style ->
                 if (mapWidget !== view) return@setStyle
-                style.addSource(GeoJsonSource("wp-user", userJson(userFix)))
+                style.addSource(GeoJsonSource("wp-user", userJson(mapLocation())))
                 style.addSource(GeoJsonSource("wp-roads", roadJson))
                 style.addSource(GeoJsonSource("wp-painted", paintedJson))
                 // No explored-ground fill and no seed circles: the veil below paints the walked
@@ -1639,9 +1655,14 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun mapLocation():Location? = MapHistory.anchor(mapTrackState,selectedDay)?.let { p ->
+        Location("history").apply { latitude=p.lat;longitude=p.lon;time=p.time;accuracy=p.accuracy }
+    } ?: userFix?.takeIf {selectedDay==null}
+
     private fun updateLocationLayer() {
-        if (amapActive) amapController.updateUser(userFix)
-        else mapInstance?.style?.getSourceAs<GeoJsonSource>("wp-user")?.setGeoJson(userJson(userFix))
+        val location=mapLocation()
+        if (amapActive) amapController.updateUser(location)
+        else mapInstance?.style?.getSourceAs<GeoJsonSource>("wp-user")?.setGeoJson(userJson(location))
         syncHeadingLifecycle()
         syncFollowCamera()
     }
@@ -1702,7 +1723,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun AmapNativeView() {
         val controller = remember { amapController }
-        val view = remember { controller.create(mapTrackState, userFix,mapRoadState,roadColor) }
+        val view = remember { controller.create(mapTrackState, mapLocation(),mapRoadState,roadColor) }
         pendingTripFocus?.let {
             controller.focus(it.first, it.second, it.third)
             pendingTripFocus = null

@@ -67,7 +67,7 @@ internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolea
         mapContent()
         if (day != null) Surface(onClick = onShowAll, color = Canvas, shape = ChipShape,
             modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top=12.dp)) {
-            Text("$day · 返回全部探索", color = Pigment, fontSize = 13.sp, modifier = Modifier.padding(12.dp))
+            Text("$day 当天足迹 · 返回全部探索", color = Pigment, fontSize = 13.sp, modifier = Modifier.padding(12.dp))
         }
         if(notice!=null && day==null) Surface(onClick=onSettings,color=Canvas,shape=PanelShape,
             border=BorderStroke(1.dp,Line),shadowElevation=1.dp,
@@ -79,7 +79,7 @@ internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolea
             listOf("放大地图" to { onZoom(1) }, "缩小地图" to { onZoom(-1) }, "定位我" to onLocate).forEach { (label, action) ->
                 Surface(onClick = action, color = Canvas.copy(alpha=.97f), shape = RoundedCornerShape(13.dp),
                     border = BorderStroke(1.dp, Line), shadowElevation = 2.dp, modifier = Modifier.size(48.dp)) {
-                    Box(Modifier.semantics { contentDescription = label }, contentAlignment = Alignment.Center) {
+                    Box(Modifier.semantics { contentDescription = if(label=="定位我" && day!=null) "定位当天" else label }, contentAlignment = Alignment.Center) {
                         if (label == "定位我") Icon(painterResource(R.drawable.ic_location), null, tint = Ink, modifier = Modifier.size(21.dp))
                         else Text(if (label == "放大地图") "+" else "−", color = Ink, fontSize = 24.sp,fontWeight=FontWeight.Normal)
                     }
