@@ -11,8 +11,11 @@ import org.json.JSONObject
 
 /** Real two-finger touch events. Host must verify the dedicated AVD before invoking. */
 internal object AmapGestureProbe {
+    private var transientSamples=0
+    private var minimumUnknownBlack=1.0
     fun run(instrumentation: Instrumentation, direction: String): String {
         require(direction == "in" || direction == "out")
+        transientSamples=0;minimumUnknownBlack=1.0
         val context = instrumentation.targetContext
         instrumentation.startActivitySync(Intent(context,MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -48,7 +51,8 @@ internal object AmapGestureProbe {
         check(restored>wide+3.0) { "Actual camera did not zoom in" }
         shot("v043-gesture-return.png")
         return "AMAP_GESTURE_PASS: "+JSONObject().put("street_zoom",before)
-            .put("wide_zoom",wide).put("returned_zoom",restored).toString()
+            .put("wide_zoom",wide).put("returned_zoom",restored)
+            .put("transient_samples",transientSamples).put("minimum_unknown_black",minimumUnknownBlack).toString()
     }
 
     private fun pinch(instrumentation:Instrumentation,direction:String) {
@@ -76,6 +80,27 @@ internal object AmapGestureProbe {
         for (step in 1..30) {
             SystemClock.sleep(20)
             event(MotionEvent.ACTION_MOVE, begin + (end - begin) * step / 30f, 2)
+            if(step%10==0) {
+                val image=instrumentation.uiAutomation.takeScreenshot() ?: error("Transient screenshot unavailable")
+                try {
+                    transientSamples++
+                    val sites=listOf(.08f to .18f,.90f to .18f,.08f to .84f)
+                    val fractions=sites.map { (fx,fy) ->
+                        val cx=(image.width*fx).toInt();val cy=(image.height*fy).toInt()
+                        var black=0
+                        for(dx in -4..4) for(dy in -4..4) {
+                            val pixel=image.getPixel(cx+dx,cy+dy)
+                            if(android.graphics.Color.red(pixel)<12 && android.graphics.Color.green(pixel)<12 && android.graphics.Color.blue(pixel)<12) black++
+                        }
+                        black/81.0
+                    }
+                    minimumUnknownBlack=minOf(minimumUnknownBlack,fractions.min())
+                    File(instrumentation.targetContext.getExternalFilesDir(null),"v044-transient-$transientSamples.png").outputStream().use {
+                        check(image.compress(Bitmap.CompressFormat.PNG,90,it))
+                    }
+                    check(fractions.all { it>.90 }) { "Unknown map exposed during $direction gesture: $fractions" }
+                } finally { image.recycle() }
+            }
         }
         event(MotionEvent.ACTION_POINTER_UP or (1 shl 8), end, 2)
         event(MotionEvent.ACTION_UP, end, 1)

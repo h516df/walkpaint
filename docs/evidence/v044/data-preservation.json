@@ -1,0 +1,117 @@
+{
+  "all_original_rows_preserved": true,
+  "device": "emulator-5560",
+  "before": {
+    "trips": {
+      "count": 7,
+      "sha256": "c35dfb0f1e1d49ae13a5c28c6a486f6ef6096723f416b98e87678bab2b7da519"
+    },
+    "points": {
+      "count": 4865,
+      "sha256": "79443c5009d792f6da0aca68c7d7e5f66c32049ff18545964e2e1cf5e33d20f6"
+    },
+    "roads": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "road_matches": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "coverage": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "after": {
+    "trips": {
+      "count": 7,
+      "sha256": "c35dfb0f1e1d49ae13a5c28c6a486f6ef6096723f416b98e87678bab2b7da519",
+      "baselineCount": 7,
+      "baselineSha256": "c35dfb0f1e1d49ae13a5c28c6a486f6ef6096723f416b98e87678bab2b7da519"
+    },
+    "points": {
+      "count": 4865,
+      "sha256": "79443c5009d792f6da0aca68c7d7e5f66c32049ff18545964e2e1cf5e33d20f6",
+      "baselineCount": 4865,
+      "baselineSha256": "79443c5009d792f6da0aca68c7d7e5f66c32049ff18545964e2e1cf5e33d20f6"
+    },
+    "roads": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "baselineCount": 0,
+      "baselineSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "road_matches": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "baselineCount": 0,
+      "baselineSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "coverage": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "baselineCount": 0,
+      "baselineSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "earlier_original_device": {
+    "all_original_rows_preserved": true,
+    "before": {
+      "trips": {
+        "count": 1,
+        "sha256": "346ae30c184b701e2aa08a981a19518c30b74c291c73f7efb8100ff9588d1ae0"
+      },
+      "points": {
+        "count": 8,
+        "sha256": "11e1466e559575169218f9b429fe4eda39f8a5f8ca060d231b4f7c8ca7776888"
+      },
+      "roads": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "road_matches": {
+        "count": 7,
+        "sha256": "7b5f8a3c967061cf50ecf30b2e0fe6006d765228e8c181c8fdfeef922806d17d"
+      },
+      "coverage": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    "after": {
+      "trips": {
+        "count": 8,
+        "sha256": "88338c0b4f5bf92cb72fbde59be2f0646367954e96a52b52b874c7d9b7729065",
+        "baselineCount": 1,
+        "baselineSha256": "346ae30c184b701e2aa08a981a19518c30b74c291c73f7efb8100ff9588d1ae0"
+      },
+      "points": {
+        "count": 4905,
+        "sha256": "e55729c4d3ae610adf70f5fe0bfbec8e9d26e43d8c7bd1f2ab0b39390dd1d856",
+        "baselineCount": 8,
+        "baselineSha256": "11e1466e559575169218f9b429fe4eda39f8a5f8ca060d231b4f7c8ca7776888"
+      },
+      "roads": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "baselineCount": 0,
+        "baselineSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "road_matches": {
+        "count": 39,
+        "sha256": "b542303454f9c5df27c5859d0ff1695d723ab6c38c2d4f5a2566a0f6b295404c",
+        "baselineCount": 7,
+        "baselineSha256": "7b5f8a3c967061cf50ecf30b2e0fe6006d765228e8c181c8fdfeef922806d17d"
+      },
+      "coverage": {
+        "count": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "baselineCount": 0,
+        "baselineSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    "phone_path": "not_verified"
+  },
+  "phone_path": "not_verified"
+}

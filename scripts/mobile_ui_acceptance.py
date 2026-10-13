@@ -7,7 +7,7 @@ from datetime import datetime
 
 ROOT=Path(__file__).resolve().parents[1]
 ADB=r'D:\Apps\Android\sdk\platform-tools\adb.exe'
-SERIAL='emulator-5556'
+from amap_runtime_evidence import SERIAL
 OUT=ROOT/'verification/mobile-ui'
 
 def run(*args,binary=False,timeout=90):

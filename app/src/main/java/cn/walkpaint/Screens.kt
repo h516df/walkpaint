@@ -33,7 +33,7 @@ internal fun AppShell(
     automatic: Boolean, running: Boolean, trackingStatus: String, recordingTitle: String,
     recordingHealthy: Boolean, profileNotice: String?, onResolveTracking: () -> Unit, mapNotice: String?, selectedDay: String?, mapRoadState: RoadState,
     dailyRoads: Map<String,RoadState>, roadAreaHint: String, onShowAll: () -> Unit,
-    needsBackground: Boolean, onLocate: () -> Unit, onToggleTracking: (Boolean) -> Unit,
+    needsBackground: Boolean, onLocate: () -> Unit, onZoom: (Int) -> Unit, onToggleTracking: (Boolean) -> Unit,
     onDemo: () -> Unit, onTrip: (Track) -> Unit, onExport: () -> Unit, onImport: () -> Unit,
     onBackgroundSettings: () -> Unit, onPowerSettings: () -> Unit, onRevoke: () -> Unit,
     onCopyDiagnostics: () -> Unit, internalBackupCount: Int, mapProviderLabel: String,
@@ -43,36 +43,17 @@ internal fun AppShell(
     feedbackContent: @Composable (onBack:()->Unit)->Unit,
     updatesContent: @Composable (onBack:()->Unit)->Unit, mapContent: @Composable () -> Unit
 ) {
-    // The share is anchored to the last place the person was, so the number carries a name instead
-    // of being an abstract count of cells.
-    val lastPoint=state.realTracks.lastOrNull()?.points?.lastOrNull()
-    val anchorLat=fix?.latitude ?: lastPoint?.lat
-    val anchorLon=fix?.longitude ?: lastPoint?.lon
-    val share=remember(state,anchorLat,anchorLon) {
-        if(anchorLat==null||anchorLon==null) PlaceShare(0,0,0)
-        else PlaceProgress.of(state,anchorLat,anchorLon)
-    }
-    val explored=remember(state) {
-        Explorer.of(state,java.time.LocalDate.now().atStartOfDay(java.time.ZoneId.systemDefault())
-            .toInstant().toEpochMilli())
-    }
-    Scaffold(containerColor=PageBackground, bottomBar={
+    Scaffold(containerColor=PageBackground, topBar={
         Surface(color=Canvas, shadowElevation=2.dp) {
-            Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal=8.dp,vertical=6.dp).height(58.dp),
-                horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                listOf("地图","足迹","我的").forEachIndexed { index,label ->
-                    val chosen=index==selectedTab
-                    Column(Modifier.weight(1f).fillMaxHeight()
-                        .background(if(chosen) PigmentSoft else androidx.compose.ui.graphics.Color.Transparent,ChipShape)
-                        .clickable { onTab(index) }, horizontalAlignment=Alignment.CenterHorizontally,
-                        verticalArrangement=Arrangement.Center) {
-                        Icon(painterResource(when(index) { 0->R.drawable.ic_map;1->R.drawable.ic_route;else->R.drawable.ic_person }),
-                            contentDescription=label,tint=if(chosen) Pigment else Muted,modifier=Modifier.size(22.dp))
-                        Spacer(Modifier.height(4.dp))
-                        Text(label,color=if(chosen) Pigment else Muted,fontSize=12.sp,
-                            fontWeight=if(chosen) FontWeight.SemiBold else FontWeight.Normal)
+            Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal=16.dp,vertical=6.dp),
+                verticalAlignment=Alignment.CenterVertically, horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                listOf("探索","足迹").forEachIndexed { index,label ->
+                    TextButton(onClick={onTab(index)}, modifier=Modifier.weight(1f),
+                        colors=ButtonDefaults.textButtonColors(contentColor=if(selectedTab==index) Pigment else Muted)) {
+                        Text(label, fontSize=18.sp, fontWeight=if(selectedTab==index) FontWeight.Bold else FontWeight.Normal)
                     }
                 }
+                IconButton(onClick={onTab(2)}) { Icon(painterResource(R.drawable.ic_person), "我的", tint=if(selectedTab==2) Pigment else Muted) }
             }
         }
     }) { padding ->
@@ -80,16 +61,8 @@ internal fun AppShell(
             when(selectedTab) {
                 0 -> DesignMapOverlay(state,selectedDay,automatic,recordingTitle,recordingHealthy,mapNotice,
                     mapProviderLabel,{onTab(2)},onToggleTracking,onLocate,onShowAll,
-                    mapProviderLabel.contains("OpenFreeMap"),mapContent)
-                1 -> DesignTripsPage(state,roadColor,onTrip,onExport) {
-                    Column(verticalArrangement=Arrangement.spacedBy(16.dp)) {
-                        PlaceCard(placeName ?: PlaceProgress.UNKNOWN_PLACE,share,
-                            Explorer.streak(DailyFootprints.days(state).map { it.key },DailyFootprints.key(System.currentTimeMillis())))
-                        RecapCard(RecapMaker.of(DailyFootprints.days(state),DailyFootprints.key(System.currentTimeMillis()).take(7)),
-                            RecapMaker.of(DailyFootprints.days(state),DailyFootprints.key(System.currentTimeMillis()).take(4)))
-                        FootprintCalendar(DailyFootprints.days(state),DailyFootprints.key(System.currentTimeMillis()),onTrip)
-                    }
-                }
+                    mapProviderLabel.contains("OpenFreeMap"),onZoom,mapContent)
+                1 -> DesignTripsPage(state,roadColor,onTrip,onExport)
                 else -> ProfilePage(state,appearanceMode,onAppearanceMode,onShowIntro,automatic,profileNotice,onResolveTracking,
                     onToggleTracking,onRevoke,onBackgroundSettings,onPowerSettings,onCopyDiagnostics,
                     roadState,roadAreaHint,onRoadPack,onExport,onImport,internalBackupCount,
@@ -238,7 +211,7 @@ private fun monthLabel(month:String):String = "${month.take(4)} 年 ${month.subs
  * from the calendar below it.
  */
 @Composable
-private fun RecapCard(month:Recap?,year:Recap?) {
+internal fun RecapCard(month:Recap?,year:Recap?) {
     if(month==null && year==null) return
     Section("回顾") {
         month?.let { RecapRow("本月", it) }
@@ -352,7 +325,7 @@ private fun heatInk(level:Int) = if(level>=3) androidx.compose.ui.graphics.Color
  * share [YearHeatmap] banding, so a shade means the same thing wherever you are.
  */
 @Composable
-private fun FootprintCalendar(days:List<DailyFootprint>,todayKey:String,onTrip:(Track)->Unit) {
+internal fun FootprintCalendar(days:List<DailyFootprint>,todayKey:String,onTrip:(Track)->Unit) {
     val today=remember { java.time.LocalDate.now() }
     val byKey=remember(days) { days.associateBy { it.key } }
     val meters=remember(days) { byKey.mapValues { it.value.meters } }
@@ -379,7 +352,8 @@ private fun FootprintCalendar(days:List<DailyFootprint>,todayKey:String,onTrip:(
             CalendarMode.YEAR -> YearStrip(today,meters) { date ->
                 monthKey=date.toString().take(7); modeName=CalendarMode.MONTH.name }
             CalendarMode.MONTH -> MonthPage(monthKey,today,meters,byKey,dayKey,
-                onShiftMonth={ monthKey=it }, onPickDay={ dayKey=it; modeName=CalendarMode.DAY.name })
+                onShiftMonth={ monthKey=it }, onPickDay={ dayKey=it; modeName=CalendarMode.DAY.name
+                    byKey[it]?.let { selected -> onTrip(selected.focusTrack()) } })
             CalendarMode.DAY -> DayPage(dayKey,byKey,today,todayKey,onTrip)
         }
     }
@@ -493,7 +467,7 @@ private fun DayPage(dayKey:String,byKey:Map<String,DailyFootprint>,today:java.ti
             }
         }
         Spacer(Modifier.height(10.dp))
-        if(day!=null) SettingRow("在地图上查看这一天",onClick={ onTrip(day.focusTrack()) })
+        if(day!=null) SettingRow("查看当天足迹",onClick={ onTrip(day.focusTrack()) })
     }
 }
 
@@ -540,7 +514,6 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
                 } }
                 item { Section("地图与涂色") {
                     SettingRow("地图服务与隐私",provider,onAmap)
-                    SettingRow("联网备用地图","单独同意后使用 OpenFreeMap",onOnline)
                     SettingRow("涂色颜色",RoadPaintColor.name(roadColor),onAppearance)
                 } }
                 item { Section("数据与备份") {

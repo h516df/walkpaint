@@ -24,7 +24,7 @@ internal data class RecordingStatus(val code: String, val title: String, val hin
             val currentCallback = s.callbackAt.takeIf { it >= s.startedAt } ?: 0
             if (!recent(currentCallback)) {
                 if (currentCallback > 0 || !recent(s.startedAt))
-                    return RecordingStatus("CALLBACK_INTERRUPTED", "收不到定位信号", "监听还开着，但没有新的定位进来；请到室外或稍等")
+                    return RecordingStatus("CALLBACK_INTERRUPTED", "收不到定位信号", "监听还开着，但系统没有送来新的 GPS 位置；网络蓝点不能代替 GPS 足迹")
                 return RecordingStatus("STARTING", "正在搜寻定位", "还没拿到第一个有效定位，此时并没有在记录")
             }
             if (s.validAt < s.startedAt || !recent(s.validAt) || s.filterAt > s.validAt && s.filter in setOf(

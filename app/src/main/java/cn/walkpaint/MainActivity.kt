@@ -61,10 +61,10 @@ import java.util.Locale
  * fog still covers the screen between redraws; this only keeps a long drag from redrawing the
  * whole history on every frame.
  */
-private const val VEIL_REFRESH_MS = 500L
+private const val VEIL_REFRESH_MS = 120L
 /** Shortest gap between two redraws once the map has settled; a redraw that lands inside it is
  * coalesced into one shortly afterwards rather than dropped, so the last view is always drawn. */
-private const val VEIL_REFRESH_SETTLE_MS = 350L
+private const val VEIL_REFRESH_SETTLE_MS = 100L
 
 /**
  * A viewport wider than this is not a view of the map; it is the engine before it is ready. It was
@@ -98,19 +98,29 @@ class MainActivity : ComponentActivity() {
     /** Name of the place the progress is measured around; null until resolved, never an error. */
     private var placeName by mutableStateOf<String?>(null)
     private var placeAnchor: TrackPoint? = null
+    private var placeRequestRevision = 0
 
     /**
      * Resolves the current place name, but only after moving far enough to matter. Geocoding on
      * every fix would hammer the service for a name that has not changed.
      */
     private fun refreshPlaceName(fix: Location?) {
+        if (!amapConsent || BuildConfig.AMAP_KEY.isBlank()) {
+            placeRequestRevision++
+            placeAnchor = null
+            placeName = null
+            return
+        }
         val last = snapshot.realTracks.lastOrNull()?.points?.lastOrNull()
         val lat = fix?.latitude ?: last?.lat ?: return
         val lon = fix?.longitude ?: last?.lon ?: return
         val anchor = TrackPoint(lat, lon, 0L, 5f)
         placeAnchor?.let { if (Geo.meters(it, anchor) < 500.0) return }
         placeAnchor = anchor
-        PlaceName.resolve(this, lat, lon) { name -> runOnUiThread { if (name != null) placeName = name } }
+        val requestRevision = ++placeRequestRevision
+        PlaceName.resolve(this, lat, lon) { name -> runOnUiThread {
+            if (amapConsent && requestRevision == placeRequestRevision && placeAnchor == anchor && name != null) placeName = name
+        } }
     }
     private var showRoadAppearance by mutableStateOf(false)
     private var retainedMapCamera:org.maplibre.android.camera.CameraPosition?=null
@@ -432,6 +442,11 @@ class MainActivity : ComponentActivity() {
                     roadAreaHint = roadAreaHint,
                     onShowAll = { clearDaySelection() },
                     onLocate = { clearDaySelection(showExtent=false); centerUser() },
+                    onZoom = { delta ->
+                        pauseMapFollowing()
+                        if(amapActive) amapController.zoomBy(delta)
+                        else mapInstance?.let { map -> map.animateCamera(CameraUpdateFactory.zoomTo((map.cameraPosition.zoom+delta).coerceIn(3.0,20.0))) }
+                    },
                     onToggleTracking = { requested ->
                         if (requested) beginEnable()
                         else {
@@ -581,7 +596,7 @@ class MainActivity : ComponentActivity() {
                     },
                     title = { Text("是否使用高德地图？", fontWeight = FontWeight.Bold) },
                     text = { Column {
-                        Text("高德开放平台地图 SDK 由北京高德图强科技有限公司提供，用于地图展示；" +
+                        Text("高德开放平台地图与搜索 SDK 由北京高德图强科技有限公司提供，用于地图展示和地名查询；" +
                             "可能收集经纬度、IP/网络、GNSS、设备参数、系统和传感器信息。" +
                             "足迹数据库仍保留本机；拒绝使用高德不影响自动记录。")
                         TextButton(onClick = {
@@ -595,6 +610,8 @@ class MainActivity : ComponentActivity() {
                                 .putBoolean("amap_sdk_consent", true)
                                 .putBoolean("amap_sdk_decision_seen", true).apply()
                             amapConsent = true
+                            placeAnchor = null
+                            refreshPlaceName(userFix)
                             showAmapConsent = false
                         }) { Text("同意使用高德") }
                     },
@@ -602,7 +619,10 @@ class MainActivity : ComponentActivity() {
                         TextButton(onClick = {
                             showAmapConsent = false
                             amapConsent=false; onlineMap=false
+                            placeRequestRevision++
+                            placeAnchor=null; placeName=null
                             com.amap.api.maps.MapsInitializer.updatePrivacyAgree(applicationContext,false)
+                            com.amap.api.services.core.ServiceSettings.updatePrivacyAgree(applicationContext,false)
                             getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE).edit()
                                 .putBoolean("amap_sdk_decision_seen", true)
                                 .putBoolean("amap_sdk_consent", false)
@@ -989,7 +1009,7 @@ class MainActivity : ComponentActivity() {
             savedCount = (diagnostic["saved_count"] as? Number)?.toLong() ?: snapshot.realPointCount.toLong(),
             movingThisSession = (diagnostic["session_moving_count"] as? Number)?.toLong() ?: 0L,
             savedThisSession = (diagnostic["session_saved_count"] as? Number)?.toLong() ?: 0L,
-            filteredCount = (diagnostic["filtered_count"] as? Number)?.toLong() ?: 0L,
+            filteredCount = (diagnostic["session_filtered_count"] as? Number)?.toLong() ?: 0L,
             stationaryFiltered = (diagnostic["session_filter_stationary_count"] as? Number)?.toLong() ?: 0L,
             jumpFiltered = (diagnostic["session_filter_jump_count"] as? Number)?.toLong() ?: 0L,
             accuracyFiltered = (diagnostic["session_filter_accuracy_count"] as? Number)?.toLong() ?: 0L,
@@ -1269,17 +1289,6 @@ class MainActivity : ComponentActivity() {
         return view
     }
 
-    /**
-     * The veil currently follows the walked ground around the person, not the map view.
-     *
-     * A viewport-following version was written and is kept in `TrailPaint.frameFor`, but its
-     * on-device rendering could not be made correct in this pass: after the frame changes, the
-     * image MapLibre actually draws is at the wrong scale (a bitmap dump showed the first,
-     * degenerate frame still on screen minutes later, and rebuilding the source fixed the
-     * staleness but not the scale). Shipping it would make the fog worse than what it replaced, so
-     * the screen keeps the version that renders correctly and the large-history limitation stays
-     * documented as open in `docs/evidence/V037_FOG_LINE.md`.
-     */
     private fun onMapCameraMoved() { refreshVeilForViewport(force = false) }
 
     private fun onMapCameraSettled() {
@@ -1415,7 +1424,7 @@ class MainActivity : ComponentActivity() {
         }
         val viewport = currentViewport
         val colour = roadColor
-        val handOver = force
+        val handOver = true
         val anchor = userFix?.let { TrackPoint(it.latitude, it.longitude, it.time, it.accuracy) }
         val day = selectedDay
         val displayed = mapTrackState
@@ -1433,10 +1442,8 @@ class MainActivity : ComponentActivity() {
                 val routeJson = TrackMapJson.encodePaths(route)
                 runOnUiThread {
                     try {
-                        // While the camera is moving the image is painted but not handed over: the
-                        // rebuild costs a few tens of milliseconds on the UI thread, and doing it
-                        // under a finger is exactly the jank this work exists to remove. The
-                        // settled callback hands over the final view.
+                        // The cheap coverage mask remains in place until this actual ground
+                        // frame is handed over, including during an active pinch.
                         if (handOver && day == selectedDay) {
                             mapTrailPaths = route
                             paintedJson = routeJson

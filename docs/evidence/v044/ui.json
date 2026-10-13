@@ -1,0 +1,31 @@
+{
+  "device": "emulator-5560",
+  "avd": "WalkPaint_Google_API36_V044",
+  "engine": "amap",
+  "phone_path": "not_verified",
+  "checks": {
+    "map_only_home": true,
+    "zoom_controls_change_camera": true,
+    "pan_and_locate": true,
+    "calendar_statistics_day_details_day_map": true,
+    "recording_and_diagnostics_in_profile_no_backup_entry": true,
+    "reopen_exploration": true
+  },
+  "passed": true,
+  "apk_sha256": "567080ebcf316892d5879c85c79b6bf68f7017f3a572f11b03a4a2a0b12f3a50",
+  "camera_before_zoom": {
+    "zoom": 17.0,
+    "lat": 39.9102,
+    "lon": 116.39142
+  },
+  "camera_after_zoom_in": {
+    "zoom": 18.0,
+    "lat": 39.9102,
+    "lon": 116.39142
+  },
+  "camera_after_zoom_out": {
+    "zoom": 17.0,
+    "lat": 39.9102,
+    "lon": 116.39142
+  }
+}
