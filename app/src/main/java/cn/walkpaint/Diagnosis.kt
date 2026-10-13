@@ -98,7 +98,7 @@ internal object Diagnosis {
         SCREEN_PHONE_LOCATION_OFF -> "手机定位关着，现在收不到位置。打开它就自己恢复。"
         SCREEN_STORAGE -> "位置收到了，但写不进手机存储。检查一下剩余空间。"
         SCREEN_BACKGROUND_STOPPED -> "记录被系统停掉了。回到应用能恢复；把本应用加入省电白名单能减少这种情况。"
-        SCREEN_NO_SIGNAL -> "收不到定位。多半是在室内或信号被挡住，到室外试试。"
+        SCREEN_NO_SIGNAL -> "记录后台在运行，但系统没有送来新的 GPS 位置。网络蓝点不代表 GPS 已定位；目前不能确定是信号、系统还是订阅问题。"
         SCREEN_WEAK_SIGNAL -> "定位精度不够，暂时没记录。到空旷一点的地方会好。"
         SCREEN_WALKING_FILTERED -> "定位在更新，但你走的路被当成「没移动」丢掉了。这是需要修的问题，把这份诊断发我。"
         SCREEN_LONG_GAP -> "整体正常，但中间出现过一次较长的断档。系统清理后台时会这样，断档不是数据被删。"
@@ -114,7 +114,7 @@ internal object Diagnosis {
         ),
         DiagnosisItem(
             "记录后台", if (f.running) Health.OK else Health.BAD,
-            if (f.running) "在运行，本次已启动 ${f.serviceStartCount} 次" else "没有在运行",
+            if (f.running) "在运行，历史累计启动 ${f.serviceStartCount} 次" else "没有在运行",
             when {
                 !f.running -> "回到应用就能恢复；把本应用加入省电白名单能减少这种情况"
                 !f.batteryWhitelisted -> "建议把本应用加入省电白名单，减少被系统停掉"

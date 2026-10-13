@@ -10,7 +10,7 @@ internal class RecordingHealth(private var lastCallbackElapsed: Long? = null) {
 
     companion object {
         fun shouldRetry(registered: Boolean, providerEnabled: Boolean, lastCallbackAge: Long,
-                        lastRegistrationAge: Long): Boolean = providerEnabled &&
-            (!registered || (lastCallbackAge > 90_000L && lastRegistrationAge > 90_000L))
+                        lastRegistrationAge: Long, acquiringGnss: Boolean = false): Boolean = providerEnabled &&
+            (!registered || (!acquiringGnss && lastCallbackAge > 90_000L && lastRegistrationAge > 90_000L))
     }
 }

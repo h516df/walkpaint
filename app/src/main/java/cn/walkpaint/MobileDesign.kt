@@ -65,67 +65,29 @@ internal fun DesignSummary(state: TrackState) {
 internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolean,
     title: String, healthy: Boolean, notice: String?, provider: String, onSettings: () -> Unit,
     onToggle: (Boolean) -> Unit, onLocate: () -> Unit, onShowAll: () -> Unit,
-    showOsmCredit: Boolean, mapContent: @Composable () -> Unit) {
-    val selected = remember(state, day) { DailyFootprints.select(state, day ?: DailyFootprints.key(System.currentTimeMillis())) }
-    val summary = remember(selected) { TrailSummary.of(selected.realTracks) }
+    showOsmCredit: Boolean, onZoom: (Int) -> Unit, mapContent: @Composable () -> Unit) {
     val uri = androidx.compose.ui.platform.LocalUriHandler.current
-    val density = LocalDensity.current
-    var summaryHeight by remember { mutableIntStateOf(0) }
-    val mapBottomInset = maxOf(188.dp, with(density) { summaryHeight.toDp() } + 24.dp)
     Box(Modifier.fillMaxSize()) {
-        // Leave the SDK's logo/attribution above the summary instead of covering it with a card.
-        Box(Modifier.fillMaxSize().padding(bottom = mapBottomInset)) { mapContent() }
-        Row(Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Surface(onClick = onSettings, color = Canvas, shape = RoundedCornerShape(24.dp),
-                border = BorderStroke(1.dp, Line), modifier = Modifier.weight(1f)) {
-                Row(Modifier.padding(horizontal = 12.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(7.dp).background(if (healthy) Pigment else Color(0xFFA9670F), CircleShape))
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (!automatic) "已暂停" else notice ?: title, color = Ink, fontSize = 12.sp,
-                        maxLines = 2, fontWeight = FontWeight.Medium)
-                }
-            }
-            Surface(onClick = onSettings, color = Canvas, shape = RoundedCornerShape(24.dp), border = BorderStroke(1.dp, Line)) {
-                Text(when { provider.contains("高德") -> "高德地图"; provider.contains("OpenFreeMap") -> "OpenFreeMap"; else -> "离线地图" },
-                    color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp))
-            }
+        mapContent()
+        if (day != null) Surface(onClick = onShowAll, color = Canvas, shape = ChipShape,
+            modifier = Modifier.align(Alignment.TopCenter).padding(12.dp)) {
+            Text("$day · 返回全部探索", color = Pigment, fontSize = 13.sp, modifier = Modifier.padding(12.dp))
         }
-        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        Column(Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 42.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (day != null) Surface(onClick = onShowAll, color = Canvas, shape = ChipShape) {
-                Text("$day · 返回全部探索", color = Pigment, fontSize = 13.sp, modifier = Modifier.padding(12.dp))
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                Surface(onClick = onLocate, color = Canvas, shape = RoundedCornerShape(16.dp),
+            listOf("放大地图" to { onZoom(1) }, "缩小地图" to { onZoom(-1) }, "定位我" to onLocate).forEach { (label, action) ->
+                Surface(onClick = action, color = Canvas, shape = RoundedCornerShape(16.dp),
                     border = BorderStroke(1.dp, Line), shadowElevation = 2.dp, modifier = Modifier.size(48.dp)) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(painterResource(R.drawable.ic_location), "定位我", tint = Pigment, modifier = Modifier.size(23.dp))
-                    }
-                }
-            }
-            if (showOsmCredit) Text("© OpenStreetMap contributors · ODbL 1.0", color = Ink, fontSize = 10.sp,
-                modifier = Modifier.background(Canvas, RoundedCornerShape(4.dp))
-                    .clickable { uri.openUri("https://www.openstreetmap.org/copyright") }.padding(4.dp))
-            Surface(color = Canvas, shape = RoundedCornerShape(22.dp), border = BorderStroke(1.dp, Line), shadowElevation = 3.dp,
-                modifier = Modifier.onSizeChanged { summaryHeight = it.height }) {
-                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Box(Modifier.align(Alignment.CenterHorizontally).width(32.dp).height(3.dp).background(Line, CircleShape))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        DesignStat(exploredDistance(summary.meters), if (day == null) "今日里程" else "当天里程", Modifier.weight(1.2f))
-                        DesignStat(summary.duration, "有效记录时长", Modifier.weight(1f))
-                        DesignStat("${summary.points}", "足迹点", Modifier.weight(.7f))
-                    }
-                    Text(if (!automatic) "记录已暂停，历史足迹保留" else notice ?: title,
-                        color = Muted, fontSize = 12.sp)
-                    Button(onClick = { onToggle(!automatic) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                        shape = RoundedCornerShape(12.dp)) {
-                        Text(if (automatic) "暂停记录" else "继续记录", fontWeight = FontWeight.SemiBold)
+                    Box(Modifier.semantics { contentDescription = label }, contentAlignment = Alignment.Center) {
+                        if (label == "定位我") Icon(painterResource(R.drawable.ic_location), null, tint = Pigment, modifier = Modifier.size(23.dp))
+                        else Text(if (label == "放大地图") "+" else "−", color = Pigment, fontSize = 28.sp)
                     }
                 }
             }
         }
+        if (showOsmCredit) Text("© OpenStreetMap contributors · ODbL 1.0", color = Ink, fontSize = 10.sp,
+            modifier = Modifier.align(Alignment.BottomStart).background(Canvas, RoundedCornerShape(4.dp))
+                .clickable { uri.openUri("https://www.openstreetmap.org/copyright") }.padding(4.dp))
     }
 }
 
@@ -165,20 +127,16 @@ internal fun RouteThumbnail(track: Track, modifier: Modifier = Modifier, color: 
 
 @Composable
 internal fun DesignTripsPage(state: TrackState, roadColor: Int, onTrip: (Track) -> Unit,
-    onExport: () -> Unit, calendar: @Composable () -> Unit) {
+    onExport: () -> Unit) {
     val days = remember(state) { DailyFootprints.days(state) }
-    var rangeName by rememberSaveable { mutableStateOf(FootprintRange.ALL.name) }
     var detailKey by rememberSaveable { mutableStateOf<String?>(null) }
-    var showCalendar by rememberSaveable { mutableStateOf(false) }
-    val today = LocalDate.now()
-    val range = FootprintRange.valueOf(rangeName)
+    var showStats by rememberSaveable { mutableStateOf(false) }
     val selected = days.firstOrNull { it.key == detailKey }
     if (selected != null) {
         DesignTripDetail(selected, roadColor, { detailKey = null }, { onTrip(selected.focusTrack()) }, onExport)
         return
     }
-    val filtered = days.filter { range.includes(it.key, today) }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -186,43 +144,19 @@ internal fun DesignTripsPage(state: TrackState, roadColor: Int, onTrip: (Track) 
                     Text("共 ${exploredDistance(state.totalMeters)} · ${days.size} 个探索日", color = Muted, fontSize = 13.sp,
                         modifier = Modifier.padding(top = 6.dp))
                 }
+                TextButton(onClick = { showStats = !showStats }) { Text(if(showStats) "日历" else "统计") }
                 IconButton(onClick = onExport) { Icon(painterResource(R.drawable.ic_export), "导出全部足迹", tint = Pigment) }
             }
         }
-        item {
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FootprintRange.entries.forEach { entry ->
-                    FilterChip(selected = entry == range, onClick = { rangeName = entry.name }, label = { Text(entry.label) })
-                }
-            }
+        if (showStats) item { RecapCard(RecapMaker.of(days, java.time.LocalDate.now().toString().take(7)),
+            RecapMaker.of(days, java.time.LocalDate.now().toString().take(4))) }
+        else item { FootprintCalendar(days, DailyFootprints.key(System.currentTimeMillis())) { track ->
+            detailKey = days.firstOrNull { it.tracks.any { original -> original.id == track.id } }?.key
+                ?: track.points.firstOrNull()?.let { DailyFootprints.key(it.time) }
+        } }
+        if (days.isEmpty()) item {
+            Text("第一段足迹，等你出发。开启自动记录后，已保存的路线会出现在日历里。", color = Muted, fontSize = 14.sp)
         }
-        if (filtered.isEmpty()) item {
-            Surface(shape = CardShape, color = Canvas, border = BorderStroke(1.dp, Line)) {
-                Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(if (days.isEmpty()) "第一段足迹，等你出发" else "这段时间还没有足迹", color = Ink, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-                    Text("开启自动记录后，已保存的路线会出现在这里。", color = Muted, fontSize = 14.sp)
-                }
-            }
-        }
-        items(filtered, key = { it.key }) { day ->
-            val track = remember(day) { day.focusTrack() }
-            val summary = remember(day) { TrailSummary.of(day.tracks) }
-            Surface(onClick = { detailKey = day.key }, color = Canvas, shape = CardShape, border = BorderStroke(1.dp, Line)) {
-                Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    RouteThumbnail(track, Modifier.size(64.dp), roadColor)
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(if (day.key == today.toString()) "今天的足迹" else day.key, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                        Text("${summary.duration} · ${day.points} 个足迹点", color = Muted, fontSize = 12.sp)
-                    }
-                    Text(exploredDistance(day.meters), color = Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, style = TabularFigures)
-                }
-            }
-        }
-        item {
-            TextButton(onClick = { showCalendar = !showCalendar }) { Text(if (showCalendar) "收起探索日历" else "查看探索日历与统计") }
-        }
-        if (showCalendar) item { calendar() }
     }
 }
 

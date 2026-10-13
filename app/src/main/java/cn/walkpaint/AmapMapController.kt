@@ -44,6 +44,38 @@ internal class AmapMapController(private val context: Context, private val onGes
     private val casings = mutableListOf<Polyline>()
     private val cores = mutableListOf<Polyline>()
     private var ground: GroundOverlay? = null
+    private var coverageGuard: android.graphics.drawable.Drawable? = null
+    private val guardPath = android.graphics.Path()
+    private val guardPaint = Paint().apply { color = Color.BLACK }
+    private fun updateCoverageGuard() { coverageGuard?.invalidateSelf() }
+    private fun installCoverageGuard(view: MapView) {
+        val guard = object : android.graphics.drawable.Drawable() {
+            override fun draw(canvas: Canvas) {
+                val frame = groundFrame
+                val projection = map?.projection
+                guardPath.reset()
+                guardPath.fillType = android.graphics.Path.FillType.EVEN_ODD
+                guardPath.addRect(0f,0f,view.width.toFloat(),view.height.toFloat(),android.graphics.Path.Direction.CW)
+                if(frame != null && projection != null) {
+                    val corners = listOf(toAmap(frame.latMax,frame.lonMin),toAmap(frame.latMax,frame.lonMax),
+                        toAmap(frame.latMin,frame.lonMax),toAmap(frame.latMin,frame.lonMin)).map { projection.toScreenLocation(it) }
+                    // Degenerate projection must stay covered until the map is ready.
+                    if(corners.distinctBy { it.x to it.y }.size == 4) {
+                        guardPath.moveTo(corners[0].x.toFloat(),corners[0].y.toFloat())
+                        corners.drop(1).forEach { guardPath.lineTo(it.x.toFloat(),it.y.toFloat()) }
+                        guardPath.close()
+                    }
+                }
+                canvas.drawPath(guardPath,guardPaint)
+            }
+            override fun setAlpha(alpha: Int) {}
+            override fun setColorFilter(filter: android.graphics.ColorFilter?) {}
+            @Suppress("DEPRECATION") override fun getOpacity() = android.graphics.PixelFormat.TRANSLUCENT
+        }
+        coverageGuard=guard
+        view.addOnLayoutChangeListener { _,_,_,_,_,_,_,_,_ -> guard.setBounds(0,0,view.width,view.height);guard.invalidateSelf() }
+        view.overlay.add(guard)
+    }
     private var paintedRevision = -1
     /** Kept only so an exported field report can say what the phone's own engine ended up with. */
     private var groundPixels: String? = null
@@ -82,6 +114,8 @@ internal class AmapMapController(private val context: Context, private val onGes
         view.onCreate(null)
         currentView = view
         map = view.map
+        groundFrame = null
+        installCoverageGuard(view)
         casings.clear()
         cores.clear()
         ground = null
@@ -120,8 +154,8 @@ internal class AmapMapController(private val context: Context, private val onGes
         }
         // The veil follows the map: a pan or a zoom asks for a redraw for the new view.
         map?.setOnCameraChangeListener(object : AMap.OnCameraChangeListener {
-            override fun onCameraChange(position: CameraPosition?) { onCamera() }
-            override fun onCameraChangeFinish(position: CameraPosition?) { onCameraSettled() }
+            override fun onCameraChange(position: CameraPosition?) { updateCoverageGuard(); onCamera() }
+            override fun onCameraChangeFinish(position: CameraPosition?) { updateCoverageGuard(); onCameraSettled() }
         })
         map?.uiSettings?.isTiltGesturesEnabled = false
         latestPosition = location
@@ -137,6 +171,7 @@ internal class AmapMapController(private val context: Context, private val onGes
     fun render(state: TrackState, roads: RoadState, paths: List<List<TrackPoint>>,
                fog: Bitmap?, fogFrame: PaintFrame?, fogRevision: Int) {
         if (gestureActive) {
+            map?.let { syncGround(it, fog, fogFrame, fogRevision) }
             pendingState = state; pendingRoads = roads; pendingPaths = paths
             pendingFog = fog; pendingFrame = fogFrame; pendingRevision = fogRevision
             return
@@ -216,6 +251,7 @@ internal class AmapMapController(private val context: Context, private val onGes
         }
         groundPixels = "${fog.width}x${fog.height}"
         groundFrame = frame
+        updateCoverageGuard()
         if (BuildConfig.DEBUG) PerfTrace.upload(System.nanoTime() - handoverStart)
     }
 
@@ -239,6 +275,10 @@ internal class AmapMapController(private val context: Context, private val onGes
         } else {
             marker.position = coordinate
         }
+    }
+
+    fun zoomBy(delta: Int) {
+        map?.animateCamera(CameraUpdateFactory.zoomBy(delta.toFloat()))
     }
 
     fun focus(lat: Double, lon: Double, zoom: Double) {

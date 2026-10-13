@@ -61,10 +61,10 @@ import java.util.Locale
  * fog still covers the screen between redraws; this only keeps a long drag from redrawing the
  * whole history on every frame.
  */
-private const val VEIL_REFRESH_MS = 500L
+private const val VEIL_REFRESH_MS = 120L
 /** Shortest gap between two redraws once the map has settled; a redraw that lands inside it is
  * coalesced into one shortly afterwards rather than dropped, so the last view is always drawn. */
-private const val VEIL_REFRESH_SETTLE_MS = 350L
+private const val VEIL_REFRESH_SETTLE_MS = 100L
 
 /**
  * A viewport wider than this is not a view of the map; it is the engine before it is ready. It was
@@ -432,6 +432,11 @@ class MainActivity : ComponentActivity() {
                     roadAreaHint = roadAreaHint,
                     onShowAll = { clearDaySelection() },
                     onLocate = { clearDaySelection(showExtent=false); centerUser() },
+                    onZoom = { delta ->
+                        pauseMapFollowing()
+                        if(amapActive) amapController.zoomBy(delta)
+                        else mapInstance?.let { map -> map.animateCamera(CameraUpdateFactory.zoomTo((map.cameraPosition.zoom+delta).coerceIn(3.0,20.0))) }
+                    },
                     onToggleTracking = { requested ->
                         if (requested) beginEnable()
                         else {
@@ -989,7 +994,7 @@ class MainActivity : ComponentActivity() {
             savedCount = (diagnostic["saved_count"] as? Number)?.toLong() ?: snapshot.realPointCount.toLong(),
             movingThisSession = (diagnostic["session_moving_count"] as? Number)?.toLong() ?: 0L,
             savedThisSession = (diagnostic["session_saved_count"] as? Number)?.toLong() ?: 0L,
-            filteredCount = (diagnostic["filtered_count"] as? Number)?.toLong() ?: 0L,
+            filteredCount = (diagnostic["session_filtered_count"] as? Number)?.toLong() ?: 0L,
             stationaryFiltered = (diagnostic["session_filter_stationary_count"] as? Number)?.toLong() ?: 0L,
             jumpFiltered = (diagnostic["session_filter_jump_count"] as? Number)?.toLong() ?: 0L,
             accuracyFiltered = (diagnostic["session_filter_accuracy_count"] as? Number)?.toLong() ?: 0L,
@@ -1269,17 +1274,6 @@ class MainActivity : ComponentActivity() {
         return view
     }
 
-    /**
-     * The veil currently follows the walked ground around the person, not the map view.
-     *
-     * A viewport-following version was written and is kept in `TrailPaint.frameFor`, but its
-     * on-device rendering could not be made correct in this pass: after the frame changes, the
-     * image MapLibre actually draws is at the wrong scale (a bitmap dump showed the first,
-     * degenerate frame still on screen minutes later, and rebuilding the source fixed the
-     * staleness but not the scale). Shipping it would make the fog worse than what it replaced, so
-     * the screen keeps the version that renders correctly and the large-history limitation stays
-     * documented as open in `docs/evidence/V037_FOG_LINE.md`.
-     */
     private fun onMapCameraMoved() { refreshVeilForViewport(force = false) }
 
     private fun onMapCameraSettled() {
@@ -1415,7 +1409,7 @@ class MainActivity : ComponentActivity() {
         }
         val viewport = currentViewport
         val colour = roadColor
-        val handOver = force
+        val handOver = true
         val anchor = userFix?.let { TrackPoint(it.latitude, it.longitude, it.time, it.accuracy) }
         val day = selectedDay
         val displayed = mapTrackState
@@ -1433,10 +1427,8 @@ class MainActivity : ComponentActivity() {
                 val routeJson = TrackMapJson.encodePaths(route)
                 runOnUiThread {
                     try {
-                        // While the camera is moving the image is painted but not handed over: the
-                        // rebuild costs a few tens of milliseconds on the UI thread, and doing it
-                        // under a finger is exactly the jank this work exists to remove. The
-                        // settled callback hands over the final view.
+                        // The cheap coverage mask remains in place until this actual ground
+                        // frame is handed over, including during an active pinch.
                         if (handOver && day == selectedDay) {
                             mapTrailPaths = route
                             paintedJson = routeJson

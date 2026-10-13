@@ -54,6 +54,13 @@ class DiagnosisTest {
         assertNotNull(signal.action)
     }
 
+    @Test fun missingGpsDoesNotGuessIndoorCauseAndLabelsLifetimeStarts() {
+        val f=healthy().copy(callbackAgeMs=3_691_000,filteredCount=0,stationaryFiltered=0,jumpFiltered=0,accuracyFiltered=0,serviceStartCount=36)
+        assertFalse(Diagnosis.verdict(f).contains("室内"))
+        assertTrue(Diagnosis.verdict(f).contains("网络蓝点"))
+        assertTrue(Diagnosis.report(f).contains("历史累计启动 36 次"))
+        assertTrue(Diagnosis.report(f).contains("没有丢过点"))
+    }
     @Test fun aWalkRejectedAsStandingStillIsNamedAsAProblemToFix() {
         // Positioning is arriving, the receiver reported travel, and still nothing was stored.
         val f = healthy().copy(

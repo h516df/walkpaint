@@ -86,6 +86,8 @@ class RecordingService : Service(), LocationListener {
     private var rawFixBeforeLast: Location? = null
     private var lastRawFix: Location? = null
     private var gnssRegistered = false
+    private var lastSatelliteElapsed = 0L
+    private var satellitesUsed = 0
     private val gnssCallback = object : GnssStatus.Callback() {
         override fun onStarted() = gnssEvent("系统GNSS已启动")
         override fun onStopped() = gnssEvent("系统GNSS已停止")
@@ -96,6 +98,8 @@ class RecordingService : Service(), LocationListener {
         override fun onSatelliteStatusChanged(status: GnssStatus) {
             if (isClosing.get()) return
             val used = (0 until status.satelliteCount).count { status.usedInFix(it) }
+            lastSatelliteElapsed = SystemClock.elapsedRealtime()
+            satellitesUsed = used
             RecordingDiagnostics.satellites(this@RecordingService, status.satelliteCount, used)
         }
     }
@@ -179,6 +183,8 @@ class RecordingService : Service(), LocationListener {
             session.start()
             rawFixBeforeLast = null
             lastRawFix = null
+            lastSatelliteElapsed = 0L
+            satellitesUsed = 0
             lastNotificationAt = 0L
             val ongoing = notification("持续 GPS 记录 · 可能增加电耗")
             if (Build.VERSION.SDK_INT >= 29) {
@@ -233,7 +239,8 @@ class RecordingService : Service(), LocationListener {
         ensureGnss()
         RecordingDiagnostics.event(this, "provider", "${if(provider) "系统GPS已开启" else "系统GPS已关闭"} / ${if(gpsEnabled) "App已订阅" else "App未订阅"}")
         if (RecordingHealth.shouldRetry(gpsEnabled, provider,
-                elapsed - lastCallbackElapsed, elapsed - lastRegistrationElapsed)) {
+                elapsed - lastCallbackElapsed, elapsed - lastRegistrationElapsed,
+                acquiringGnss = lastSatelliteElapsed > 0L && elapsed - lastSatelliteElapsed in 0..45_000L && satellitesUsed == 0)) {
             // Never swallow registration failures or leave GPS unsubscribed after a retry.
             ensureGps(replace = gpsEnabled)
         }
