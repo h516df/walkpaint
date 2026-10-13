@@ -1,0 +1,18 @@
+{
+  "sha256": "32580e4da44dc0d24add869c459028929515bc07ec1657660cb0fb01a89476ae",
+  "size": 66013390,
+  "version": "0.48",
+  "code": 50,
+  "passed": true,
+  "system_installer": "com.google.android.packageinstaller",
+  "upgrade_from": "0.47/code49",
+  "upgrade_to": "0.48/code50",
+  "data_tables_unchanged": 5,
+  "trips_preserved": 7,
+  "points_preserved": 4865,
+  "prefs_preserved": true,
+  "installer_source_permission_restored": true,
+  "environment": "Android16/Google AVD/exact ARM64 APK via native bridge",
+  "production_updater_oauth_download": "not_verified",
+  "owner_vivo": "not_verified"
+}
