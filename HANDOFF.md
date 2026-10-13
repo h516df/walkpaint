@@ -1,3 +1,19 @@
+# v0.42/v0.43 高德可验收性与首屏迷雾（2026-10-13）
+
+工作区 `D:\Worktrees\WalkPaint\dsh-v042-amap-verify`，分支 `dsh/v042-amap-verify`（已推送），基线为**已发布的 v0.41** `c46352eb2f700b78abeeb4d2f30b8271c08f0d01`，其上是本轮修复的移植与扩展。交付记录见 GitHub Issue #17 的接续评论；细节与原始产物见 `docs/evidence/V042.md`。
+
+**这一轮推翻了我上一轮的一半结论。** 上一轮写"本机永远无法验证高德"：arm64 系统镜像确实被模拟器拒绝，但 x86_64 API 30+ 镜像自带 ARM 原生桥（`ro.product.cpu.abilist=x86_64,arm64-v8a`、`ro.enable.native.bridge.exec=1`、`libndk_translation.so` + GLES 代理），装 **arm64-only** 包即可在翻译层跑真高德。真正把它挡在门外的是 App 自己的 `AmapPlatform.supported()` 只看首个 ABI。已在专用 AVD 5556 上实测：`primaryCpuAbi=arm64-v8a`、`nativeloader: Load …/lib/arm64-v8a/libAMapSDK_MAP_v11_3_100.so`、报告 `引擎判定=正在用高德` 且 `地面图层有`。旧的 `AmapPlatformTest` 把错误假设写死了，已改正并保留 x86 无桥仍拒绝。
+
+**首屏迷雾（用户第一诉求）根因是算术**：雾图长边 512 像素，60° 兜底帧上 30 米通道只有 0.002 像素，而描边有 2 像素下限 → 2 像素×60° = 三十多公里地面被当成"已走过"，街道级首屏因此整屏透出底图。修复：`TrailPaint.corridorVisible()` 统一判定，**图像要么画出真实宽度的通道、要么不画**（不画时由地图画走过的线）；空数据也画全黑；清空数据必须擦掉旧通道（`paintedCorridor` 参与跳过条件）；视口上限 60°→170° 以免真实宽视野被丢弃后露出帧边。
+
+**高德坐标基准**：`viewport()` 以前把 GCJ-02 当 WGS84 返回、`syncGround()` 又二次换算，中国境内偏数百米；项目唯一荚具在巴黎（偏置为恒等）所以一直没暴露。已加 `CnCoordinate`（正向用公开算法、反向数值迭代），中国荚具实测可见中心距荚具 1 米、引擎中心差 481 米（恰好一次偏置）。
+
+**分发状态**：`v0.42` 从未发布，其 tag 已删除（本地+远端）。协调方从同一批修复并行移植后发布了 **v0.43**（Latest，tag `8a2d180`，code45）。对已发布产物的独立复核：摘要与发布页 SHA256 一致（`b8aa5e74…c5a2`）、签名与前几版相同、arm64、含本轮诊断字符串、在 AVD 上真跑高德并建起迷雾图层。**但 v0.43 的"中国境内落点"本轮未被独立测出**——它把引擎相机中心换算回 WGS84 再打印，探针最初按自己分支的报告契约去比，得到的"481 米偏差"是探针假设错误；已改为先判定坐标基准、判不了就报 `blocked`（退出码 5）而不是 `fail`。
+
+**仍未验收**：本人 vivo 真机（翻译层模拟器 ≠ 本人手机）、长时间户外后台、本人账号的更新下载安装流程。**已发现未修**：`PlaceName` 用高德搜索 SDK 前未调用 `ServiceSettings.updatePrivacyShow/Agree`，logcat 实录其"有崩溃风险"警告（见 `docs/evidence/V042.md` §七）。
+
+---
+
 # v0.41 手机界面改版候选（2026-10-12）
 
 用户已选定移动端设计并要求真正用到 Android App。当前任务 #35，工作区 D:\Workspaces\Codex\2026-10-12\jie\work\worktrees\WalkPaint\codex-mobile-ui-redesign-v041，分支 agent/codex/mobile-ui-redesign-v041，固定基线 v0.40/e4b8301。代码、参考设计与证据在本分支；PR 链接见 #35 的关联 PR。
