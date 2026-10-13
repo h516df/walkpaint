@@ -1,3 +1,21 @@
+# v0.45：底部导航、OpenDesign 视觉与快速缩放（2026-10-13）
+
+用户最终纠正：“探索，足迹，我的应该放到下面的，不是在上面呀”。本节取代历史顶部导航要求。采用 OpenDesign 的冷雾白/深色、字体层次与轻量控件；三入口固定底部，地图控件上移避开底栏。保留完整地图、既有日历/统计/日期详情、我的记录设置/诊断/更新。
+
+唯一主写手为当前 Codex，Issue #45，agent/codex/opendesign-zoom-v045，目录 D:\Workspaces\Codex\2026-10-13\xai\work\worktrees\WalkPaint\codex-opendesign-zoom-v045。从正式 v0.44 / 706dc98f2ed07aeef3a56818964bc9f40ca1be9a 隔离，不写旧会话目录，不整合历史 PR 栈。
+
+已复现日期相机加载回调覆盖取景并修复；已复现旧版 45ms 间隔四次缩小 17→16（应13）；修复按请求目标累计、反向使用目标、保留相机中心、手势重置，切页不恢复跟随，定位按钮主动恢复。0.45/code47，原签名/schema2。327 JVM、29 Python、同包实际高德/日期相机/底栏/320dp主题/五表保留通过；生产包摘要见 docs/evidence/v045/，汇总见 docs/evidence/V045.md；不可用旧顶部布局的截图/包冒充本轮验收。
+
+OpenDesign run 6c9f1231-8d7c-489b-ad9f-208a2702c27f 已 succeeded，七个文件完整，沿用 opencode/deepseek-v4.1-flash，官方默认参数；仅匿名文字和模拟数据，无真机截图/定位/私有源码外发。原设计顶部导航按用户后续纠正改为底部。官方仅静态/DOM shim；主写手另验真实浏览器和原生 Android。完整来源与映射见 docs/design/opendesign-v045/README.md。
+
+测试独占 emulator-5560 / WalkPaint_Google_API36_V044，Android16、ARM64手机正式包经 native bridge 实际加载高德。此证据不等于本人 vivo；本人 GPS、长期户外/锁屏、本人 OAuth 下载/系统安装仍未验收，#6/#17 保持开放。不要称为手机已经更新或永不断录。原7行程/4865点、五表摘要必须保持。回退须同签名/schema2/code>=47修复包，不卸载/清库，不覆盖旧Release。
+
+用户授权范围内连续完成私有推送、PR整合与版本发布；当前通用规则唯一源本机 D:\Projects\agent-rules\AGENTS.md，不再为规则推送 GitHub。既有业务发布入口 scripts/publish_release.py：固定提交、原草稿恢复、已上传资产只读核验、四资产齐全且服务器摘要相同后发布。传输问题 #39 不扩展本次 UI 范围。
+
+下文为历史记录，不代表当前版本、布局、写手或待办。
+
+---
+
 # v0.44 首页与定位反馈交付（2026-10-13）
 
 用户允许Codex决定布局：顶部探索/足迹，日历与统计合并；首页不放录制开关、定位状态、地图名称和重复足迹卡片。地图缩放过程中未知区域始终遮住。仅我的保留自动记录控制、诊断与更新。

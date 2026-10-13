@@ -1,0 +1,42 @@
+{
+  "run": "6c9f1231-8d7c-489b-ad9f-208a2702c27f",
+  "status": "succeeded",
+  "anonymous_data": true,
+  "files": [
+    {
+      "file": "assets/map.js",
+      "bytes": 18885,
+      "sha256": "3bc7f35bc18cdfd1cccc5f4534767d1ba7b0c0b0ce258adc9e29c801367397f9"
+    },
+    {
+      "file": "assets/styles.css",
+      "bytes": 27669,
+      "sha256": "0b2d5259890adca57c0bb718154921b51dae317c4fcc84d1185b2c6f103e6804"
+    },
+    {
+      "file": "assets/app.js",
+      "bytes": 44748,
+      "sha256": "c5447dfd485b9beffa5548a389ad5f2c3a8514d896994b0d8d7536d7aa2e3082"
+    },
+    {
+      "file": "acceptance.md",
+      "bytes": 5807,
+      "sha256": "7bd455f507cb9fbf1a1313d27e1385a47c2ee2ab79a6fe6cb5d3d10e6d277dbc"
+    },
+    {
+      "file": "design-system.md",
+      "bytes": 18189,
+      "sha256": "aef5820ced974f09c6debbb05f413ce5c8832c2f16b4b15955bb1797fba00d31"
+    },
+    {
+      "file": "assets/data.js",
+      "bytes": 6196,
+      "sha256": "e3c3b66505d6f62f54700d00c762843c0bffd8ca70af08a9d80cc39802fce068"
+    },
+    {
+      "file": "index.html",
+      "bytes": 5920,
+      "sha256": "0494ad3d508f877af78a2a69266577ee88fedb23856e0600c5fd87c0e7b6e5ea"
+    }
+  ]
+}
