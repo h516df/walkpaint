@@ -16,7 +16,9 @@
     "app/src/test/java/cn/walkpaint/PlaceNameRequestTest.kt": "133088867c64cf76c257a0b98c829b7027304d1b089419fc6b2d76d28f1c186f",
     "app/src/androidTest/java/cn/walkpaint/RoadAcceptanceInstrumentation.kt": "67d471087d0cb38d7c6274cce7e7ec4ed45979817ab7097698e5d4ac1e37165b",
     "app/src/androidTest/java/cn/walkpaint/PlaceNameProbe.kt": "c54d7449467dbde774e7cc2876825ccf41cd5b3443b65625aec381f2f2784e96",
-    "app/src/androidTest/java/cn/walkpaint/AmapAlignmentProbe.kt": "ef8bcd656ebbfc44cdc143b6ecd388831336ed2dd507fe9aea2598324bb253a9",
-    "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk": "68e054821ddd21aa7f4f4f67e1a8e9d780376f57189e19f60072f91917ad648c"
-  }
+    "app/src/androidTest/java/cn/walkpaint/AmapAlignmentProbe.kt": "e8afa29196ff3c0b71bd2522a62c7b7511eb80a5b447ec4d81b5b725561c4008",
+    "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk": "6c230858b711073228ffad105fc572e235703317895803806f347428a7950d33"
+  },
+  "alignment_probe_waits_for_actual_load": true,
+  "alignment_probe_ui_errors_return_to_instrumentation": true
 }
