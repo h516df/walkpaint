@@ -1,1 +1,1 @@
-HISTORY_CAMERA_FAIL: History camera restored the previous view: {"day_selected":true,"same_day_data":true,"centre_error_metres":2.0431261432168216E7,"zoom":17}
+HISTORY_CAMERA_FAIL: History camera restored the previous view: {"day_selected":true,"same_day_data":true,"centre_error_metres":2.0431261432168216E7,"zoom":17}

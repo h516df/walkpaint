@@ -1,1 +1,1 @@
-HISTORY_CAMERA_PASS: {"day_selected":true,"same_day_data":true,"centre_error_metres":1.2120497754650108E-9,"zoom":18}
+HISTORY_CAMERA_PASS: {"day_selected":true,"same_day_data":true,"centre_error_metres":1.2120497754650108E-9,"zoom":18}

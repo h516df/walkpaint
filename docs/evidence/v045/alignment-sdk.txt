@@ -1,1 +1,1 @@
-AMAP_ALIGNMENT_PASS: {"public_fixture":"Beijing","sdk_coordinate_shift_metres":555.0194543700898,"screen_centre_error_pixels":1.4142135623730951,"viewport_display_error_metres":1.970324518304123E-7,"native_overlay_error_metres":0,"raw_sdk_projection_checked":true,"camera_restored":true}
+AMAP_ALIGNMENT_PASS: {"public_fixture":"Beijing","sdk_coordinate_shift_metres":555.0194543700898,"screen_centre_error_pixels":1.4142135623730951,"viewport_display_error_metres":1.970324518304123E-7,"native_overlay_error_metres":0,"raw_sdk_projection_checked":true,"camera_restored":true}
