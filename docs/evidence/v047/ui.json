@@ -1,0 +1,175 @@
+{
+  "device": "emulator-5560",
+  "avd": "WalkPaint_Google_API36_V044",
+  "engine": "amap",
+  "phone_path": "not_verified",
+  "checks": {
+    "navigation_at_bottom_and_map_controls_clear": true,
+    "map_only_home": true,
+    "zoom_controls_change_camera": true,
+    "tab_switch_preserves_panned_camera": true,
+    "pan_and_locate": true,
+    "calendar_statistics_day_details_day_map": true,
+    "advanced_features_preserved_and_defaults_simplified": true,
+    "profile_scroll_leaves_map_camera_unchanged": true,
+    "feedback_and_updates_return_to_my": true,
+    "recording_and_diagnostics_in_profile_no_backup_entry": true,
+    "reopen_exploration": true
+  },
+  "passed": true,
+  "apk_sha256": "92c8ef5ab682ee889e3475def1b8dc44828a2d210c084f7b6447e7d44da4597a",
+  "selected_recorded_day": "2026-10-13",
+  "camera_before_zoom": {
+    "zoom": 17.0,
+    "lat": 39.23726,
+    "lon": -123.15003
+  },
+  "bottom_navigation_bounds": {
+    "home": {
+      "探索": [
+        328,
+        2200,
+        400,
+        2263
+      ],
+      "足迹": [
+        536,
+        2200,
+        608,
+        2263
+      ],
+      "我的": [
+        743,
+        2200,
+        815,
+        2263
+      ],
+      "放大地图": [
+        912,
+        1644,
+        1038,
+        1770
+      ],
+      "缩小地图": [
+        912,
+        1791,
+        1038,
+        1917
+      ],
+      "定位我": [
+        912,
+        1938,
+        1038,
+        2064
+      ]
+    },
+    "calendar": {
+      "探索": [
+        328,
+        2200,
+        400,
+        2263
+      ],
+      "足迹": [
+        536,
+        2200,
+        608,
+        2263
+      ],
+      "我的": [
+        743,
+        2200,
+        815,
+        2263
+      ]
+    },
+    "profile": {
+      "探索": [
+        328,
+        2200,
+        400,
+        2263
+      ],
+      "足迹": [
+        536,
+        2200,
+        608,
+        2263
+      ],
+      "我的": [
+        743,
+        2200,
+        815,
+        2263
+      ]
+    },
+    "reopen": {
+      "探索": [
+        328,
+        2200,
+        400,
+        2263
+      ],
+      "足迹": [
+        536,
+        2200,
+        608,
+        2263
+      ],
+      "我的": [
+        743,
+        2200,
+        815,
+        2263
+      ],
+      "放大地图": [
+        912,
+        1644,
+        1038,
+        1770
+      ],
+      "缩小地图": [
+        912,
+        1791,
+        1038,
+        1917
+      ],
+      "定位我": [
+        912,
+        1938,
+        1038,
+        2064
+      ]
+    }
+  },
+  "camera_after_zoom_in": {
+    "zoom": 18.0,
+    "lat": 39.23726,
+    "lon": -123.15003
+  },
+  "camera_after_zoom_out": {
+    "zoom": 17.0,
+    "lat": 39.23726,
+    "lon": -123.15003
+  },
+  "panned_camera": {
+    "zoom": 17.0,
+    "lat": 39.23726,
+    "lon": -123.14803
+  },
+  "camera_after_tab_return": {
+    "zoom": 17.0,
+    "lat": 39.23726,
+    "lon": -123.14803
+  },
+  "profile_hidden_camera_before": {
+    "zoom": 18.0,
+    "lat": 39.23726,
+    "lon": -123.15004
+  },
+  "profile_hidden_camera_after": {
+    "zoom": 18.0,
+    "lat": 39.23726,
+    "lon": -123.15004
+  }
+}

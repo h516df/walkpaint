@@ -87,11 +87,16 @@ try:
         assert prior['apk_sha256']==e['apk_sha256']
         names=('map_only_home','zoom_controls_change_camera','pan_and_locate','calendar_statistics_day_details_day_map')
         assert all(prior['checks'].get(k) is True for k in names)
-        e['checks']={k:True for k in names}
+        e.update(prior);e['passed']=False
+        e['checks']=dict(prior['checks'])
         if '--reopen-only' in sys.argv:
             assert prior['checks'].get('recording_and_diagnostics_in_profile_no_backup_entry') is True
             e['checks']['recording_and_diagnostics_in_profile_no_backup_entry']=True
     else:
+        recorded_state=ui.saved_state()
+        recorded_day=max(recorded_state['days'])
+        assert recorded_day[:7]==recorded_state['today'][:7], 'Fixture must have a saved day in displayed month'
+        e['selected_recorded_day']=recorded_day
         ui.shell('am','force-stop','cn.walkpaint')
         ui.shell('am','start','-W','-n','cn.walkpaint/.MainActivity')
         ui.tap('探索')
@@ -128,9 +133,8 @@ try:
         assert not any(x in labels for x in ('今天的足迹','本周','回顾','查看探索日历与统计'))
         ui.tap('统计'); labels=snap('statistics',{'回顾','日历'});assert '回顾' in labels and '日历' in labels
         ui.tap('日历'); labels=snap('calendar-return',{'足迹日历'});assert '足迹日历' in labels and '回顾' not in labels
-        # The fixture intentionally contains today's recorded day; verify a date click opens details.
-        from datetime import datetime
-        ui.tap(str(datetime.now().day));labels=snap('detail')
+        # Use the device's saved records, never the host clock or host timezone.
+        ui.tap(str(int(recorded_day[-2:])));labels=snap('detail')
         assert '行程详情' in labels
         ui.tap('在地图查看这天的足迹'); current=camera();labels=snap('day-map')
         assert any('返回全部探索' in t for t in labels)
@@ -139,17 +143,31 @@ try:
     if '--reopen-only' not in sys.argv:
         ui.tap('探索');profile_camera=camera();ui.tap('我的');labels=snap('profile')
         bottom_navigation('profile')
-        assert '自动记录' in labels
-        labels=snap('settings')
-        assert '联网备用地图' not in labels and '地图服务与隐私' in labels
-        ui.tap('诊断与反馈',scroll=True);labels=snap('feedback');assert '问题反馈' in labels or '报告预览' in labels
+        core={'自动记录','涂色颜色','问题反馈','检查更新'}
+        labels=snap('settings',core)
+        assert not any(x in labels for x in ('足迹点','定位与后台权限','地图服务与隐私','导出足迹 JSON','导入 JSON 备份','诊断与反馈'))
+        ui.tap('更多设置',scroll=True);labels=snap('more',{'备份与恢复','隐私与权限','完整诊断文本','跟随系统','浅色','深色'})
+        assert '检查更新' not in labels and '问题反馈' not in labels
+        ui.tap('备份与恢复');snap('backup',{'导出备份','恢复备份'});ui.tap('返回')
+        ui.tap('隐私与权限');snap('privacy',{'定位权限','提高后台记录稳定性','撤回自动记录授权','地图服务与隐私'});ui.tap('返回')
+        ui.tap('关于',scroll=True);snap('about',{f'版本 {VERSION}'});ui.tap('返回');ui.tap('返回')
+        ui.scroll_to_top();snap('my-return',core)
+        e['checks']['advanced_features_preserved_and_defaults_simplified']=True
+        ui.tap('问题反馈',scroll=True);labels=snap('feedback');assert '问题反馈' in labels or '报告预览' in labels
+        if '报告预览' in labels: ui.tap('返回')
+        snap('feedback-form',{'预览反馈报告'})
         hidden_camera=camera()
         e['profile_hidden_camera_before']=profile_camera;e['profile_hidden_camera_after']=hidden_camera
         assert all(abs(hidden_camera[k]-profile_camera[k])<(.01 if k=='zoom' else .00001) for k in hidden_camera), 'Profile scroll moved the covered map'
         e['checks']['profile_scroll_leaves_map_camera_unchanged']=True
         ui.tap('返回')
-        if '问题反馈' in snap('feedback-return'): ui.tap('返回')
+        # camera() explicitly generates a field report, so preview-back first closes that report.
+        if '预览反馈报告' in ui.labels(): ui.tap('返回')
+        ui.scroll_to_top();snap('feedback-return',core)
+        assert '备份与恢复' not in ui.labels()
         ui.tap('检查更新',scroll=True);labels=snap('updates');assert any(VERSION in x for x in labels)
+        ui.tap('返回');ui.scroll_to_top();snap('updates-return',core)
+        e['checks']['feedback_and_updates_return_to_my']=True
         e['checks']['recording_and_diagnostics_in_profile_no_backup_entry']=True
     ui.tap('探索');camera()
     ui.shell('am','force-stop','cn.walkpaint')

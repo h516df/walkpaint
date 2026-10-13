@@ -1,0 +1,86 @@
+[
+  {
+    "repo": "BasicAirData/GPSLogger",
+    "path": "app/src/main/java/eu/basicairdata/graziano/gpslogger/Exporter.java",
+    "url": "https://github.com/BasicAirData/GPSLogger/blob/master/app/src/main/java/eu/basicairdata/graziano/gpslogger/Exporter.java",
+    "content_sha256": "8215c1837feaac913f51f5dbd7555af95b521c03be6a020892626816ba62cb4f",
+    "lines": 795
+  },
+  {
+    "repo": "BasicAirData/GPSLogger",
+    "path": "app/src/main/java/eu/basicairdata/graziano/gpslogger/ExportingTask.java",
+    "url": "https://github.com/BasicAirData/GPSLogger/blob/master/app/src/main/java/eu/basicairdata/graziano/gpslogger/ExportingTask.java",
+    "content_sha256": "057d488724ad14a81747cc948b03e495b305883280d5acc45e33451592da4c2b",
+    "lines": 82
+  },
+  {
+    "repo": "BasicAirData/GPSLogger",
+    "path": "app/src/main/java/eu/basicairdata/graziano/gpslogger/GPSApplication.java",
+    "url": "https://github.com/BasicAirData/GPSLogger/blob/master/app/src/main/java/eu/basicairdata/graziano/gpslogger/GPSApplication.java",
+    "content_sha256": "2709ed9575b91efc62ad6b8fc4c400f085286f68accc99feb04f05cb22cc5e36",
+    "lines": 2453
+  },
+  {
+    "repo": "BasicAirData/GPSLogger",
+    "path": "app/src/main/java/eu/basicairdata/graziano/gpslogger/GPSService.java",
+    "url": "https://github.com/BasicAirData/GPSLogger/blob/master/app/src/main/java/eu/basicairdata/graziano/gpslogger/GPSService.java",
+    "content_sha256": "38ba741fac8dfdefcf70805a0c0a7751b9d116056cafd48366fee328b40c015c",
+    "lines": 217
+  },
+  {
+    "repo": "google/gps-measurement-tools",
+    "path": "GNSSLogger/app/src/main/java/com/google/android/apps/location/gps/gnsslogger/FileLogger.java",
+    "url": "https://github.com/google/gps-measurement-tools/blob/master/GNSSLogger/app/src/main/java/com/google/android/apps/location/gps/gnsslogger/FileLogger.java",
+    "content_sha256": "60e5b58cfa8aa9e62d864bcdf337abb8f406101903587b878eaab230a38ee1eb",
+    "lines": 430
+  },
+  {
+    "repo": "google/gps-measurement-tools",
+    "path": "GNSSLogger/app/src/main/java/com/google/android/apps/location/gps/gnsslogger/MeasurementProvider.java",
+    "url": "https://github.com/google/gps-measurement-tools/blob/master/GNSSLogger/app/src/main/java/com/google/android/apps/location/gps/gnsslogger/MeasurementProvider.java",
+    "content_sha256": "1193361f24df36ab858acf1fff9c5baac0d75729403c13660d4c1a00ad372e8d",
+    "lines": 457
+  },
+  {
+    "repo": "lerdeljan17/fogwalk",
+    "path": "app/src/main/java/com/fogwalk/data/VisitedRepository.kt",
+    "url": "https://github.com/lerdeljan17/fogwalk/blob/main/app/src/main/java/com/fogwalk/data/VisitedRepository.kt",
+    "content_sha256": "c31b2e2aed16171e268ac0f925e01324c3545ee4d498f8ed59004ce71b7a1656",
+    "lines": 54
+  },
+  {
+    "repo": "lerdeljan17/fogwalk",
+    "path": "app/src/main/java/com/fogwalk/map/FogOverlay.kt",
+    "url": "https://github.com/lerdeljan17/fogwalk/blob/main/app/src/main/java/com/fogwalk/map/FogOverlay.kt",
+    "content_sha256": "bfeac29eb373adf28c4fcd60ea84a81531c3f0dc5fa58545f5ce341df9da6e85",
+    "lines": 167
+  },
+  {
+    "repo": "maplibre/maplibre-native",
+    "path": "platform/android/src/example_custom_layer.cpp",
+    "url": "https://github.com/maplibre/maplibre-native/blob/main/platform/android/src/example_custom_layer.cpp",
+    "content_sha256": "4fb9ab730f3c00ce4ecc0a8d1b1e66983ca7acc3c3f46301db8e4f7a39156086",
+    "lines": 248
+  },
+  {
+    "repo": "mendhak/gpslogger",
+    "path": "gpslogger/src/main/java/com/mendhak/gpslogger/GpsLoggingService.java",
+    "url": "https://github.com/mendhak/gpslogger/blob/master/gpslogger/src/main/java/com/mendhak/gpslogger/GpsLoggingService.java",
+    "content_sha256": "6393fa78089238f5c42bd3ecdc9d0e1f3f8a4d9c40fee744410cd84db26ce193",
+    "lines": 1504
+  },
+  {
+    "repo": "ticofab/android-gpx-parser",
+    "path": "app/src/main/java/io/ticofab/androidgpxparser/GPXParserSampleActivity.java",
+    "url": "https://github.com/ticofab/android-gpx-parser/blob/master/app/src/main/java/io/ticofab/androidgpxparser/GPXParserSampleActivity.java",
+    "content_sha256": "9b81ee491ccc38ac39b667189b65c041e3af7a20c0ec30053298e201e6d5f3fc",
+    "lines": 67
+  },
+  {
+    "repo": "ticofab/android-gpx-parser",
+    "path": "parser/src/androidTest/java/io/ticofab/androidgpxparser/parser/GPXParserTest.java",
+    "url": "https://github.com/ticofab/android-gpx-parser/blob/master/parser/src/androidTest/java/io/ticofab/androidgpxparser/parser/GPXParserTest.java",
+    "content_sha256": "cc23f087e3db4dc12a2432cb620d1ce667bf5a626873c417d4d62bce3d1dce80",
+    "lines": 150
+  }
+]
