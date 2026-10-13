@@ -14,18 +14,31 @@ internal object AmapAlignmentProbe {
     fun run(i: Instrumentation): String {
         val activity = i.startActivitySync(Intent(i.targetContext, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
-        Thread.sleep(2000)
         var controller: AmapMapController? = null
         var map: AMap? = null
         fun field(obj: Any, name: String): Any? = obj.javaClass.getDeclaredField(name).apply { isAccessible=true }.get(obj)
-        i.runOnMainSync {
-            controller = (field(activity, "amapController\$delegate") as Lazy<*>).value as AmapMapController
-            map = field(controller!!, "map") as AMap
+        fun <T> onMain(block: () -> T): T {
+            var outcome: Result<T>? = null
+            i.runOnMainSync { outcome = runCatching(block) }
+            return outcome!!.getOrThrow()
         }
+        var ready = false
+        for (attempt in 0 until 40) {
+            ready = onMain {
+                controller = (field(activity, "amapController\$delegate") as Lazy<*>).value as AmapMapController
+                map = field(controller!!, "map") as? AMap
+                map != null && field(controller!!,"mapLoaded") == true &&
+                    field(controller!!,"initialFocusPending") == false &&
+                    (controller!!.view()?.width ?: 0) > 0
+            }
+            if (ready) break
+            Thread.sleep(500)
+        }
+        check(ready) { "SDK load and initial focus did not finish before projection test" }
         val sdk = map!!
         var original: com.amap.api.maps.model.CameraPosition? = null
         var publicDisplay: LatLng? = null
-        i.runOnMainSync {
+        onMain {
             original = sdk.cameraPosition
             publicDisplay = CoordinateConverter(i.targetContext).from(CoordinateConverter.CoordType.GPS)
                 .coord(LatLng(39.9075,116.3913)).convert()
@@ -34,7 +47,7 @@ internal object AmapAlignmentProbe {
         try {
             Thread.sleep(2500)
             var result: JSONObject? = null
-            i.runOnMainSync {
+            onMain {
                 fun forward(lat: Double, lon: Double) = CoordinateConverter(i.targetContext)
                     .from(CoordinateConverter.CoordType.GPS).coord(LatLng(lat,lon)).convert()
                 fun metres(a: LatLng, b: LatLng) = kotlin.math.hypot((a.latitude-b.latitude)*111194.9,
@@ -65,7 +78,7 @@ internal object AmapAlignmentProbe {
             }
             return "AMAP_ALIGNMENT_PASS: $result"
         } finally {
-            i.runOnMainSync { sdk.moveCamera(CameraUpdateFactory.newCameraPosition(original)) }
+            onMain { sdk.moveCamera(CameraUpdateFactory.newCameraPosition(original)) }
         }
     }
 }
