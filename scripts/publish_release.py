@@ -77,9 +77,18 @@ def verify_apk(path, variant, version, code):
         raise SystemExit('ARM64 包包含额外架构')
     if variant == 'universal' and "'x86_64'" not in native.group(1):
         raise SystemExit('通用包缺少测试设备架构')
-    signature = run([str(build_tools / 'apksigner.bat'), 'verify', '--print-certs', str(path)])
+    signature = run([str(build_tools / 'apksigner.bat'), 'verify', '--verbose', '--print-certs', str(path)])
+    for scheme in ('v2', 'v3'):
+        if not re.search(rf'^Verified using {scheme} scheme \([^\n]+\): true$', signature.replace("\r\n", "\n"), re.MULTILINE):
+            raise SystemExit(f'正式包缺少已验证的 {scheme} 签名，拒绝发布')
     if f'Signer #1 certificate SHA-256 digest: {SIGNER}' not in signature:
         raise SystemExit('原签名不匹配，拒绝发布')
+    # With minSdk>=24 apksigner does not evaluate v1 by default, even when present.
+    legacy = run([str(build_tools / 'apksigner.bat'), 'verify', '--verbose', '--print-certs',
+                  '--min-sdk-version', '23', '--max-sdk-version', '23', str(path)])
+    if not re.search(r'^Verified using v1 scheme \([^\n]+\): true$', legacy.replace("\r\n", "\n"), re.MULTILINE) or \
+            f'Signer #1 certificate SHA-256 digest: {SIGNER}' not in legacy:
+        raise SystemExit('传统安装证书未通过原身份验证，拒绝发布')
 
 
 def markdown(notes, sha):

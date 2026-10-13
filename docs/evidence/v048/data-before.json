@@ -1,0 +1,22 @@
+{
+  "trips": {
+    "count": 7,
+    "sha256": "c35dfb0f1e1d49ae13a5c28c6a486f6ef6096723f416b98e87678bab2b7da519"
+  },
+  "points": {
+    "count": 4865,
+    "sha256": "79443c5009d792f6da0aca68c7d7e5f66c32049ff18545964e2e1cf5e33d20f6"
+  },
+  "roads": {
+    "count": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "road_matches": {
+    "count": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "coverage": {
+    "count": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}
