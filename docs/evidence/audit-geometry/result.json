@@ -1,0 +1,8 @@
+{
+  "passed": true,
+  "apk_sha256": "97c16ab30590947ecfbefbf369ae2853d0a0bf07c9e74c0d56faa923a2790751",
+  "production_baseline": "87b75d52283d7dbdc99af91e4d073a9e49206047",
+  "phone_path": "not_verified",
+  "all_five_tables_unchanged": true,
+  "jvm_tests": 334
+}
