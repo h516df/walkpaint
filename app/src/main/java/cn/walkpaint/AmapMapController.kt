@@ -278,6 +278,7 @@ internal class AmapMapController(private val context: Context, private val onGes
     }
 
     fun zoomBy(delta: Int) {
+        initialFocusPending = false
         map?.animateCamera(CameraUpdateFactory.zoomBy(delta.toFloat()))
     }
 
@@ -305,7 +306,11 @@ internal class AmapMapController(private val context: Context, private val onGes
         val update=CameraUpdateFactory.newCameraPosition(target)
         if(animate) a.animateCamera(update,200,null) else a.moveCamera(update)
     }
-    fun cancelFollowingAnimation() { map?.stopAnimation() }
+    fun cancelFollowingAnimation() {
+        // A delayed first data render must not undo the person's manual camera choice.
+        initialFocusPending = false
+        map?.stopAnimation()
+    }
 
     fun view(): MapView? = currentView
 

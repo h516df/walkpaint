@@ -47,16 +47,17 @@ try:
             assert prior['checks'].get('recording_and_diagnostics_in_profile_no_backup_entry') is True
             e['checks']['recording_and_diagnostics_in_profile_no_backup_entry']=True
     else:
+        ui.shell('am','force-stop','cn.walkpaint')
         ui.shell('am','start','-W','-n','cn.walkpaint/.MainActivity')
         ui.tap('探索')
-        before=camera()
+        before=camera();e['camera_before_zoom']=before
         labels=snap('home')
         assert '探索' in labels and '足迹' in labels
         assert not any(x in labels for x in ('暂停记录','继续记录','高德地图','足迹点','今日里程','今天的足迹'))
         e['checks']['map_only_home']=True
-        ui.tap('放大地图'); enlarged=camera()
+        ui.tap('放大地图'); enlarged=camera();e['camera_after_zoom_in']=enlarged
         assert enlarged['zoom']>before['zoom']+.5
-        ui.tap('缩小地图'); reduced=camera()
+        ui.tap('缩小地图'); reduced=camera();e['camera_after_zoom_out']=reduced
         assert reduced['zoom']<enlarged['zoom']-.5
         e['checks']['zoom_controls_change_camera']=True
         ui.shell('input','swipe','820','1000','280','1000','450'); moved=camera()
