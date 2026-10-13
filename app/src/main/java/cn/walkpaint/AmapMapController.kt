@@ -35,6 +35,8 @@ internal class AmapMapController(private val context: Context, private val onGes
     private var currentMarker: Marker? = null
     private var latestPosition: Location? = null
     private var initialFocusPending = true
+    private val zoomSteps=StepZoomTarget()
+    private fun nativeGesture() { pendingFocus=null;zoomSteps.reset();onGesture() }
     private var exploredColor = ExploredRoadArgb
     /**
      * Overlays are kept and their geometry replaced, never cleared and rebuilt. A full rebuild on
@@ -84,6 +86,7 @@ internal class AmapMapController(private val context: Context, private val onGes
     /** Display coordinates are converted once per point, not once per point per redraw. */
     private val converted = HashMap<Long, LatLng>()
     private var retainedCamera: CameraPosition?=null
+    private var pendingFocus: CameraPosition?=null
     private val density = context.resources.displayMetrics.density
     private val blueDot by lazy {
         val bitmap = Bitmap.createBitmap((32*density).toInt(),(32*density).toInt(),Bitmap.Config.ARGB_8888)
@@ -122,6 +125,7 @@ internal class AmapMapController(private val context: Context, private val onGes
         paintedRevision = -1
         groundPixels = null
         mapLoaded = false
+        pendingFocus=null
         converted.clear()
         map?.uiSettings?.isZoomControlsEnabled = false
         map?.uiSettings?.isCompassEnabled = false
@@ -130,14 +134,14 @@ internal class AmapMapController(private val context: Context, private val onGes
         val slop=android.view.ViewConfiguration.get(context).scaledTouchSlop
         val taps=android.view.GestureDetector(context,object:android.view.GestureDetector.SimpleOnGestureListener() {
             override fun onDown(e:android.view.MotionEvent)=true
-            override fun onDoubleTap(e:android.view.MotionEvent):Boolean { onGesture();return false }
+            override fun onDoubleTap(e:android.view.MotionEvent):Boolean { nativeGesture();return false }
         })
         map?.setOnMapTouchListener { event ->
             taps.onTouchEvent(event)
             when(event.actionMasked) {
                 android.view.MotionEvent.ACTION_DOWN -> { downX=event.x;downY=event.y;gestureActive=true }
-                android.view.MotionEvent.ACTION_POINTER_DOWN -> onGesture()
-                android.view.MotionEvent.ACTION_MOVE -> if(kotlin.math.hypot(event.x-downX,event.y-downY)>slop) onGesture()
+                android.view.MotionEvent.ACTION_POINTER_DOWN -> nativeGesture()
+                android.view.MotionEvent.ACTION_MOVE -> if(kotlin.math.hypot(event.x-downX,event.y-downY)>slop) nativeGesture()
                 android.view.MotionEvent.ACTION_UP,
                 android.view.MotionEvent.ACTION_CANCEL -> endGesture()
             }
@@ -146,7 +150,9 @@ internal class AmapMapController(private val context: Context, private val onGes
             mapLoaded = true
             // Camera moves issued before the SDK finishes loading may be replaced by its default
             // camera. Restore only after loading, or leave the initial focus pending for render.
-            retainedCamera?.let {
+            val requested=pendingFocus
+            pendingFocus=null
+            (requested ?: retainedCamera)?.let {
                 map?.moveCamera(CameraUpdateFactory.newCameraPosition(it))
                 initialFocusPending = false
             }
@@ -155,7 +161,9 @@ internal class AmapMapController(private val context: Context, private val onGes
         // The veil follows the map: a pan or a zoom asks for a redraw for the new view.
         map?.setOnCameraChangeListener(object : AMap.OnCameraChangeListener {
             override fun onCameraChange(position: CameraPosition?) { updateCoverageGuard(); onCamera() }
-            override fun onCameraChangeFinish(position: CameraPosition?) { updateCoverageGuard(); onCameraSettled() }
+            override fun onCameraChangeFinish(position: CameraPosition?) {
+                position?.let { zoomSteps.settled(it.zoom) };updateCoverageGuard();onCameraSettled()
+            }
         })
         map?.uiSettings?.isTiltGesturesEnabled = false
         latestPosition = location
@@ -279,12 +287,21 @@ internal class AmapMapController(private val context: Context, private val onGes
 
     fun zoomBy(delta: Int) {
         initialFocusPending = false
-        map?.animateCamera(CameraUpdateFactory.zoomBy(delta.toFloat()))
+        pendingFocus=null
+        val a=map ?: return
+        val camera=a.cameraPosition
+        val target=zoomSteps.request(camera.zoom,delta,a.minZoomLevel,a.maxZoomLevel)
+        a.animateCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.builder(camera).zoom(target).build()))
     }
 
     fun focus(lat: Double, lon: Double, zoom: Double) {
         initialFocusPending=false
-        map?.animateCamera(CameraUpdateFactory.newLatLngZoom(toAmap(lat, lon), zoom.toFloat()))
+        zoomSteps.reset()
+        val a=map ?: return
+        val target=CameraPosition.builder(a.cameraPosition).target(toAmap(lat,lon)).zoom(zoom.toFloat()).build()
+        // The date request precedes its MapView load; it must win over the retained camera.
+        pendingFocus=if(mapLoaded) null else target
+        if(mapLoaded) a.animateCamera(CameraUpdateFactory.newCameraPosition(target))
     }
 
     /**
@@ -294,6 +311,7 @@ internal class AmapMapController(private val context: Context, private val onGes
     fun followCamera(fix: Location, bearing: Float, animate: Boolean, minZoom: Float? = null) {
         if (!mapLoaded || initialFocusPending) return
         val a=map ?: return
+        zoomSteps.reset()
         val current=a.cameraPosition
         val zoom=when {
             minZoom!=null -> maxOf(current.zoom,minZoom)
@@ -316,6 +334,7 @@ internal class AmapMapController(private val context: Context, private val onGes
 
     /** Shows a whole walked area, used when the person asks to see all of their exploration. */
     fun focusBounds(latMin: Double, lonMin: Double, latMax: Double, lonMax: Double) {
+        zoomSteps.reset()
         val bounds = com.amap.api.maps.model.LatLngBounds(
             toAmap(latMin, lonMin), toAmap(latMax, lonMax))
         map?.moveCamera(com.amap.api.maps.CameraUpdateFactory.newLatLngBounds(bounds, 80))
@@ -379,7 +398,10 @@ internal class AmapMapController(private val context: Context, private val onGes
 
     fun release(view: MapView) {
         if (view !== currentView) return
-        retainedCamera=map?.cameraPosition
+        zoomSteps.target?.let { map?.moveCamera(CameraUpdateFactory.zoomTo(it)) }
+        zoomSteps.reset()
+        retainedCamera=pendingFocus ?: map?.cameraPosition
+        pendingFocus=null
         casings.clear()
         cores.clear()
         ground = null

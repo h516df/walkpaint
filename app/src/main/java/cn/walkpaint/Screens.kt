@@ -43,21 +43,10 @@ internal fun AppShell(
     feedbackContent: @Composable (onBack:()->Unit)->Unit,
     updatesContent: @Composable (onBack:()->Unit)->Unit, mapContent: @Composable () -> Unit
 ) {
-    Scaffold(containerColor=PageBackground, topBar={
-        Surface(color=Canvas, shadowElevation=2.dp) {
-            Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal=16.dp,vertical=6.dp),
-                verticalAlignment=Alignment.CenterVertically, horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                listOf("探索","足迹").forEachIndexed { index,label ->
-                    TextButton(onClick={onTab(index)}, modifier=Modifier.weight(1f),
-                        colors=ButtonDefaults.textButtonColors(contentColor=if(selectedTab==index) Pigment else Muted)) {
-                        Text(label, fontSize=18.sp, fontWeight=if(selectedTab==index) FontWeight.Bold else FontWeight.Normal)
-                    }
-                }
-                IconButton(onClick={onTab(2)}) { Icon(painterResource(R.drawable.ic_person), "我的", tint=if(selectedTab==2) Pigment else Muted) }
-            }
-        }
-    }) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
+    Box(Modifier.fillMaxSize().background(PageBackground)) {
+        val body=if(selectedTab==0) Modifier.fillMaxSize()
+            else Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(bottom=80.dp)
+        Box(body) {
             when(selectedTab) {
                 0 -> DesignMapOverlay(state,selectedDay,automatic,recordingTitle,recordingHealthy,mapNotice,
                     mapProviderLabel,{onTab(2)},onToggleTracking,onLocate,onShowAll,
@@ -67,6 +56,29 @@ internal fun AppShell(
                     onToggleTracking,onRevoke,onBackgroundSettings,onPowerSettings,onCopyDiagnostics,
                     roadState,roadAreaHint,onRoadPack,onExport,onImport,internalBackupCount,
                     mapProviderLabel,onChooseAmap,onOnlineMap,roadColor,onRoadAppearance,feedbackContent,updatesContent)
+            }
+        }
+        Surface(color=Canvas.copy(alpha=.97f),shape=RoundedCornerShape(30.dp),
+            border=BorderStroke(1.dp,Line),shadowElevation=2.dp,
+            modifier=Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom=12.dp)
+                .widthIn(max=280.dp).fillMaxWidth(.87f)) {
+            Row(Modifier.padding(4.dp),horizontalArrangement=Arrangement.spacedBy(2.dp)) {
+                val labels=listOf("探索","足迹","我的")
+                val icons=listOf(R.drawable.ic_map,R.drawable.ic_route,R.drawable.ic_person)
+                labels.forEachIndexed { index,label ->
+                    val active=selectedTab==index
+                    Surface(onClick={onTab(index)},shape=RoundedCornerShape(26.dp),
+                        color=if(active) Ink else androidx.compose.ui.graphics.Color.Transparent,
+                        contentColor=if(active) CanvasSoft else Muted,
+                        modifier=Modifier.weight(1f).height(48.dp)) {
+                        Row(Modifier.padding(horizontal=8.dp),verticalAlignment=Alignment.CenterVertically,
+                            horizontalArrangement=Arrangement.Center) {
+                            Icon(painterResource(icons[index]),null,modifier=Modifier.size(17.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(label,fontSize=14.sp,fontWeight=if(active) FontWeight.SemiBold else FontWeight.Medium)
+                        }
+                    }
+                }
             }
         }
     }
@@ -113,8 +125,9 @@ private fun MapPage(notice: String?,day: String?,onShowAll: ()->Unit,onLocate: (
 @Composable
 private fun Heading(title:String,subtitle:String) {
     Column(Modifier.padding(top=4.dp,bottom=18.dp)) {
-        Text(title,color=Ink,fontSize=TitleSize,fontWeight=FontWeight.Bold,letterSpacing=(-0.6).sp)
-        Spacer(Modifier.height(8.dp))
+        Text(title,color=Ink,fontSize=TitleSize,fontWeight=FontWeight.SemiBold,
+            fontFamily=androidx.compose.ui.text.font.FontFamily.Serif,letterSpacing=0.sp)
+        Spacer(Modifier.height(6.dp))
         Text(subtitle,color=Muted,fontSize=CaptionSize,lineHeight=20.sp)
     }
 }
@@ -418,22 +431,29 @@ private fun MonthPage(monthKey:String,today:java.time.LocalDate,meters:Map<Strin
                         if(cell!=null) {
                             val key=cell.date.toString()
                             val hasData=byKey.containsKey(key)
-                            Box(Modifier.fillMaxWidth().aspectRatio(1f)
-                                .background(heatFill(cell.level),RoundedCornerShape(9.dp))
+                            Column(Modifier.fillMaxWidth().heightIn(min=48.dp)
                                 .then(if(hasData) Modifier.clickable { onPickDay(key) } else Modifier),
-                                contentAlignment=Alignment.Center) {
+                                horizontalAlignment=Alignment.CenterHorizontally,
+                                verticalArrangement=Arrangement.Center) {
+                                val isToday=cell.date==today
+                                Box(Modifier.size(30.dp).then(if(isToday) Modifier.border(
+                                    1.dp,Pigment,CircleShape) else Modifier),contentAlignment=Alignment.Center) {
                                 Text(cell.date.dayOfMonth.toString(),
-                                    color=if(hasData) heatInk(cell.level) else Faint,
-                                    fontSize=CaptionSize,
-                                    fontWeight=if(key==selectedKey) FontWeight.Bold else FontWeight.Normal)
+                                    color=if(hasData || isToday) Ink else Muted,
+                                    fontSize=14.sp,fontFamily=androidx.compose.ui.text.font.FontFamily.Serif,
+                                    fontWeight=if(key==selectedKey) FontWeight.SemiBold else FontWeight.Normal)
+                                }
+                                Spacer(Modifier.height(2.dp))
+                                Box(Modifier.height(4.dp).width((6+4*cell.level.coerceIn(0,3)).dp)
+                                    .background(if(hasData) Pigment else androidx.compose.ui.graphics.Color.Transparent,CircleShape))
                             }
-                        } else Box(Modifier.fillMaxWidth().aspectRatio(1f))
+                        } else Box(Modifier.fillMaxWidth().heightIn(min=48.dp))
                     }
                 }
             }
         }
         Spacer(Modifier.height(10.dp))
-        Text("颜色越深，那天走得越多",color=Muted,fontSize=MicroSize)
+        Text("短横线标记有足迹的日子，点日期查看路线",color=Muted,fontSize=MicroSize)
     }
 }
 
@@ -507,6 +527,8 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
                             Text("授权后自动累积足迹",color=Muted,fontSize=CaptionSize,modifier=Modifier.padding(top=4.dp))
                         }
                         Switch(checked=automatic,onCheckedChange=onToggle,
+                            colors=SwitchDefaults.colors(checkedTrackColor=Pigment,checkedThumbColor=Canvas,
+                                uncheckedTrackColor=CanvasSoft,uncheckedThumbColor=Muted,uncheckedBorderColor=Line),
                             modifier=Modifier.semantics { contentDescription="自动记录" })
                     }
                     if(automatic && notice!=null) SettingRow(notice,"查看权限与记录状态",onResolve)

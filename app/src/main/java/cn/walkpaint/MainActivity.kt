@@ -139,6 +139,7 @@ class MainActivity : ComponentActivity() {
     private var amapConsent by mutableStateOf(false)
     private var showAmapConsent by mutableStateOf(false)
     private val follow=MapFollowState()
+    private val fallbackZoomSteps=StepZoomTarget()
     private var activityResumed=false
     private var mapHeading=0f
     private var lastCameraPoint:TrackPoint?=null
@@ -192,6 +193,7 @@ class MainActivity : ComponentActivity() {
     private var boundaryCatalog: RoadCatalog?=null
     private var boundaryRoads: List<RoadSegment>?=null
     private fun clearDaySelection(showExtent: Boolean = true) {
+        fallbackZoomSteps.reset()
         selectedDay=null;pendingTripFocus=null;follow.locate();lastCameraPoint=null
         lastRevision=-1;updateUi()
         // "Back to all exploration" shows what has actually been explored. Following the person at
@@ -414,12 +416,11 @@ class MainActivity : ComponentActivity() {
         appearanceMode=getSharedPreferences("ui_appearance",Context.MODE_PRIVATE).getInt("mode",0).coerceIn(0,2)
         showIntro=!trackingEnabled && !mapPref.getBoolean("mobile_intro_seen",false)
         setContent {
-            WalkPaintTheme(appearanceMode) {
+            WalkPaintTheme(appearanceMode,currentTab==0) {
                 AppShell(
                     selectedTab = currentTab,
                     onTab = {
                         if(it!=2 && privateUpdateState.busy) privateUpdater.cancel()
-                        if(it==0 && currentTab!=0 && selectedDay==null) { follow.locate();lastCameraPoint=null }
                         currentTab=it;syncHeadingLifecycle()
                         // The veil is opaque now, so entering the map tab without one shows a map the
                         // person has not explored. The camera may not move at all on this switch, so
@@ -445,7 +446,10 @@ class MainActivity : ComponentActivity() {
                     onZoom = { delta ->
                         pauseMapFollowing()
                         if(amapActive) amapController.zoomBy(delta)
-                        else mapInstance?.let { map -> map.animateCamera(CameraUpdateFactory.zoomTo((map.cameraPosition.zoom+delta).coerceIn(3.0,20.0))) }
+                        else mapInstance?.let { map ->
+                            val target=fallbackZoomSteps.request(map.cameraPosition.zoom.toFloat(),delta,3f,20f)
+                            map.animateCamera(CameraUpdateFactory.zoomTo(target.toDouble()))
+                        }
                     },
                     onToggleTracking = { requested ->
                         if (requested) beginEnable()
@@ -464,6 +468,7 @@ class MainActivity : ComponentActivity() {
                         }.onFailure { toast("演示数据不可写入，请检查存储") }
                     },
                     onTrip = { trip ->
+                        fallbackZoomSteps.reset()
                         follow.history();syncHeadingLifecycle()
                         selectedDay=DailyFootprints.key(trip.started)
                         lastRevision=-1
@@ -1471,12 +1476,16 @@ class MainActivity : ComponentActivity() {
             if (mapWidget !== view) return@getMapAsync
             mapInstance = loaded
             loaded.addOnCameraMoveStartedListener { reason ->
-                if(reason==MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) pauseMapFollowing()
+                if(reason==MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
+                    fallbackZoomSteps.reset();pauseMapFollowing()
+                }
             }
             // The veil follows the map, so it has to be redrawn for a new view; the throttling and
             // the "did it really move" test live in refreshVeilForViewport.
             loaded.addOnCameraMoveListener { onMapCameraMoved() }
-            loaded.addOnCameraIdleListener { onMapCameraSettled() }
+            loaded.addOnCameraIdleListener {
+                fallbackZoomSteps.settled(loaded.cameraPosition.zoom.toFloat());onMapCameraSettled()
+            }
             val builder = if(onlineMap) Style.Builder().fromUri("https://tiles.openfreemap.org/styles/liberty")
                 else Style.Builder().fromJson("""{"version":8,"sources":{},"layers":[{"id":"local-background","type":"background","paint":{"background-color":"#F4F7F5"}}]}""")
             loaded.setStyle(builder) { style ->
@@ -1739,6 +1748,8 @@ class MainActivity : ComponentActivity() {
             onDispose {
                 lifecycle.removeObserver(observer)
                 headingSensor.stop()
+                fallbackZoomSteps.target?.let { mapInstance?.moveCamera(CameraUpdateFactory.zoomTo(it.toDouble())) }
+                fallbackZoomSteps.reset()
                 retainedMapCamera=mapInstance?.cameraPosition
                 runCatching { view.onPause(); view.onStop(); view.onDestroy() }
                 if (mapWidget === view) { mapWidget = null; mapInstance = null }
