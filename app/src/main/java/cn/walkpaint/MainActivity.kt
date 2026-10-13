@@ -98,19 +98,29 @@ class MainActivity : ComponentActivity() {
     /** Name of the place the progress is measured around; null until resolved, never an error. */
     private var placeName by mutableStateOf<String?>(null)
     private var placeAnchor: TrackPoint? = null
+    private var placeRequestRevision = 0
 
     /**
      * Resolves the current place name, but only after moving far enough to matter. Geocoding on
      * every fix would hammer the service for a name that has not changed.
      */
     private fun refreshPlaceName(fix: Location?) {
+        if (!amapConsent || BuildConfig.AMAP_KEY.isBlank()) {
+            placeRequestRevision++
+            placeAnchor = null
+            placeName = null
+            return
+        }
         val last = snapshot.realTracks.lastOrNull()?.points?.lastOrNull()
         val lat = fix?.latitude ?: last?.lat ?: return
         val lon = fix?.longitude ?: last?.lon ?: return
         val anchor = TrackPoint(lat, lon, 0L, 5f)
         placeAnchor?.let { if (Geo.meters(it, anchor) < 500.0) return }
         placeAnchor = anchor
-        PlaceName.resolve(this, lat, lon) { name -> runOnUiThread { if (name != null) placeName = name } }
+        val requestRevision = ++placeRequestRevision
+        PlaceName.resolve(this, lat, lon) { name -> runOnUiThread {
+            if (amapConsent && requestRevision == placeRequestRevision && placeAnchor == anchor && name != null) placeName = name
+        } }
     }
     private var showRoadAppearance by mutableStateOf(false)
     private var retainedMapCamera:org.maplibre.android.camera.CameraPosition?=null
@@ -581,7 +591,7 @@ class MainActivity : ComponentActivity() {
                     },
                     title = { Text("是否使用高德地图？", fontWeight = FontWeight.Bold) },
                     text = { Column {
-                        Text("高德开放平台地图 SDK 由北京高德图强科技有限公司提供，用于地图展示；" +
+                        Text("高德开放平台地图与搜索 SDK 由北京高德图强科技有限公司提供，用于地图展示和地名查询；" +
                             "可能收集经纬度、IP/网络、GNSS、设备参数、系统和传感器信息。" +
                             "足迹数据库仍保留本机；拒绝使用高德不影响自动记录。")
                         TextButton(onClick = {
@@ -595,6 +605,8 @@ class MainActivity : ComponentActivity() {
                                 .putBoolean("amap_sdk_consent", true)
                                 .putBoolean("amap_sdk_decision_seen", true).apply()
                             amapConsent = true
+                            placeAnchor = null
+                            refreshPlaceName(userFix)
                             showAmapConsent = false
                         }) { Text("同意使用高德") }
                     },
@@ -602,7 +614,10 @@ class MainActivity : ComponentActivity() {
                         TextButton(onClick = {
                             showAmapConsent = false
                             amapConsent=false; onlineMap=false
+                            placeRequestRevision++
+                            placeAnchor=null; placeName=null
                             com.amap.api.maps.MapsInitializer.updatePrivacyAgree(applicationContext,false)
+                            com.amap.api.services.core.ServiceSettings.updatePrivacyAgree(applicationContext,false)
                             getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE).edit()
                                 .putBoolean("amap_sdk_decision_seen", true)
                                 .putBoolean("amap_sdk_consent", false)
