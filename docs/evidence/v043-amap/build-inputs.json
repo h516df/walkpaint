@@ -1,0 +1,17 @@
+{
+  "python_failures": 0,
+  "source_input_sha256": "88a4559a44457d8b32ad97035b56e9bee8767d788cac05c80a5735c07ec4876d",
+  "version": "0.43",
+  "python_tests": 11,
+  "code": 45,
+  "arm64_only": true,
+  "fog_pixel_probe": "PASS",
+  "phone_path": "not_verified",
+  "baseline": "c46352eb2f700b78abeeb4d2f30b8271c08f0d01",
+  "debuggable": false,
+  "signer_sha256": "21b74e3e2a10e12da8284d4e6bd7d99e55b00a385215902e94d7896f7a46c967",
+  "engine": "amap",
+  "jvm_tests": 318,
+  "apk_sha256": "b8aa5e7479a925e109dc2e544ee186c5acd7addfd575be6e2cf64c2a80e4c5a2",
+  "jvm_failures": 0
+}

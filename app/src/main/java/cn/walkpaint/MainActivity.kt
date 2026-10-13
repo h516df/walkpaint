@@ -68,11 +68,15 @@ private const val VEIL_REFRESH_SETTLE_MS = 350L
 
 /**
  * A viewport wider than this is not a view of the map; it is the engine before it is ready. It was
- * five degrees, which also threw away a legitimately wide zoom-out; sixty still catches the
- * whole-world region the engines report at launch, and a real view of the planet is not something
- * this app shows.
+ * five degrees, which also threw away a legitimately wide zoom-out; sixty still threw away a real
+ * wide zoom-out as well, and rejecting a view the person is actually looking at is worse than
+ * framing it: the veil then falls back to a person-centred frame that may not cover the screen, and
+ * the basemap shows around its edge. So the limit is now only wide enough to catch the degenerate
+ * whole-world region the engines report at launch, and the frame follows whatever real view it gets.
+ * A frame too coarse to draw the corridor no longer widens it (see TrailPaint.corridorVisible), so a
+ * wide view is safe to accept: it stays fully veiled and the walked route is drawn as a line.
  */
-private const val MAX_SANE_VIEW_DEGREES = 60.0
+private const val MAX_SANE_VIEW_DEGREES = 170.0
 
 /**
  * Shortest gap between two handovers of the veil image to the map.
@@ -133,14 +137,21 @@ class MainActivity : ComponentActivity() {
         { @Suppress("DEPRECATION") windowManager.defaultDisplay.rotation },
         { bearing -> mapHeading=bearing ?: 0f;syncFollowCamera() }) }
     private val amapController by lazy { AmapMapController(this,::pauseMapFollowing,
-        { syncFollowCamera(force=true) }, ::onMapCameraMoved, ::onMapCameraSettled) }
-    private val amapSupported get() = AmapPlatform.supported(Build.SUPPORTED_ABIS.toList())
+        { refreshVeilForViewport(force=true) }, ::onMapCameraMoved, ::onMapCameraSettled) }
+    private val amapSupported get() = AmapPlatform.supported(Build.SUPPORTED_ABIS.toList(), BuildConfig.ARM64_ONLY)
     private val amapActive get() = amapSupported && BuildConfig.AMAP_KEY.isNotBlank() && amapConsent
     private var showDiagnostics by mutableStateOf(false)
     private var diagnosticText by mutableStateOf("")
     private var feedbackHistory by mutableStateOf(RecordingDiagnostics.HistoryView(emptyList(),true,false))
     private var feedbackReport by mutableStateOf<String?>(null)
     private var feedbackBusy by mutableStateOf(false)
+    /**
+     * Sending this extra asks the app to write its field export to its own external directory.
+     *
+     * Only an explicit command triggers it — nothing in the app sends it — because the export
+     * contains the person's coordinates and must never leave the phone on its own.
+     */
+    private val EXTRA_EXPORT_FIELD_REPORT = "cn.walkpaint.extra.EXPORT_FIELD_REPORT"
     private var privateUpdateState by mutableStateOf(PrivateUpdateState())
     private val privateUpdater by lazy { PrivateUpdater(this) { privateUpdateState=it } }
     private val currentRelease by lazy {
@@ -638,6 +649,9 @@ class MainActivity : ComponentActivity() {
             }
         }
         mainHandler.post(refreshTask)
+        // Command-driven export: the app is launched with the extra and writes its own field report
+        // where the reading side can fetch it. Nothing else in the app ever sends this.
+        if (intent?.getBooleanExtra(EXTRA_EXPORT_FIELD_REPORT, false) == true) dumpFieldReport()
     }
 
     private fun updateUi() {
@@ -719,9 +733,9 @@ class MainActivity : ComponentActivity() {
                     // where the person has been would vanish on exactly the screen where it matters
                     // most. Above that the cleared ground is plainly visible, so sending a line too
                     // would only cost the UI thread a GeoJSON rebuild per update while walking.
-                    val perMetre = fogBounds?.let { TrailPainter.pixelsPerMeter(it) } ?: 0.0
-                    val veilShowsCorridor = perMetre > 0.0 &&
-                        TrailPaint.CORRIDOR_M * perMetre >= TrailPaint.NETWORK_BELOW_PX
+                    // The predicate is TrailPaint's, not a copy of it: the veil leaves the corridor
+                    // out exactly when this line is drawn, and the two must not be able to disagree.
+                    val veilShowsCorridor = fogBounds?.let { TrailPaint.corridorVisible(it) } == true
                     val trailPaths = RecordedTrail.paths(displayedTrack.realTracks)
                     val trail = when {
                         // A chosen day is always drawn: that is the route the person asked to see.
@@ -1044,6 +1058,41 @@ class MainActivity : ComponentActivity() {
     private fun fmt(value: Double, digits: Int) = String.format(java.util.Locale.ROOT, "%.${digits}f", value)
 
     /**
+     * Which engine the phone is really running, and why.
+     *
+     * The record and the screen disagreed because the screen was never running the engine the
+     * record was written against, and nothing in the export said so. The AMap SDK ships ARM-only
+     * native libraries; a universal x86 process can fall back while an ARM64 artifact uses the
+     * advertised native bridge. This line distinguishes the actual engine's behaviour from the
+     * other's, on whichever engine the person happens to be holding.
+     */
+    private fun engineChoice(): String = VeilReport.engineChoice(
+        supported = amapSupported,
+        firstAbi = Build.SUPPORTED_ABIS.firstOrNull().orEmpty(),
+        keyConfigured = BuildConfig.AMAP_KEY.isNotBlank(),
+        consent = amapConsent,
+        active = amapActive,
+    )
+
+    /** What the active engine's overlay stack actually contains, read from the running engine. */
+    private fun mapEngineDetail(): String {
+        if (amapActive) return amapController.describe()
+        val style = mapInstance?.style ?: return "备用地图=样式还没加载（地图还没起来）"
+        return runCatching {
+            val layers = style.layers
+            val fog = layers.indexOfFirst { it.id == "wp-fog" }
+            val line = layers.indexOfFirst { it.id == "wp-painted-outline" }
+            val source = if (style.getSourceAs<
+                    org.maplibre.android.style.sources.ImageSource>("wp-fog") != null) "有" else "没有"
+            "备用地图=样式已加载 图层共${layers.size}个 " +
+                "雾图层=${if (fog >= 0) "序号$fog" else "没有"} 雾图源=$source " +
+                "行走线图层=${if (line >= 0) "序号$line" else "没有"} " +
+                "雾在行走线下面=${if (fog in 0 until line) "是" else "否（看不清，或图层不在）"} " +
+                "雾图版本=$fogSourceRevision"
+        }.getOrElse { "备用地图=图层读取失败（${it.javaClass.simpleName}）" }
+    }
+
+    /**
      * The raw material, gathered on demand.
      *
      * This is the answer to "I can feel something is wrong and cannot describe it": every fix the
@@ -1051,7 +1100,8 @@ class MainActivity : ComponentActivity() {
      * the accuracy it carried, the camera and veil the person was actually looking at, and the
      * database's own count. Nothing is uploaded; the person copies or shares the text themselves.
      */
-    private fun prepareFieldReport() {
+    private fun prepareFieldReport(onReady: ((String) -> Unit)? = null) {
+        if (feedbackBusy) return
         val application = applicationContext
         val enabled = AmbientTracking.enabled(this); val running = AmbientTracking.running
         val fine = AmbientTracking.hasFineLocation(this); val background = AmbientTracking.hasBackgroundLocation(this)
@@ -1072,11 +1122,23 @@ class MainActivity : ComponentActivity() {
         val viewport = currentViewport
         val frame = fogFrame
         val bitmap = fogBitmap
+        // The engine is asked what it is showing here, on the UI thread: both map SDKs have to be
+        // touched from it, and a report that described a different engine than the one on screen
+        // would be worse than no report at all.
+        val engineDetail = engineChoice() + "\n" + mapEngineDetail()
+        val lineByMap = mapTrailPaths.isNotEmpty()
         refreshExecutor.execute {
             val text = runCatching {
                 val state = repository.snapshot()
                 val now = System.currentTimeMillis()
                 val last = state.realTracks.flatMap { it.points }.maxByOrNull { it.time }
+                // Counted here rather than on the map thread: it is a plain array walk, and the
+                // painter cannot be redrawing the same image because this work is on its executor.
+                val stats = bitmap?.let { image ->
+                    val argb = IntArray(image.width * image.height)
+                    image.getPixels(argb, 0, image.width, 0, 0, image.width, image.height)
+                    VeilReport.of(argb)
+                }
                 FieldReport.build(
                     FieldFacts(
                         now = now,
@@ -1084,16 +1146,16 @@ class MainActivity : ComponentActivity() {
                         device = "${Build.BRAND} ${Build.MODEL}",
                         android = Build.VERSION.SDK_INT.toString(),
                         engine = engine,
+                        engineDetail = engineDetail,
                         permissions = "精确定位=$fine 后台定位=$background 通知=$notifications " +
                             "手机定位开关=$gpsProvider 电池白名单=$whitelisted 记录开关=$enabled 后台服务=$running",
                         recording = RecordingDiagnostics.summary(application),
                         camera = "$camera\n可见范围=" + (viewport?.let {
                             "纬度${fmt(it.latSpan, 4)}° 经度${fmt(it.lonSpan, 4)}°"
                         } ?: "地图还没报告（用兜底大帧）"),
-                        veil = "雾帧=" + (frame?.let {
-                            "${it.widthPx}x${it.heightPx} 覆盖纬度${fmt(it.latSpan, 4)}° 经度${fmt(it.lonSpan, 4)}°"
-                        } ?: "尚未生成") +
-                            " 位图=${bitmap?.let { "${it.width}x${it.height}" } ?: "无"} 版本=$fogRevision",
+                        veil = VeilReport.frame(frame, lineByMap) + "\n" +
+                            (stats?.let { VeilReport.image(it, fogRevision) }
+                                ?: "雾位图=无（还没画出来）"),
                         storage = "数据库点数=${state.realPointCount} 行程=${state.realTracks.size} " +
                             "记录里程=${state.totalMeters.toInt()}米" +
                             (last?.let { " 最后一点=${SimpleDateFormat("MM-dd HH:mm:ss", Locale.ROOT).format(Date(it.time))} 精度=${it.accuracy.toInt()}米" } ?: ""),
@@ -1102,8 +1164,41 @@ class MainActivity : ComponentActivity() {
                     FieldRecorder.snapshot(now),
                 )
             }.getOrElse { "记录现场暂时无法整理，足迹保留。请稍后重试。" }
-            runOnUiThread { feedbackBusy = false; feedbackReport = text }
+            runOnUiThread {
+                feedbackBusy = false; feedbackReport = text
+                // The command-driven export needs the same text the person would see, at the same
+                // moment, so it is handed over here rather than assembled a second time.
+                onReady?.invoke(text)
+            }
         }
+    }
+
+    /**
+     * Writes the field export to the app's own external directory when the app is launched with
+     * [EXTRA_EXPORT_FIELD_REPORT].
+     *
+     * The export lets the phone and the dedicated AVD report their actual engine and overlays.
+     * ARM64 native-bridge testing covers rendering, while the person's phone still supplies OEM,
+     * permissions and real location evidence. Nothing is uploaded unless shared, and the file
+     * is written only when this extra is explicitly sent; the
+     * file lives beside the app's own data and is the same text the person can already share.
+     */
+    private fun dumpFieldReport() {
+        prepareFieldReport { text ->
+            runCatching {
+                val file = java.io.File(getExternalFilesDir(null) ?: filesDir, "field-report.txt")
+                file.writeText(text)
+                // The path is logged so the reading side never has to guess between /sdcard and
+                // /storage/emulated/0, or a device with more than one user.
+                android.util.Log.i("WalkPaintField", "field report written: ${file.absolutePath}")
+            }.onFailure { android.util.Log.w("WalkPaintField", "field report write failed", it) }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_EXPORT_FIELD_REPORT, false)) dumpFieldReport()
     }
 
     private fun copyFeedback() {
@@ -1201,11 +1296,12 @@ class MainActivity : ComponentActivity() {
     private fun cameraTrace(stage: String) {
         if (!BuildConfig.DEBUG) return
         val camera = mapInstance?.cameraPosition
+        val amapCamera = if (amapActive) amapController.cameraSource() else null
         val target = camera?.target
         val fix = userFix
         val view = currentViewport
-        android.util.Log.d("WalkPaintCam", "$stage lat=${target?.latitude} lon=${target?.longitude} " +
-            "zoom=${camera?.zoom} day=${selectedDay ?: "cumulative"} " +
+        android.util.Log.d("WalkPaintCam", "$stage lat=${amapCamera?.first ?: target?.latitude} lon=${amapCamera?.second ?: target?.longitude} " +
+            "zoom=${amapCamera?.third ?: camera?.zoom} day=${selectedDay ?: "cumulative"} " +
             "fixLat=${fix?.latitude} fixLon=${fix?.longitude} " +
             "viewLat=${view?.latSpan} viewLon=${view?.lonSpan} " +
             "frameLat=${fogFrame?.latMin}..${fogFrame?.latMax} " +
@@ -1321,6 +1417,8 @@ class MainActivity : ComponentActivity() {
         val colour = roadColor
         val handOver = force
         val anchor = userFix?.let { TrackPoint(it.latitude, it.longitude, it.time, it.accuracy) }
+        val day = selectedDay
+        val displayed = mapTrackState
         refreshExecutor.execute {
             try {
                 val start = System.nanoTime()
@@ -1329,13 +1427,21 @@ class MainActivity : ComponentActivity() {
                 if (BuildConfig.DEBUG) PerfTrace.pan(nanos)
                 val frame = fogPainter.frame()
                 val revision = fogPainter.revision
+                val linePaths = RecordedTrail.paths(displayed.realTracks)
+                val route = if (day == null && frame?.let { TrailPaint.corridorVisible(it) } == true)
+                    emptyList() else TrailShape.network(linePaths, frame)
+                val routeJson = TrackMapJson.encodePaths(route)
                 runOnUiThread {
                     try {
                         // While the camera is moving the image is painted but not handed over: the
                         // rebuild costs a few tens of milliseconds on the UI thread, and doing it
                         // under a finger is exactly the jank this work exists to remove. The
                         // settled callback hands over the final view.
-                        if (handOver) handOverVeil(image, frame, revision)
+                        if (handOver && day == selectedDay) {
+                            mapTrailPaths = route
+                            paintedJson = routeJson
+                            handOverVeil(image, frame, revision)
+                        }
                     } finally {
                         // Released here, not before the handover: the painter must not be drawing
                         // into the same bitmap while the map is reading it.

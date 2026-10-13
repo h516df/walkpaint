@@ -1,0 +1,42 @@
+[
+  {
+    "path": "scripts/v040_finish_publish.py",
+    "size": 3926,
+    "sha256": "fc9dabcc8ccd73e7b7067bca8e4bd68df389cb32f26e7685e4b1ecf0072d53cd"
+  },
+  {
+    "path": "scripts/v040_release_update_check.py",
+    "size": 2444,
+    "sha256": "0e1e90ba65496e49fe3cf0306d7e1eb1ea97a49558b5f50323f9b9c864727b3b"
+  },
+  {
+    "path": "scripts/try_arm64_emulator.py",
+    "size": 3710,
+    "sha256": "c524cdb4cde3887d06504ce97d0e943fd44e14155bd2218be7686562e675d106"
+  },
+  {
+    "path": "scripts/phone_acceptance.py",
+    "size": 11833,
+    "sha256": "422d31550c4321d21398dff63b9d6dc558d486faede7825f73c6b474c5885974"
+  },
+  {
+    "path": "scripts/field_report_sections.py",
+    "size": 4343,
+    "sha256": "798f1a621ea0a6b55f2469278d252a7ce51395daecc5e0f328ed5f4d626db7ba"
+  },
+  {
+    "path": "docs/evidence/V041.md",
+    "size": 10434,
+    "sha256": "3dfb214424be77aef650625492a034431ed789e4e256dfa930d44476d684a0a3"
+  },
+  {
+    "path": "docs/evidence/v041-amap-abi.txt",
+    "size": 780,
+    "sha256": "1e81becb55eff31306d40a5acee9cc2f06b6472ba68fcfd1cca2e38ef2b957dc"
+  },
+  {
+    "path": "docs/evidence/v041-arm64-emulator-FATAL.log",
+    "size": 376,
+    "sha256": "5a69955d7b0bfc3de7202b074c02f4e68a3d6491faf28134c0e5abad196c2b7a"
+  }
+]

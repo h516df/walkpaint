@@ -45,6 +45,10 @@ internal class AmapMapController(private val context: Context, private val onGes
     private val cores = mutableListOf<Polyline>()
     private var ground: GroundOverlay? = null
     private var paintedRevision = -1
+    /** Kept only so an exported field report can say what the phone's own engine ended up with. */
+    private var groundPixels: String? = null
+    private var groundFrame: PaintFrame? = null
+    private var mapLoaded = false
     /** Display coordinates are converted once per point, not once per point per redraw. */
     private val converted = HashMap<Long, LatLng>()
     private var retainedCamera: CameraPosition?=null
@@ -82,6 +86,8 @@ internal class AmapMapController(private val context: Context, private val onGes
         cores.clear()
         ground = null
         paintedRevision = -1
+        groundPixels = null
+        mapLoaded = false
         converted.clear()
         map?.uiSettings?.isZoomControlsEnabled = false
         map?.uiSettings?.isCompassEnabled = false
@@ -102,7 +108,16 @@ internal class AmapMapController(private val context: Context, private val onGes
                 android.view.MotionEvent.ACTION_CANCEL -> endGesture()
             }
         }
-        map?.setOnMapLoadedListener { onReady() }
+        map?.setOnMapLoadedListener {
+            mapLoaded = true
+            // Camera moves issued before the SDK finishes loading may be replaced by its default
+            // camera. Restore only after loading, or leave the initial focus pending for render.
+            retainedCamera?.let {
+                map?.moveCamera(CameraUpdateFactory.newCameraPosition(it))
+                initialFocusPending = false
+            }
+            onReady()
+        }
         // The veil follows the map: a pan or a zoom asks for a redraw for the new view.
         map?.setOnCameraChangeListener(object : AMap.OnCameraChangeListener {
             override fun onCameraChange(position: CameraPosition?) { onCamera() }
@@ -112,7 +127,6 @@ internal class AmapMapController(private val context: Context, private val onGes
         latestPosition = location
         initialFocusPending = true
         render(state,roads,emptyList(),null,null,-1)
-        retainedCamera?.let { map?.moveCamera(CameraUpdateFactory.newCameraPosition(it));initialFocusPending=false }
         return view
     }
 
@@ -158,7 +172,7 @@ internal class AmapMapController(private val context: Context, private val onGes
             (exploredColor and 0x00FFFFFF) or (0xB0 shl 24), 11f)
         syncGround(a, fog, fogFrame, fogRevision)
         updateUser(latestPosition)
-        if(initialFocusPending) {
+        if(initialFocusPending && mapLoaded) {
             val current=latestPosition?.let { TrackPoint(it.latitude,it.longitude,it.time,it.accuracy) }
             RoadMapFocus.choose(state,current,RoadState())?.let { point ->
                 a.moveCamera(CameraUpdateFactory.newLatLngZoom(toAmap(point.lat,point.lon),17f))
@@ -200,6 +214,8 @@ internal class AmapMapController(private val context: Context, private val onGes
             existing.setImage(descriptor)
             existing.setPositionFromBounds(bounds)
         }
+        groundPixels = "${fog.width}x${fog.height}"
+        groundFrame = frame
         if (BuildConfig.DEBUG) PerfTrace.upload(System.nanoTime() - handoverStart)
     }
 
@@ -235,6 +251,7 @@ internal class AmapMapController(private val context: Context, private val onGes
      * camera to street level. Following a moving fix leaves the camera's own zoom alone.
      */
     fun followCamera(fix: Location, bearing: Float, animate: Boolean, minZoom: Float? = null) {
+        if (!mapLoaded || initialFocusPending) return
         val a=map ?: return
         val current=a.cameraPosition
         val zoom=when {
@@ -255,30 +272,75 @@ internal class AmapMapController(private val context: Context, private val onGes
     /** Shows a whole walked area, used when the person asks to see all of their exploration. */
     fun focusBounds(latMin: Double, lonMin: Double, latMax: Double, lonMax: Double) {
         val bounds = com.amap.api.maps.model.LatLngBounds(
-            com.amap.api.maps.model.LatLng(latMin, lonMin),
-            com.amap.api.maps.model.LatLng(latMax, lonMax))
+            toAmap(latMin, lonMin), toAmap(latMax, lonMax))
         map?.moveCamera(com.amap.api.maps.CameraUpdateFactory.newLatLngBounds(bounds, 80))
     }
 
     /** One line describing what the camera is showing, for the on-demand field export. */
     fun cameraSummary(): String {
         val camera = map?.cameraPosition ?: return "高德地图尚未就绪"
+        val source = fromAmap(camera.target.latitude, camera.target.longitude)
         return String.format(java.util.Locale.ROOT, "缩放=%.2f 中心=%.5f,%.5f",
-            camera.zoom, camera.target.latitude, camera.target.longitude)
+            camera.zoom, source.latitude, source.longitude)
+    }
+
+    fun cameraSource(): Triple<Double, Double, Float>? {
+        val camera = map?.cameraPosition ?: return null
+        val source = fromAmap(camera.target.latitude, camera.target.longitude)
+        return Triple(source.latitude, source.longitude, camera.zoom)
     }
 
     /** What the AMap view is showing, so the veil can follow it. */
     fun viewport(): ViewBounds? {
         val bounds = map?.projection?.visibleRegion?.latLngBounds ?: return null
-        return ViewBounds(bounds.southwest.latitude, bounds.southwest.longitude,
-            bounds.northeast.latitude, bounds.northeast.longitude)
+        val southwest = fromAmap(bounds.southwest.latitude, bounds.southwest.longitude)
+        val northeast = fromAmap(bounds.northeast.latitude, bounds.northeast.longitude)
+        return ViewBounds(southwest.latitude, southwest.longitude,
+            northeast.latitude, northeast.longitude)
     }
+
+    private fun fromAmap(lat: Double, lon: Double): LatLng {
+        if (!CoordinateConverter.isAMapDataAvailable(lat, lon)) return LatLng(lat, lon)
+        val source = CoordinateInverse.toSource(lat, lon) { sourceLat, sourceLon ->
+            val display = toAmap(sourceLat, sourceLon)
+            display.latitude to display.longitude
+        }
+        return LatLng(source.first, source.second)
+    }
+
+    /**
+     * What the AMap side of the veil actually ended up doing, for the on-demand field export.
+     *
+     * Report the actual engine on both the phone and an ARM64 native-bridge AVD. This distinguishes
+     * "the SDK never loaded", "the SDK loaded but the ground overlay was never
+     * created", and "the overlay exists and the map is drawing the basemap over it" apart. Only the
+     * third of those would need a different way of hiding the map, so guessing between them is what
+     * produced a fix that could not be trusted.
+     */
+    fun describe(): String {
+        if (map == null) return "高德=视图未创建"
+        val pixels = groundPixels
+        val layer = when {
+            ground != null -> "有(位图=$pixels 图层版本=$paintedRevision 边界=" +
+                (groundFrame?.let { String.format(java.util.Locale.ROOT, "%.5f,%.5f~%.5f,%.5f",
+                    it.latMin, it.lonMin, it.latMax, it.lonMax) } ?: "未记录") + ")"
+            pixels != null -> "没有（位图已交给高德 $pixels，但地面图层没建起来）"
+            else -> "没有（还没有位图）"
+        }
+        return "高德=视图已建 地图加载完成=$mapLoaded 地面图层$layer " +
+            "折线=描边${casings.size}条/芯${cores.size}条(zIndex 10/11，地面图层zIndex 9) " +
+            "坐标换算缓存=${converted.size} 手势挂起=$gestureActive"
+    }
+
     fun release(view: MapView) {
         if (view !== currentView) return
         retainedCamera=map?.cameraPosition
         casings.clear()
         cores.clear()
         ground = null
+        groundPixels = null
+        groundFrame = null
+        mapLoaded = false
         paintedRevision = -1
         currentMarker = null
         map = null

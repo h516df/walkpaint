@@ -16,3 +16,5 @@ jobs:
           persist-credentials: false
       - name: Release recovery and UI result assertions
         run: python3 -m unittest discover -s tests -v
+      - name: AMap artifact evidence and dedicated device guards
+        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v

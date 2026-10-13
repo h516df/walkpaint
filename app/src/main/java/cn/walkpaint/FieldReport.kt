@@ -97,6 +97,8 @@ internal data class FieldFacts(
     val device: String,
     val android: String,
     val engine: String,
+    /** Which engine was really running and what its overlay stack contained. */
+    val engineDetail: String,
     val permissions: String,
     val recording: String,
     val camera: String,
@@ -120,6 +122,7 @@ internal object FieldReport {
         out.appendLine("导出时间：${stamp(facts.now)}（手机本地时间）")
         out.appendLine("版本：${facts.version} · Android ${facts.android} · ${facts.device}")
         out.appendLine("地图引擎：${facts.engine}")
+        out.appendLine(facts.engineDetail)
         out.appendLine("权限与后台：${facts.permissions}")
         out.appendLine()
         out.appendLine("—— 结论（自动判定，未必正确）——")

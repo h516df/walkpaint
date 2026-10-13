@@ -1,4 +1,29 @@
-# 当前任务：交付工具与行为验收改进
+# PR #38 验收工具整合（2026-10-13）
+
+用户已明确允许解决整合冲突并清理相关旧脚本。本次只整合 a22f94e 的发布恢复、UI 行为断言和 AndroidTest 探针；生产源码、版本、签名与正式 v0.43 安装包不变。
+
+正式 v0.43 标签固定 8a2d18097c7ce5b9cb00050457b202bc45d981f6，APK SHA256 为 b8aa5e7479a925e109dc2e544ee186c5acd7addfd575be6e2cf64c2a80e4c5a2；不可覆盖该发布。PR #38 只整合到 agent/codex/mobile-ui-redesign-v041，不连带合并历史 PR 栈。
+
+旧 v0.40 发布/安装、纯 ARM 模拟器、自动手机授权和旧现场探针，以及误判 x86 高德的三个证据文件已按 SHA256 本地备份后移出当前入口。使用 amap_runtime_evidence.py / amap_ui_acceptance.py 验同一 ARM64 包和实际高德；发布沿用 publish_release.py，历史已发布版本仅 --verify-only。大文件上传传输改进仍由 Issue #39 跟踪。
+
+以下交付工具证据是 v0.41 的历史 MapLibre 路径，不替代 v0.43 高德验收或本人手机验收。
+
+---
+
+# v0.43 高德同引擎验收（2026-10-13）
+
+用户目标：解决 DSH 测试和 vivo 真机使用路径不同的问题；保留 v0.41 界面，未知区域全黑，只有走过的路线显露地图。
+
+当前主写手是 Codex，分支 agent/codex/amap-v042，目录 D:\Workspaces\Codex\2026-10-13\xai\work\worktrees\WalkPaint\codex-amap-v042。DSH 两个会话及其已识别发布后台任务已中止；不要再次派发恢复旧写手。基线是已发布 v0.41/c46352e，保留诊断提交 d1500a2。历史 main 与 PR 栈不合并。
+
+版本 0.43/code45、schema2、原签名。v0.42 标签已经由 DSH 推送到 13db588，未正式发布；保留该标签，不覆盖。正式验收只接受 ARM64 手机包在专用 Google AVD 经 native bridge 真实加载高德的路径，不能以备用地图通过代替。本人手机、长期户外记录及本人账号下载/系统安装仍未验收，Issue #6 保持开放。
+
+本轮修复：宽帧不扩大三十米通道；首屏与空路线保持未知区域不透光；中国高德视口回到 WGS84 后再绘制；缩放时同步选择通道或路线线条。现场导出说明实际引擎/图层/像素。证据、测试与回退边界见 docs/evidence/V043.md。
+
+以下保留的是历史交接记录；其中旧版本、写手与“x86 模拟器无法执行高德”的结论均不代表本轮状态。
+
+---
+# 历史任务：v0.41 交付工具与行为验收改进
 
 用户要求提高经常进行的 Vibe Coding 效率与质量，并明确要求直接实施。唯一写手是当前 Codex；工作区 work/ops-worktrees/WalkPaint/codex-delivery-regression-tools，分支 agent/codex/delivery-regression-tools，基线为已发布 v0.41 的 c46352eb2f700b78abeeb4d2f30b8271c08f0d01。
 

@@ -1,0 +1,31 @@
+{
+  "tag": "v0.43",
+  "target": "8a2d18097c7ce5b9cb00050457b202bc45d981f6",
+  "url": "https://github.com/h516df/walkpaint/releases/tag/v0.43",
+  "published_at": "2026-10-12T18:26:12Z",
+  "status": "published",
+  "read_only": true,
+  "latest_verified": null,
+  "assets": [
+    {
+      "name": "WalkPaint-v0.43-arm64-debug.apk",
+      "size": 65972059,
+      "digest": "sha256:b8aa5e7479a925e109dc2e544ee186c5acd7addfd575be6e2cf64c2a80e4c5a2"
+    },
+    {
+      "name": "WalkPaint-v0.43-arm64.apk",
+      "size": 65972059,
+      "digest": "sha256:b8aa5e7479a925e109dc2e544ee186c5acd7addfd575be6e2cf64c2a80e4c5a2"
+    },
+    {
+      "name": "WalkPaint-v0.43-release-notes.json",
+      "size": 1209,
+      "digest": "sha256:98e9b828e584ae266769434d972c721e6e5ec278bad50e0250d52dca1ec15f16"
+    },
+    {
+      "name": "WalkPaint-v0.43-SHA256.txt",
+      "size": 294,
+      "digest": "sha256:2bef76a82f3d654fa8aa1a329360d2e4b7b37809154c7521749a21644d91368e"
+    }
+  ]
+}
