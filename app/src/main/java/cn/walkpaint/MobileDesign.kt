@@ -85,24 +85,23 @@ internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolea
                 Text("›",color=chromeInk,fontSize=20.sp,modifier=Modifier.padding(start=8.dp))
             }
         }
-        Column(Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(end=16.dp,bottom=104.dp),
+        Column(Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(end=16.dp,bottom=94.dp),
             verticalArrangement=Arrangement.spacedBy(12.dp)) {
-            Surface(color=chrome,shape=RoundedCornerShape(16.dp),border=BorderStroke(1.dp,Color(0xFF34455C))) {
+            Surface(color=Color.White,shape=RoundedCornerShape(14.dp)) {
                 Column {
                     listOf("放大地图" to 1,"缩小地图" to -1).forEachIndexed { index,(label,delta) ->
-                        if(index>0) HorizontalDivider(Modifier.width(48.dp).padding(horizontal=10.dp),color=Color(0xFF34455C))
+                        if(index>0) HorizontalDivider(Modifier.width(48.dp).padding(horizontal=10.dp),color=Color(0xFFE5EAF2))
                         Surface(onClick={onZoom(delta)},color=Color.Transparent,modifier=Modifier.size(48.dp)) {
                             Box(Modifier.semantics { contentDescription=label },contentAlignment=Alignment.Center) {
-                                Text(if(delta>0) "+" else "−",color=chromeInk,fontSize=26.sp)
+                                Text(if(delta>0) "+" else "−",color=Color(0xFF26374F),fontSize=26.sp)
                             }
                         }
                     }
                 }
             }
-            Surface(onClick=onLocate,color=chrome,shape=RoundedCornerShape(16.dp),
-                border=BorderStroke(1.dp,Color(0xFF34455C)),modifier=Modifier.size(48.dp)) {
+            Surface(onClick=onLocate,color=skinPalette(LocalVisualSkin.current,false).brand,shape=RoundedCornerShape(14.dp),modifier=Modifier.size(48.dp)) {
                 Box(Modifier.semantics { contentDescription=if(day!=null) "定位当天" else "定位我" },contentAlignment=Alignment.Center) {
-                    Icon(painterResource(R.drawable.ic_location),null,tint=Color(0xFFB8D3FF),modifier=Modifier.size(22.dp))
+                    Icon(painterResource(R.drawable.ic_location),null,tint=Color.White,modifier=Modifier.size(22.dp))
                 }
             }
         }
@@ -148,7 +147,7 @@ internal fun RouteThumbnail(track: Track, modifier: Modifier = Modifier, color: 
 
 @Composable
 internal fun DesignTripsPage(state: TrackState, roadColor: Int, onTrip: (Track) -> Unit,
-    onExport: () -> Unit) {
+    onExport: () -> Unit,onSkin:()->Unit={}) {
     val days = remember(state) { DailyFootprints.days(state) }
     var detailKey by rememberSaveable { mutableStateOf<String?>(null) }
     var showStats by rememberSaveable { mutableStateOf(false) }
@@ -162,7 +161,12 @@ internal fun DesignTripsPage(state: TrackState, roadColor: Int, onTrip: (Track) 
             TextButton(onClick={showStats=!showStats}) { Text(if(showStats) "日历" else "统计") }
             IconButton(onClick=onExport) { Icon(painterResource(R.drawable.ic_export),"导出全部足迹",tint=Pigment) }
         } }
-        item { DesignSummary(state) }
+        item {
+            val month=java.time.LocalDate.now().toString().take(7)
+            val monthDays=remember(days,month) {days.filter {it.key.startsWith(month)}}
+            SkinHero(exploredDistance(monthDays.sumOf {it.meters}),"${monthDays.size}",onSkin,
+                "本月里程","本月探索天数")
+        }
         if (showStats) item { RecapCard(RecapMaker.of(days, java.time.LocalDate.now().toString().take(7)),
             RecapMaker.of(days, java.time.LocalDate.now().toString().take(4))) }
         else item { FootprintCalendar(days, DailyFootprints.key(System.currentTimeMillis())) { track ->

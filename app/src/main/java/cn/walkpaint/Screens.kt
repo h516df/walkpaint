@@ -45,7 +45,7 @@ internal fun AppShell(
     appearanceMode:Int, onAppearanceMode:(Int)->Unit, onShowIntro:()->Unit,
     feedbackContent: @Composable (onBack:()->Unit)->Unit,
     updatesContent: @Composable (onBack:()->Unit)->Unit, mapContent: @Composable () -> Unit,
-    onBackupEntry:()->Unit={}
+    onBackupEntry:()->Unit={},onSkin:()->Unit={}
 ) {
     Box(Modifier.fillMaxSize().background(PageBackground)) {
         // Keep the SDK and GL surface alive across bottom-tab journeys. Only the controls/pages
@@ -63,42 +63,40 @@ internal fun AppShell(
                 0 -> DesignMapOverlay(state,selectedDay,automatic,recordingTitle,recordingHealthy,mapNotice,
                     mapProviderLabel,{onTab(2)},onToggleTracking,onLocate,onShowAll,
                     mapProviderLabel.contains("OpenFreeMap"),onZoom,{})
-                1 -> Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(bottom=88.dp)) {
-                    DesignTripsPage(state,roadColor,onTrip,onExport)
+                1 -> Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(bottom=76.dp)) {
+                    DesignTripsPage(state,roadColor,onTrip,onExport,onSkin)
                 }
-                else -> Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(bottom=88.dp)) {
+                else -> Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(bottom=76.dp)) {
                     ProfilePage(state,appearanceMode,onAppearanceMode,onShowIntro,automatic,profileNotice,onResolveTracking,
                     onToggleTracking,onRevoke,onBackgroundSettings,onPowerSettings,onCopyDiagnostics,
                     roadState,roadAreaHint,onRoadPack,onExport,onImport,internalBackupCount,
-                    mapProviderLabel,onChooseAmap,onOnlineMap,roadColor,onRoadAppearance,feedbackContent,updatesContent,onBackupEntry)
+                    mapProviderLabel,onChooseAmap,onOnlineMap,roadColor,onRoadAppearance,feedbackContent,updatesContent,onBackupEntry,onSkin)
                 }
             }
         }
         val mapChrome=selectedTab==0
-        val dock=if(mapChrome) androidx.compose.ui.graphics.Color(0xFF172334) else Canvas
-        val dockInk=if(mapChrome) androidx.compose.ui.graphics.Color(0xFFDCE7F7) else Muted
-        val selectedInk=if(mapChrome) androidx.compose.ui.graphics.Color(0xFFB8D3FF) else Pigment
-        Surface(color=dock,shape=RoundedCornerShape(20.dp),
-            border=BorderStroke(1.dp,if(mapChrome) androidx.compose.ui.graphics.Color(0xFF34455C) else Line),
-            modifier=Modifier.align(Alignment.BottomCenter).navigationBarsPadding()
-                .padding(start=16.dp,end=16.dp,bottom=10.dp).widthIn(max=420.dp).fillMaxWidth()) {
-            Row(Modifier.padding(horizontal=8.dp,vertical=4.dp)) {
-                val labels=listOf("探索","足迹","我的")
-                val icons=listOf(R.drawable.ic_map,R.drawable.ic_route,R.drawable.ic_person)
-                labels.forEachIndexed { index,label ->
-                    val active=selectedTab==index
-                    Surface(onClick={onTab(index)},color=androidx.compose.ui.graphics.Color.Transparent,
-                        modifier=Modifier.weight(1f).heightIn(min=60.dp).semantics { selected=active }) {
-                        Column(Modifier.padding(vertical=6.dp),horizontalAlignment=Alignment.CenterHorizontally,
-                            verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                            Box(Modifier.background(if(active) selectedInk.copy(alpha=.14f) else
-                                androidx.compose.ui.graphics.Color.Transparent,RoundedCornerShape(9.dp))
-                                .padding(horizontal=16.dp,vertical=3.dp)) {
+        val dock=if(mapChrome) androidx.compose.ui.graphics.Color(0xFF151B26) else Canvas
+        val dockInk=if(mapChrome) androidx.compose.ui.graphics.Color(0xFFB7C1D0) else Muted
+        val selectedInk=if(mapChrome) skinPalette(LocalVisualSkin.current,true).brand else Pigment
+        Surface(color=dock,modifier=Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+            Column(Modifier.navigationBarsPadding()) {
+                HorizontalDivider(color=if(mapChrome) androidx.compose.ui.graphics.Color(0xFF2A3342) else Line)
+                Row(Modifier.widthIn(max=520.dp).fillMaxWidth().align(Alignment.CenterHorizontally)
+                    .padding(horizontal=16.dp,vertical=10.dp),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                    val labels=listOf("探索","足迹","我的")
+                    val icons=listOf(R.drawable.ic_map,R.drawable.ic_route,R.drawable.ic_person)
+                    labels.forEachIndexed { index,label ->
+                        val active=selectedTab==index
+                        Surface(onClick={onTab(index)},color=if(active) selectedInk.copy(alpha=.12f) else
+                            androidx.compose.ui.graphics.Color.Transparent,shape=RoundedCornerShape(14.dp),
+                            modifier=Modifier.weight(1f).heightIn(min=48.dp).semantics { selected=active }) {
+                            Row(Modifier.padding(horizontal=6.dp,vertical=12.dp),verticalAlignment=Alignment.CenterVertically,
+                                horizontalArrangement=Arrangement.spacedBy(7.dp,Alignment.CenterHorizontally)) {
                                 Icon(painterResource(icons[index]),null,tint=if(active) selectedInk else dockInk,
-                                    modifier=Modifier.size(22.dp))
+                                    modifier=Modifier.size(20.dp))
+                                Text(label,color=if(active) selectedInk else dockInk,fontSize=14.sp,
+                                    fontWeight=if(active) FontWeight.SemiBold else FontWeight.Normal)
                             }
-                            Text(label,color=if(active) selectedInk else dockInk,fontSize=12.sp,
-                                fontWeight=if(active) FontWeight.SemiBold else FontWeight.Normal)
                         }
                     }
                 }
@@ -530,7 +528,7 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
     roads:RoadState,areaHint:String,onRoadPack:()->Unit,onExport:()->Unit,onImport:()->Unit,backupCount:Int,
     provider:String,onAmap:()->Unit,onOnline:()->Unit,roadColor:Int,onAppearance:()->Unit,
     feedbackContent: @Composable (onBack:()->Unit)->Unit,
-    updatesContent: @Composable (onBack:()->Unit)->Unit,onBackupEntry:()->Unit) {
+    updatesContent: @Composable (onBack:()->Unit)->Unit,onBackupEntry:()->Unit,onSkin:()->Unit) {
     var page by rememberSaveable { mutableStateOf("我的") }
     var revokeConfirm by rememberSaveable { mutableStateOf(false) }
     if(page=="问题反馈") { feedbackContent { page="我的" };return }
@@ -541,29 +539,41 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
             onBack=if(page=="我的") null else ({page=if(page=="更多设置") "我的" else "更多设置"})) }
         when(page) {
             "我的" -> {
-                item { DesignSummary(state) }
-                item { TrailSectionLabel("探索设置") }
+                item { SkinHero(exploredDistance(state.totalMeters),"${state.dayCount}",onSkin) }
+                item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                    Surface(onClick=onSkin,color=Canvas,shape=RoundedCornerShape(16.dp),
+                        modifier=Modifier.weight(1f)) {
+                        Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                            Icon(painterResource(R.drawable.ic_paint),null,tint=Pigment,modifier=Modifier.size(23.dp))
+                            Text("主图皮肤",color=Ink,fontSize=15.sp,fontWeight=FontWeight.Medium)
+                            Text(LocalVisualSkin.current.label,color=Muted,fontSize=12.sp)
+                        }
+                    }
+                    Surface(onClick=onAppearance,color=Canvas,shape=RoundedCornerShape(16.dp),
+                        modifier=Modifier.weight(1f)) {
+                        Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                            Box(Modifier.size(23.dp).background(androidx.compose.ui.graphics.Color(roadColor),CircleShape))
+                            Text("足迹颜色",color=Ink,fontSize=15.sp,fontWeight=FontWeight.Medium)
+                            Text(RoadPaintColor.name(roadColor),color=Muted,fontSize=12.sp)
+                        }
+                    }
+                } }
                 item { TrailPanel(spacing=0.dp) {
                     Row(Modifier.fillMaxWidth().heightIn(min=64.dp),verticalAlignment=Alignment.CenterVertically) {
                         Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
                             Text("自动记录",color=Ink,fontSize=16.sp,fontWeight=FontWeight.Medium)
-                            Text(if(automatic) "已开启，自动累积新的足迹" else "已暂停，历史足迹保留",
+                            Text(if(automatic) "已开启，定位状态请查看下方" else "已暂停，历史足迹保留",
                                 color=Muted,fontSize=13.sp,lineHeight=19.sp)
                         }
                         Switch(checked=automatic,onCheckedChange=onToggle,
                             modifier=Modifier.semantics { contentDescription="自动记录" })
                     }
-                    if(automatic && notice!=null) SettingRow(notice,"查看权限与记录状态",onResolve)
                     HorizontalDivider(color=Line)
-                    Row(Modifier.fillMaxWidth().clickable(onClick=onAppearance).heightIn(min=64.dp),
-                        verticalAlignment=Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                            Text("涂色颜色",color=Ink,fontSize=16.sp,fontWeight=FontWeight.Medium)
-                            Text(RoadPaintColor.name(roadColor),color=Muted,fontSize=13.sp)
-                        }
-                        Box(Modifier.size(24.dp).background(androidx.compose.ui.graphics.Color(roadColor),CircleShape))
-                        Text("›",color=Faint,fontSize=22.sp,modifier=Modifier.padding(start=12.dp))
-                    }
+                    SettingRow("定位与记录状态",notice ?: if(automatic) "查看当前定位、记录与恢复情况" else "已暂停记录",onDiagnostics)
+                    HorizontalDivider(color=Line)
+                    AppearanceSelector(appearanceMode,onAppearanceMode)
+                    HorizontalDivider(color=Line)
+                    SettingRow("备份与数据","导出备份、恢复足迹") { onBackupEntry();page="备份与恢复" }
                 } }
                 item { TrailSectionLabel("帮助与管理") }
                 item { TrailPanel(spacing=0.dp) {
@@ -571,7 +581,7 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
                     HorizontalDivider(color=Line)
                     SettingRow("检查更新","当前版本 ${BuildConfig.VERSION_NAME}") { page="检查更新" }
                     HorizontalDivider(color=Line)
-                    SettingRow("更多设置","备份、隐私与外观") { page="更多设置" }
+                    SettingRow("更多设置","权限、隐私与使用说明") { page="更多设置" }
                 } }
                 item { Text("足迹涂色  ${BuildConfig.VERSION_NAME}",color=Muted,fontSize=12.sp,
                     modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),textAlign=TextAlign.Center) }

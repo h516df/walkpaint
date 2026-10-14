@@ -1,3 +1,15 @@
+# v0.52：主图皮肤与定位通知（2026-10-15）
+
+用户认可冰蓝主图/皮肤后明确“可以，做吧”，并要求检查通知栏不变和GPS体验。#70/#71，Codex单写手agent/codex/skins-location-v052，基线619818/v0.51；正式目标仍agent/codex/mobile-ui-redesign-v041，不从旧main发版，不使用设计委派。
+
+最终0.52/code58/原证书V1/V2/V3/schema2，APK 513dff652ec7482e975e409a29f0f8bb8af2076f32ce6472b860b5d405e73e58，固定dist/v0.52/input。360 JVM/39 Python；系统覆盖/原数据和偏好；真实服务通知/过期点拒绝/后台断流一次探测重注册/新鲜回调恢复；最终三皮肤、320dp/130%字体和高德9000点145段/快速缩放/25场景均通过。详见docs/evidence/V052.md/v052，发布事实看实际Release及work/v052/handoff.json。
+
+默认皮肤加载不改旧颜色；用户主动选皮肤同步配色并持久化，午夜默认深色，外观/足迹色可再单调。通知状态变化立即更新，同状态最多30秒合并；GPS未注册30秒退避，已订阅沿用保守探测；只有新鲜持续回调重置恢复。网络蓝点/订阅成功/进程心跳仍不能当GPS记录证据。
+
+本人vivo户外/锁屏GPS/FPS/OAuth未验收，#6/#17/#60保持。只操作5560，公开模拟GPS只追加测试行，原五表前缀哈希保持；不清库/卸载。回退同签名/schema2/code>=58修复。未重启DSH/手机隧道。下方为历史记录，0.51“定位策略未改”仅指当时版本。
+
+---
+
 # v0.51：Codex 直接改进原生 UI（2026-10-14）
 
 用户最新决定：“UI太丑了，你来改进吧，别用open desgin了”。本轮直接写原生界面，不使用 OpenDesign Cloud/Local Codex 或委派；下方历史“保留OpenDesign视觉”不再是当前要求。唯一写手 agent/codex/native-ui-v051，现有自有 codex-opendesign-zoom-v045 只是目录名；正式目标仍 agent/codex/mobile-ui-redesign-v041，main不是本轮发布基线。Issue #68。
