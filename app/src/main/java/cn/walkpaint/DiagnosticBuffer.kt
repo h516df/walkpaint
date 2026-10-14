@@ -6,9 +6,10 @@ internal class DiagnosticBuffer(initial: Map<String, Any?> = emptyMap()) {
     var dirty = false
         private set
 
-    fun record(kind: String, reason: String, at: Long, gap: Long? = null): Boolean {
+    fun record(kind: String, reason: String, at: Long, gap: Long? = null, amount: Int = 1): Boolean {
         val safeReason = if (kind == "filtered") GpsFilterCategory.safeReason(reason) else reason
-        fun count(key: String) { values[key] = long(key) + 1 }
+        require(amount in 1..TrailIngress.MAX_POINTS)
+        fun count(key: String) { values[key] = long(key) + if(kind=="saved") amount else 1 }
         values["last_event_at"] = at
         values["last_event"] = safeReason
         when (kind) {

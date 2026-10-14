@@ -334,6 +334,60 @@ class FootprintDatabase(private val context: Context) :
         return true
     }
 
+    /** One bounded observation batch, one transaction and one backup trigger. Schema stays v2. */
+    @Synchronized internal fun addPositions(batch: TrailIngress.Batch): Int {
+        if (fatalError != null) return 0
+        val input = batch.points
+        val wall = System.currentTimeMillis()
+        if (input.size !in 2..TrailIngress.MAX_POINTS || !RecordedTrail.visible(input) ||
+            input.any { !Geo.plausibleTimestamp(it.time,wall) || Geo.rejectionReason(null,it)!=null } ||
+            input.zipWithNext().any { (a,b) -> !RecordedTrail.connected(a,b) }) {
+            lastFilterReason="INVALID_BATCH"; return 0
+        }
+        val db=writableDatabase
+        var tripId: String?=null
+        val previous=db.rawQuery("SELECT p.lat,p.lon,p.time,p.accuracy,p.segment,p.trip_id FROM points p JOIN trips t ON t.id=p.trip_id WHERE t.demo=0 ORDER BY p.time DESC,p.id DESC LIMIT 1",null).use { c ->
+            if(c.moveToFirst()) { tripId=c.getString(5); TrackPoint(c.getDouble(0),c.getDouble(1),c.getLong(2),c.getFloat(3),c.getInt(4)) } else null
+        }
+        // The carried anchor may already be committed. Never duplicate it or accept overlap.
+        val carriedAnchor=previous!=null && input.first().time==previous.time &&
+            input.first().lat==previous.lat && input.first().lon==previous.lon
+        val incoming=if(carriedAnchor) input.drop(1) else input
+        if(incoming.isEmpty()) return 0
+        if(previous!=null && incoming.first().time<=previous.time) {
+            lastFilterReason="NON_INCREASING_TIME";return 0
+        }
+        var prior=previous
+        var id=tripId
+        val stored=ArrayList<Pair<String,TrackPoint>>()
+        db.beginTransaction()
+        try {
+            incoming.forEachIndexed { index,p ->
+                val old=prior
+                val newTrip=id==null || old==null || p.time-old.time>25*60_000L || localDay(p.time)!=localDay(old.time)
+                if(newTrip) {
+                    id=UUID.randomUUID().toString()
+                    db.insertOrThrow("trips",null,ContentValues().apply { put("id",id);put("started",p.time);put("demo",0) })
+                }
+                val separated = index==0 && (batch.newSegment || !carriedAnchor || old==null || p.time-old.time>RecordedTrail.MAX_GAP_MS)
+                val next=p.copy(segment=if(newTrip) 0 else old!!.segment + if(separated) 1 else 0)
+                val pointId=db.insertOrThrow("points",null,ContentValues().apply {
+                    put("trip_id",id);put("lat",next.lat);put("lon",next.lon);put("time",next.time)
+                    put("accuracy",next.accuracy);put("segment",next.segment)
+                })
+                if(!newTrip && !separated && old!=null) paintPairIsolated(db,pointId,old,next)
+                stored.add(id!! to next); prior=next
+            }
+            db.setTransactionSuccessful()
+        } catch (_:Exception) {
+            writeFailureLatched=true;lastError="足迹写入失败。请检查存储空间并尽快备份";return 0
+        } finally { db.endTransaction() }
+        if(writeFailureLatched) { writeFailureLatched=false;lastError=null }
+        cached=null;revision++
+        maybeDailyBackup(stored.last().second.time)
+        return stored.size
+    }
+
     @Synchronized fun setDemo(enabled: Boolean) {
         ensureWritable()
         val db = writableDatabase

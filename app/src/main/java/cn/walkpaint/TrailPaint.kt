@@ -348,16 +348,7 @@ internal class TrailPainter {
             }
         }
         for (path in paths) {
-            if (path.isEmpty()) continue
-            if (path.size == 1) {
-                // A lone fix is still ground: it gets the corridor as a dot.
-                val p = path[0]
-                if (p.lat.isFinite() && p.lon.isFinite() && target.contains(p.lat, p.lon)) {
-                    val x = target.pixelX(p.lon); val y = target.pixelY(p.lat)
-                    if (seen.add(keyOf(x, y, x, y))) out.add(floatArrayOf(x, y, x, y))
-                }
-                continue
-            }
+            if (!RecordedTrail.visible(path)) continue
             for (index in 1 until path.size) {
                 val a = path[index - 1]
                 val b = path[index]

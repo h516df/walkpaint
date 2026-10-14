@@ -77,6 +77,7 @@ class RecordingService : Service(), LocationListener {
     private val storeExecutor = Executors.newSingleThreadExecutor()
     private val isClosing = AtomicBoolean(false)
     private val session = RecordingSession()
+    private val ingress = TrailIngress() // accessed only by storeExecutor
     private var latestStartId = 0
     private var gpsEnabled = false
     private var lastCallbackElapsed = 0L
@@ -181,6 +182,7 @@ class RecordingService : Service(), LocationListener {
         try {
             isClosing.set(false)
             session.start()
+            storeExecutor.execute { ingress.reset() }
             rawFixBeforeLast = null
             lastRawFix = null
             lastSatelliteElapsed = 0L
@@ -317,7 +319,7 @@ class RecordingService : Service(), LocationListener {
             filtered("INVALID_COORDINATE", location.accuracy); return
         }
         val normalized = Geo.normalizedFixTime(location.time, System.currentTimeMillis(), ageMillis)
-        if (normalized == null) { filtered("STALE_FIX", location.accuracy); return }
+        if (normalized == null) { storeExecutor.execute { ingress.reset() }; filtered("STALE_FIX", location.accuracy); return }
         val reliableFix = Location(location).apply { time = normalized }
         if (reliableFix.accuracy <= 250f) AmbientTracking.lastFix = reliableFix
 
@@ -326,6 +328,7 @@ class RecordingService : Service(), LocationListener {
         if (!reliableFix.accuracy.isFinite() || reliableFix.accuracy !in 1f..35f) {
             rawFixBeforeLast = null
             lastRawFix = null
+            storeExecutor.execute { ingress.reset() }
             filtered("UNRELIABLE_ACCURACY", reliableFix.accuracy); return
         }
         RecordingDiagnostics.event(this, "valid_gps", "VALID_GPS_RECEIVED")
@@ -343,20 +346,24 @@ class RecordingService : Service(), LocationListener {
         storeExecutor.execute {
             if (!session.accepts(ticket) || !AmbientTracking.enabled(this)) return@execute
             try {
-                val accepted = app.repository.addPosition(reliableFix, inferredMovement)
-                if (accepted) {
+                val speed=if(reliableFix.hasSpeed() && (!reliableFix.hasSpeedAccuracy() || reliableFix.speedAccuracyMetersPerSecond in 0f..3f)) reliableFix.speed.toDouble() else null
+                val batch=ingress.offer(TrackPoint(reliableFix.latitude,reliableFix.longitude,reliableFix.time,reliableFix.accuracy),inferredMovement,speed)
+                if(batch==null) { filtered(ingress.rejection,reliableFix.accuracy);return@execute }
+                val written = app.repository.addPositions(batch)
+                if (written>0) {
                     AmbientTracking.lastSaved = System.currentTimeMillis()
-                    RecordingDiagnostics.event(this, "saved", "SQLITE_SAVED")
-                    FieldRecorder.stored()
+                    RecordingDiagnostics.event(this, "saved", "SQLITE_SAVED", count=written)
+                    repeat(written) { FieldRecorder.stored() }
                     mainHandler.post {
                         if (!session.accepts(ticket)) return@post
                         AmbientTracking.status = "刚刚保存 GPS 足迹 · 精度 ${reliableFix.accuracy.toInt()} 米"
                         updateNotification("刚刚记下新足迹")
                     }
                 } else if (app.repository.lastError != null) {
+                    ingress.reset()
                     AmbientTracking.status = app.repository.lastError!!
                     RecordingDiagnostics.event(this, "failure", "DATABASE_WRITE_FAILED")
-                } else filtered(app.repository.lastFilterReason, reliableFix.accuracy)
+                } else { ingress.reset(); filtered(app.repository.lastFilterReason, reliableFix.accuracy) }
             } catch (e: Exception) {
                 AmbientTracking.status = "足迹保存失败 · 请查看诊断，原数据保留"
                 RecordingDiagnostics.event(this, "failure", "DATABASE_" + e.javaClass.simpleName)
@@ -390,6 +397,7 @@ class RecordingService : Service(), LocationListener {
 
     override fun onProviderDisabled(provider: String) {
         if (provider == LocationManager.GPS_PROVIDER) {
+            storeExecutor.execute { ingress.reset() }
             RecordingDiagnostics.event(this, "register", "GPS_PROVIDER_DISABLED")
             AmbientTracking.status = "GPS 已关闭 · 等待开启，不会绘制假足迹"
         }

@@ -476,6 +476,8 @@ private fun MonthPage(monthKey:String,today:java.time.LocalDate,meters:Map<Strin
 private fun DayPage(dayKey:String,byKey:Map<String,DailyFootprint>,today:java.time.LocalDate,
     todayKey:String,onTrip:(Track)->Unit) {
     val day=byKey[dayKey]
+    val integrity=remember(day) { TrailIntegrity.of(day?.tracks.orEmpty()) }
+    var showIntegrity by remember(dayKey) { mutableStateOf(false) }
     val hours=remember(dayKey) { YearHeatmap.hourStrip(day?.tracks.orEmpty()) }
     val peak=hours.maxOrNull() ?: 0.0
     Column {
@@ -502,6 +504,10 @@ private fun DayPage(dayKey:String,byKey:Map<String,DailyFootprint>,today:java.ti
         }
         Spacer(Modifier.height(10.dp))
         if(day!=null) SettingRow("查看当天足迹",onClick={ onTrip(day.focusTrack()) })
+        if(day!=null) {
+            TextButton(onClick={showIntegrity=!showIntegrity}) { Text(if(showIntegrity) "收起记录完整性" else "记录完整性") }
+            if(showIntegrity) Text(integrity.report(),color=Muted,fontSize=CaptionSize,lineHeight=20.sp)
+        }
     }
 }
 
