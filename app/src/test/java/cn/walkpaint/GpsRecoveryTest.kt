@@ -2,6 +2,19 @@ package cn.walkpaint
 import org.junit.Assert.*
 import org.junit.Test
 class GpsRecoveryTest {
+    @Test fun initialFailedRequestAlsoStartsTheRetryBackoff() {
+        val p=GpsRecovery(1000);p.registrationAttempt(1000)
+        assertEquals(GpsRecovery.Action.NONE,p.next(2000,false,true))
+        assertEquals(GpsRecovery.Action.REGISTER,p.next(31000,false,true))
+    }
+    @Test fun failedRegistrationRetriesWithoutWaitingForColdAcquisition() {
+        val p=GpsRecovery(1000)
+        assertEquals(GpsRecovery.Action.REGISTER,p.next(2000,false,true))
+        assertEquals(GpsRecovery.Action.NONE,p.next(31999,false,true))
+        assertEquals(GpsRecovery.Action.REGISTER,p.next(32000,false,true))
+        assertEquals(GpsRecovery.Action.REGISTER,p.next(62000,false,true))
+        assertEquals(GpsRecovery.Action.NONE,p.next(92000,true,true))
+    }
     @Test fun sixtyTwoSecondsAndFreshSatellitesCannotTriggerRepeatedColdStarts() {
         val p=GpsRecovery(1000)
         assertEquals(GpsRecovery.Action.NONE,p.next(63000,true,true))

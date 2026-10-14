@@ -30,6 +30,8 @@ internal object UiStateProbe {
         val result = JSONObject().put("days", JSONObject(days)).put("today", LocalDate.now().toString())
             .put("automatic_enabled", AmbientTracking.enabled(context))
             .put("appearance_mode", context.getSharedPreferences("ui_appearance", Context.MODE_PRIVATE).getInt("mode", 0))
+            .put("skin", context.getSharedPreferences("ui_appearance", Context.MODE_PRIVATE).getString("skin","city"))
+            .put("road_color", RoadAppearance(context).color)
             .put("installed_apk_sha256", digest.digest().joinToString("") { "%02x".format(it) })
         return "UI_STATE_PASS: $result"
     }

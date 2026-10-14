@@ -93,6 +93,8 @@ class MainActivity : ComponentActivity() {
     private val repository by lazy { (application as WalkPaintApp).repository }
     private var currentTab by mutableIntStateOf(0)
     private var appearanceMode by mutableIntStateOf(0)
+    private var visualSkin by mutableStateOf(VisualSkin.CITY)
+    private var showSkinPicker by mutableStateOf(false)
     private var showIntro by mutableStateOf(false)
     private val roadAppearance by lazy { RoadAppearance(this) }
     private var roadColor by mutableIntStateOf(ExploredRoadArgb)
@@ -427,9 +429,10 @@ class MainActivity : ComponentActivity() {
             !amapConsent && !mapPref.getBoolean("amap_sdk_decision_seen", false)
         updateUi()
         appearanceMode=getSharedPreferences("ui_appearance",Context.MODE_PRIVATE).getInt("mode",0).coerceIn(0,2)
+        visualSkin=VisualSkin.stored(getSharedPreferences("ui_appearance",Context.MODE_PRIVATE).getString("skin",null))
         showIntro=!trackingEnabled && !mapPref.getBoolean("mobile_intro_seen",false)
         setContent {
-            WalkPaintTheme(appearanceMode,currentTab==0) {
+            WalkPaintTheme(appearanceMode,currentTab==0,visualSkin) {
                 AppShell(
                     selectedTab = currentTab,
                     onTab = {
@@ -541,12 +544,21 @@ class MainActivity : ComponentActivity() {
                         { privateUpdater.download() },::installUpdate,{ privateUpdater.cancel() },
                         { privateUpdater.logout() },{ openUpdateBrowser(UpdateDestination.URL) }) },
                     mapContent = { if (amapActive) AmapNativeView() else NativeMapView() },
+                    onSkin={showSkinPicker=true},
                     onBackupEntry={ refreshExecutor.execute {
                         val count=repository.refreshBackupCount()
                         runOnUiThread { backupCount=count }
                     } }
                 )
 
+                if(showSkinPicker) SkinPicker(visualSkin,{ skin ->
+                    visualSkin=skin
+                    appearanceMode=if(skin==VisualSkin.NIGHT) 2 else 0
+                    getSharedPreferences("ui_appearance",Context.MODE_PRIVATE).edit()
+                        .putString("skin",skin.id).putInt("mode",appearanceMode).apply()
+                    chooseRoadColor(skin.paint)
+                    showSkinPicker=false
+                },{showSkinPicker=false})
                 if(showRoadAppearance) RoadColorDialog(roadColor,::chooseRoadColor) { showRoadAppearance=false }
                 if(showOnlineConsent) AlertDialog(
                     onDismissRequest={ showOnlineConsent=false },

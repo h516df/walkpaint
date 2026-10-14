@@ -6,13 +6,21 @@ internal class GpsRecovery(private val started: Long) {
     private var continuous: Long? = null
     private var lastProbe: Long? = null
     private var registeredOnce = false
+    private var lastRegistrationAttempt:Long? = null
     private var probing = false
     fun callback(now: Long) { continuous=now; registeredOnce=false }
+    fun registrationAttempt(now:Long) { lastRegistrationAttempt=now }
     fun cancelProbe() { probing=false }
     fun stale(now: Long): Boolean = now-(continuous ?: started) >= if(continuous==null) ACQUIRE_MS else STALE_MS
     fun next(now: Long, registered: Boolean, provider: Boolean): Action {
         if(!provider || probing) return Action.NONE
-        if(!registered && !registeredOnce) { registeredOnce=true;return Action.REGISTER }
+        // A failed request never created a stream. Retry that request with a fixed backoff;
+        // it must not consume the one restart reserved for an actually subscribed outage.
+        if(!registered) {
+            if(lastRegistrationAttempt?.let { now-it < REGISTER_RETRY_MS } == true) return Action.NONE
+            lastRegistrationAttempt=now
+            return Action.REGISTER
+        }
         if(!stale(now) || lastProbe?.let { now-it < PROBE_INTERVAL_MS } == true) return Action.NONE
         lastProbe=now;probing=true;return Action.PROBE
     }
@@ -23,6 +31,7 @@ internal class GpsRecovery(private val started: Long) {
     }
     companion object {
         const val ACQUIRE_MS=180_000L
+        const val REGISTER_RETRY_MS=30_000L
         const val STALE_MS=90_000L
         const val PROBE_INTERVAL_MS=300_000L
         const val PROBE_MS=15_000L
