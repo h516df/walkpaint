@@ -1048,7 +1048,9 @@ class MainActivity : ComponentActivity() {
             serviceStartCount = (diagnostic["start_count"] as? Number)?.toLong() ?: 0L,
             databaseError = repository.lastError,
             dozeIdle = power.isDeviceIdleMode,
-            statusCode=RecordingStatus.assess(RecordingDiagnostics.signals(this,repository.lastError)).code
+            statusCode=RecordingStatus.assess(RecordingDiagnostics.signals(this,repository.lastError)).code,
+            serviceAgeMs=GpsReceipts.age(GpsReceipts.started,SystemClock.elapsedRealtime()),
+            pendingThisSession=(diagnostic["session_pending_count"] as? Number)?.toLong() ?: 0L
         )
         return Diagnosis.report(facts) + "\n\n—— 原始计数（给开发者看） ——\n" +
             rows.joinToString("\n") + "\n\n" + RecordingDiagnostics.summary(this) +

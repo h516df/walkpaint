@@ -44,6 +44,9 @@ internal object RecordingRecoveryProbe {
             }
             SystemClock.sleep(16000)
             check(callbacks.get()==0) { "cancelled probe delivered late result or timeout" }
+            val final=RecordingDiagnostics.snapshot(c)
+            check((final["session_pending_count"] as? Number)?.toLong()?.let { it>0 }==true) { "fixed public emulator GPS stream did not reach pending stage" }
+            check((final["session_filter_time_count"] as? Number)?.toLong()==0L) { "fresh first fix incorrectly counted as time rejection" }
             return "RECORDING_RECOVERY_PASS: rapid pause/resume preserved choice; background UI poll stopped while service remained; native probe cancellation delivered no late result"
         } finally {
             i.runOnMainSync {

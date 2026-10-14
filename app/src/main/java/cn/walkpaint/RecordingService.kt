@@ -379,7 +379,12 @@ class RecordingService : Service(), LocationListener {
             try {
                 val speed=if(reliableFix.hasSpeed() && (!reliableFix.hasSpeedAccuracy() || reliableFix.speedAccuracyMetersPerSecond in 0f..3f)) reliableFix.speed.toDouble() else null
                 val batch=ingress.offer(TrackPoint(reliableFix.latitude,reliableFix.longitude,reliableFix.time,reliableFix.accuracy),inferredMovement,speed)
-                if(batch==null) { filtered(ingress.rejection,reliableFix.accuracy);return@execute }
+                if(batch==null) {
+                    if(ingress.rejection=="STATIONARY_OR_SMALL_MOVE")
+                        RecordingDiagnostics.event(this,"pending","WAITING_MOVEMENT_CONFIRMATION")
+                    else filtered(ingress.rejection,reliableFix.accuracy)
+                    return@execute
+                }
                 val written = app.repository.addPositions(batch)
                 if (written>0) {
                     AmbientTracking.lastSaved = System.currentTimeMillis()

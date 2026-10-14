@@ -40,6 +40,8 @@ internal data class DiagnosisFacts(
     val databaseError: String?,
     val dozeIdle: Boolean,
     val statusCode: String? = null,
+    val serviceAgeMs: Long? = null,
+    val pendingThisSession: Long = 0L,
 )
 
 /**
@@ -87,7 +89,8 @@ internal object Diagnosis {
             // Only call the recorder broken when the receiver itself reported travel and nothing
             // was stored anyway. A phone lying on a desk produces the same filter counters and is
             // completely normal, so counts alone must never raise this alarm.
-            if (f.movingThisSession >= 3 && f.savedThisSession == 0L) SCREEN_WALKING_FILTERED
+            if (f.movingThisSession >= 3 && f.savedThisSession == 0L &&
+                (f.serviceAgeMs==null || f.serviceAgeMs>=STALE_SAVE_MS)) SCREEN_WALKING_FILTERED
             else if (dominantFilter(f) == FilterKind.ACCURACY && f.accuracyFiltered > 0) SCREEN_WEAK_SIGNAL
             else SCREEN_UNCLEAR
         }
@@ -215,8 +218,9 @@ internal object Diagnosis {
     }
 
     private fun filterDetail(f: DiagnosisFacts): String {
-        if (f.filteredCount <= 0) return "没有丢过点"
-        return "丢下 ${f.filteredCount} 次（没移动 ${f.stationaryFiltered} / 跳得太远 ${f.jumpFiltered} / 精度不够 ${f.accuracyFiltered}）"
+        val waiting=if(f.pendingThisSession>0) "；等待移动确认 ${f.pendingThisSession} 次（可能随后入库，不是丢点数）" else ""
+        if (f.filteredCount <= 0) return "没有即时拒绝的位置"+waiting
+        return "即时拒绝 ${f.filteredCount} 次（没移动 ${f.stationaryFiltered} / 跳得太远 ${f.jumpFiltered} / 精度不够 ${f.accuracyFiltered}）"+waiting
     }
 
     private fun filterAdvice(f: DiagnosisFacts): String? = when (dominantFilter(f)) {

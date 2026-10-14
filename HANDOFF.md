@@ -1,3 +1,13 @@
+# v0.50：最后诊断核对补丁（2026-10-14）
+
+0.49已发布/c2c0037f50dd32d7cb4ae2eff13e9c67d0ff1456；最后核对发现首点误计时间、暂存误计丢弃、初期借历史保存年龄报警，Issue #66。继续原任务最小修复，0.50/code53/原签名/schema2，不覆盖0.49。独立分支agent/codex/pending-diagnostics-v050，正式目标agent/codex/mobile-ui-redesign-v041。
+
+APK f73460ea2943f9503f4c94e0dbd91cc74b98838f1d0080d239bcff942ad73ab8已通过351 JVM、实际Android持续回调pending>0/时间过滤0、Home后台和取消、原五表及设置保持、系统FileProvider覆盖52→53和真实高德/SHA。包已固定dist/v0.50/input，证据V050.md/v050，发布状态看Release和本机work/v050/handoff。只操作专属5560，来源default恢复，外部staging清理；本人真实GPS/FPS/OAuth未验收。
+
+不把等待确认当丢点，不把历史保存年龄当本次初期报警。地图/存储/恢复策略未改，0.49证据复用于未变模块，受影响路径已重测。不卸载清库，回退同签名/schema2/code>=53。下面0.49是历史基线和仍适用的具体实现边界。
+
+---
+
 # v0.49：已验收候选与三个独立切片（2026-10-14）
 
 用户已批准实施，勿重新询问技术决策。基线491dd493a0052753ab60bc7e00c198e60597bfe7/v0.48，正式目标agent/codex/mobile-ui-redesign-v041；唯一写手Codex，原自有worktree。轨迹PR #63，定位PR #64，最终UI生命周期/验收切片agent/codex/ui-lifecycle-v049。整合/发布结果以GitHub及本机work/v049/handoff为准，不按旧main或历史DSH任务继续。

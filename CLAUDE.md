@@ -1,3 +1,13 @@
+# v0.50：最终诊断补丁（2026-10-14）
+
+基线v0.49/c2c0037f50dd32d7cb4ae2eff13e9c67d0ff1456已经发布，保留不覆盖；本轮最后核对发现首点误计时间、暂存误计丢弃和初期借历史保存年龄报警，Issue #66，以0.50/code53修正。分支agent/codex/pending-diagnostics-v050，正式目标不变。APK f73460ea2943f9503f4c94e0dbd91cc74b98838f1d0080d239bcff942ad73ab8，原证书V1/V2/V3/schema2。
+
+首点等待确认，pending独立于即时拒绝；可能随后入库，不能用pending推断丢点。走路过滤告警至少经过本次180秒。351 JVM、实际固定模拟GPS持续服务pending>0/时间拒绝0、系统覆盖/已装SHA/原五表和设置保持、真实高德启用通过。见V050.md。0.49的地图/几何/存储/恢复策略未变，复用对应证据而不假称0.50重复完整FPS或真机；本人GPS/OAuth/FPS仍未验收。
+
+发布状态以Release和本机work/v050/handoff为准，dist/v0.50/input固定实测包，不重建替换。回退同证书/schema2/code>=53。只操作5560，原测试来源已恢复。下方0.49细节仍适用，其code52是历史发布基线。
+
+---
+
 # v0.49：可信轨迹、GPS恢复与诊断精简（2026-10-14）
 
 用户批准实施孤点/连续性、有限定位恢复/#55、后台UI轮询/#30三个切片。唯一写手Codex，自有codex-opendesign-zoom-v045；正式整合目标仍agent/codex/mobile-ui-redesign-v041，main不是本轮发布基线，不恢复旧DSH写手。

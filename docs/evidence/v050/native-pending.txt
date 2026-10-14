@@ -1,0 +1,1 @@
+RECORDING_RECOVERY_PASS: rapid pause/resume preserved choice; background UI poll stopped while service remained; native probe cancellation delivered no late result

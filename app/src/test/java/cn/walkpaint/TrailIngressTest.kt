@@ -3,6 +3,10 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class TrailIngressTest {
+    @Test fun firstValidObservationWaitsForMotionInsteadOfClaimingDuplicateTime() {
+        val ingress=TrailIngress();assertNull(ingress.offer(p(0.0,1)))
+        assertEquals("STATIONARY_OR_SMALL_MOVE",ingress.rejection)
+    }
     private fun p(m: Double, s: Long, east: Double = 0.0) = TrackPoint(31.0+m/111195.0,121.0+east/95312.0,s*1000,8f)
     @Test fun minutesOfStationaryFixesProduceNoBatch() {
         val ingress=TrailIngress()
