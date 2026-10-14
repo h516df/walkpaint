@@ -70,7 +70,7 @@ internal object HistoryCameraProbe {
                 check(markerFix?.provider=="history") {"The day map shows today's GPS/network position"}
                 check(Geo.meters(point,TrackPoint(markerFix!!.latitude,markerFix.longitude,markerFix.time,markerFix.accuracy))<.1)
                 result.put("fog_only_selected_day",true).put("marker_is_day_endpoint",true)
-                result.put("day_points",state.realPointCount).put("fixture_total_points",7959)
+                result.put("day_points",state.realPointCount).put("fixture_total_points",9000)
                 result
             }
             main {

@@ -177,6 +177,17 @@ internal object FogPixelProbe {
         check(empty.getPixel(midX, midY) == 0xFF000000.toInt(),
             "empty paths kept a previously explored corridor")
 
+        // Saved observations without travel must leave the exact centre opaque as well.
+        for(run in listOf(listOf(point(0.0,0.0)),listOf(point(0.0,0.0),point(0.0,0.0)))) {
+            val isolated=TrailPainter()
+            val image=isolated.update(listOf(run),PIGMENT,run.first(),view)
+            val area=isolated.frame()
+            check(image!=null && area!=null,"isolated observation did not produce a covering frame")
+            if(image!=null && area!=null) {
+                val pixel=image.getPixel(area.pixelX(BASE_LON).toInt(),area.pixelY(BASE_LAT).toInt())
+                check(alpha(pixel)==255 && rgb(pixel)==0,"isolated or zero-length observation dug a pinhole")
+            }
+        }
         return if (failures.isEmpty()) "FOG_PIXEL_PROBE_PASS"
         else "FOG_PIXEL_PROBE_FAIL: " + failures.joinToString(" | ")
     }

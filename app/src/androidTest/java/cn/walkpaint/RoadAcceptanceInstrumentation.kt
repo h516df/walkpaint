@@ -111,7 +111,7 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
         }
         if(directTrailProbe) {
             try { result.putString("stream",DirectTrailProbe.run(this));finish(Activity.RESULT_OK,result) }
-            catch(e:Throwable) { result.putString("stream","DIRECT_TRAIL_DB_FAIL: ${e.javaClass.simpleName}: ${e.message}");finish(Activity.RESULT_CANCELED,result) }
+            catch(e:Throwable) { result.putString("stream","DIRECT_TRAIL_DB_FAIL: ${e.stackTraceToString()}");finish(Activity.RESULT_CANCELED,result) }
             return
         }
         if(updateLogoutProbe) {

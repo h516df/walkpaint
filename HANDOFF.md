@@ -1,3 +1,19 @@
+# v0.49：已验收候选与三个独立切片（2026-10-14）
+
+用户已批准实施，勿重新询问技术决策。基线491dd493a0052753ab60bc7e00c198e60597bfe7/v0.48，正式目标agent/codex/mobile-ui-redesign-v041；唯一写手Codex，原自有worktree。轨迹PR #63，定位PR #64，最终UI生命周期/验收切片agent/codex/ui-lifecycle-v049。整合/发布结果以GitHub及本机work/v049/handoff为准，不按旧main或历史DSH任务继续。
+
+最终包0.49/code52/schema2、SHA256 5af07513c19f061a39727764834eeae5ad28d5f6cbeefa2cf4b847d591ab82fc，原证书V1/V2/V3，dist/v0.49/input固定实际已安装包。不要重建后悄悄换包。生产源码归一化指纹见docs/evidence/v049/production-sources.json，整合后必须保持一致；两个测试包指纹/实际高德与五表及设置证据见V049.md。
+
+用户本人0.48诊断：本次服务62秒、GPS0/有效0/保存0/过滤0、可见52/参与0；历史GPS约9小时。静止46秒绕过移动门槛已确定是代码缺陷，但不能唯一归因截图每个点或物理GPS故障。连续缓存只保留真实观察、实际空窗断线；首次搜星180秒、独立15秒探测、限一次重注册，当前状态用单调接收。旧退出10的进程归属未验证时标注未知。
+
+原五表7行程/4865点在最终系统覆盖及所有原生测试后完整保持，自动记录false/主题0。专属5560已装最终code52并实际高德；其他5558/5574禁止操作。临时安装来源已恢复default，外部staging清理；私有cache测试APK可随专属AVD回收，勿清空生产更新缓存。实际本人vivo、户外/锁屏GPS、FPS、本人OAuth未验收，#6/#17继续；备份#51/#52与GPX#53、播放#54未实施。
+
+接续先核对Release/正式SHA/设备，复用匹配证据；复核已隔离临时DB/filesDir/设置，压力夹具只在内存，勿恢复旧共用备份或全局杀模拟器脚本。恢复同签名/schema2/code>=52，不卸载清库。
+
+以下为历史记录，不替代本节。
+
+---
+
 # v0.48：手机安装证书兼容修复（2026-10-13）
 
 用户最新报告“软件包似乎无效，缺乏开发者证书”。Issue #60；唯一写手 Codex，现有自有 worktree，agent/codex/install-certificate-v048；基线正式45c3fc269602115714800db19ad61719845bcf23，整合目标仍 agent/codex/mobile-ui-redesign-v041。不要恢复其他旧 DSH 写手或写 canonical main。

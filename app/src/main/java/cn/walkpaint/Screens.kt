@@ -43,7 +43,8 @@ internal fun AppShell(
     onRoadPack: () -> Unit, roadColor:Int, onRoadAppearance:()->Unit,
     appearanceMode:Int, onAppearanceMode:(Int)->Unit, onShowIntro:()->Unit,
     feedbackContent: @Composable (onBack:()->Unit)->Unit,
-    updatesContent: @Composable (onBack:()->Unit)->Unit, mapContent: @Composable () -> Unit
+    updatesContent: @Composable (onBack:()->Unit)->Unit, mapContent: @Composable () -> Unit,
+    onBackupEntry:()->Unit={}
 ) {
     Box(Modifier.fillMaxSize().background(PageBackground)) {
         // Keep the SDK and GL surface alive across bottom-tab journeys. Only the controls/pages
@@ -68,7 +69,7 @@ internal fun AppShell(
                     ProfilePage(state,appearanceMode,onAppearanceMode,onShowIntro,automatic,profileNotice,onResolveTracking,
                     onToggleTracking,onRevoke,onBackgroundSettings,onPowerSettings,onCopyDiagnostics,
                     roadState,roadAreaHint,onRoadPack,onExport,onImport,internalBackupCount,
-                    mapProviderLabel,onChooseAmap,onOnlineMap,roadColor,onRoadAppearance,feedbackContent,updatesContent)
+                    mapProviderLabel,onChooseAmap,onOnlineMap,roadColor,onRoadAppearance,feedbackContent,updatesContent,onBackupEntry)
                 }
             }
         }
@@ -526,7 +527,7 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
     roads:RoadState,areaHint:String,onRoadPack:()->Unit,onExport:()->Unit,onImport:()->Unit,backupCount:Int,
     provider:String,onAmap:()->Unit,onOnline:()->Unit,roadColor:Int,onAppearance:()->Unit,
     feedbackContent: @Composable (onBack:()->Unit)->Unit,
-    updatesContent: @Composable (onBack:()->Unit)->Unit) {
+    updatesContent: @Composable (onBack:()->Unit)->Unit,onBackupEntry:()->Unit) {
     var page by rememberSaveable { mutableStateOf("我的") }
     var revokeConfirm by rememberSaveable { mutableStateOf(false) }
     if(page=="问题反馈") { feedbackContent { page="我的" };return }
@@ -564,7 +565,7 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
                 item { Text("足迹涂色  ${BuildConfig.VERSION_NAME} · 数据保存在本机",color=Muted,fontSize=12.sp) }
             }
             "更多设置" -> item { Section("设置") {
-                SettingRow("备份与恢复","保存或找回你的足迹") { page="备份与恢复" }
+                SettingRow("备份与恢复","保存或找回你的足迹") { onBackupEntry();page="备份与恢复" }
                 SettingRow("隐私与权限","管理授权与后台运行") { page="隐私与权限" }
                 SettingRow("完整诊断文本","原始计数与道路复算，可复制",onDiagnostics)
                 Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
