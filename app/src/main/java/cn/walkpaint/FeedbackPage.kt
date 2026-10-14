@@ -18,7 +18,8 @@ import androidx.compose.ui.semantics.contentDescription
 @Composable
 internal fun FeedbackPage(history:RecordingDiagnostics.HistoryView,report:String?,busy:Boolean,
     onBack:()->Unit,onPreview:(String,String)->Unit,onClosePreview:()->Unit,
-    onCopy:()->Unit,onShare:()->Unit,onCollection:(Boolean)->Unit,onClear:()->Unit) {
+    onCopy:()->Unit,onShare:()->Unit,onCollection:(Boolean)->Unit,onClear:()->Unit,
+    gpsSurvey:String="",gpsSurveyActive:Boolean=false,onGpsSurvey:()->Unit={}) {
     var category by rememberSaveable { mutableStateOf("定位") }
     var description by rememberSaveable { mutableStateOf("") }
     var confirmClear by rememberSaveable { mutableStateOf(false) }
@@ -37,6 +38,13 @@ internal fun FeedbackPage(history:RecordingDiagnostics.HistoryView,report:String
             item { SelectionContainer { Text(report,color=Ink,fontSize=13.sp,lineHeight=21.sp) } }
         } else {
             item { Text("线索只保存在本机。这里能帮助排查已观察到的问题，未出现线索不表示没有故障。",color=Muted,fontSize=13.sp,lineHeight=20.sp) }
+            item {
+                OutlinedButton(onClick=onGpsSurvey,enabled=!gpsSurveyActive,modifier=Modifier.fillMaxWidth()) {
+                    Text(if(gpsSurveyActive) "正在短测定位…" else "开始 60 秒定位诊断")
+                }
+                Text("保持应用在前台；不改变自动记录开关，结果只保留在本机。",color=Muted,fontSize=12.sp)
+                if(gpsSurvey.isNotBlank()) SelectionContainer { Text(gpsSurvey,color=Ink,fontSize=13.sp,lineHeight=20.sp) }
+            }
             item { Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
                 Text("遇到了什么问题？",color=Ink)
                 FeedbackReport.categories.chunked(3).forEach { row -> Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {

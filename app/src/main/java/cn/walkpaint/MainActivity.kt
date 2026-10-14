@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import android.net.Uri
 import android.widget.Toast
@@ -153,6 +154,12 @@ class MainActivity : ComponentActivity() {
     private val amapActive get() = amapSupported && BuildConfig.AMAP_KEY.isNotBlank() && amapConsent
     private var showDiagnostics by mutableStateOf(false)
     private var diagnosticText by mutableStateOf("")
+    private var showDiagnosticDetails by mutableStateOf(false)
+    private var shortGpsText by mutableStateOf("")
+    private var shortGpsActive by mutableStateOf(false)
+    private var shortProbe:FreshGpsProbe?=null
+    private var shortGnss:android.location.GnssStatus.Callback?=null
+    private val finishShortGps=Runnable { stopShortGps("60秒短测完成") }
     private var feedbackHistory by mutableStateOf(RecordingDiagnostics.HistoryView(emptyList(),true,false))
     private var feedbackReport by mutableStateOf<String?>(null)
     private var feedbackBusy by mutableStateOf(false)
@@ -283,6 +290,7 @@ class MainActivity : ComponentActivity() {
     private val refreshTask = object : Runnable {
         override fun run() {
             updateUi()
+            shortGpsText=ShortGpsSurvey.report();shortGpsActive=ShortGpsSurvey.active()
             mainHandler.postDelayed(this, 2000L)
         }
     }
@@ -522,7 +530,8 @@ class MainActivity : ComponentActivity() {
                         onBack={feedbackReport=null;onBack()},onPreview=::prepareFeedback,
                         onClosePreview={feedbackReport=null},onCopy={copyFeedback()},onShare={shareFeedback()},
                         onCollection={RecordingDiagnostics.collectHistory(this,it)},
-                        onClear={RecordingDiagnostics.clearHistory(this)}) },
+                        onClear={RecordingDiagnostics.clearHistory(this)},gpsSurvey=shortGpsText,
+                        gpsSurveyActive=shortGpsActive,onGpsSurvey=::startShortGps) },
                     updatesContent = { onBack -> UpdatesPage(currentRelease,privateUpdateState,
                         { if(privateUpdateState.busy) privateUpdater.cancel();onBack() },::checkUpdates,
                         { privateUpdater.authorize() },{ openUpdateBrowser(PrivateUpdatePolicy.VERIFY) },
@@ -597,7 +606,9 @@ class MainActivity : ComponentActivity() {
                     onDismissRequest = { showDiagnostics = false },
                     title = { Text("记录诊断 · 不含坐标") },
                     text = { Column(Modifier.verticalScroll(rememberScrollState())) {
-                        Text(diagnosticText, fontSize = 13.sp)
+                        Text(diagnosticText.substringBefore("\n\n—— 原始计数"), fontSize = 13.sp)
+                        TextButton(onClick={showDiagnosticDetails=!showDiagnosticDetails}) { Text(if(showDiagnosticDetails) "收起开发者信息" else "展开开发者信息") }
+                        if(showDiagnosticDetails) Text(diagnosticText.substringAfter("\n\n—— 原始计数",""),fontSize=13.sp)
                     } },
                     confirmButton = { TextButton(onClick = { copyTrackingDiagnostics() }) { Text("复制诊断") } },
                     dismissButton = { TextButton(onClick = { showDiagnostics = false }) { Text("关闭") } }
@@ -1003,7 +1014,8 @@ class MainActivity : ComponentActivity() {
             "当前屏幕亮起：" + power.isInteractive,
             "当前 Doze 待机：" + power.isDeviceIdleMode,
             "当前省电模式：" + power.isPowerSaveMode,
-            "最近 GPS 信号：" + age(lastFix?.time),
+            "本次持续 GPS 回调：" + (GpsReceipts.age(GpsReceipts.continuous,SystemClock.elapsedRealtime())?.let { "${it/1000} 秒前" } ?: "尚无"),
+            "历史最近 GPS 回调：" + age((diagnostic["gps_callback_at"] as? Number)?.toLong()),
             "最近 GPS 精度：" + (lastFix?.accuracy?.toInt()?.toString() ?: "未知") + "米",
             "地图蓝点来源：" + (userFix?.provider?.takeIf { it in setOf("gps","network") } ?: "无"),
             "上次足迹写入：" + age(lastSaved),
@@ -1017,21 +1029,20 @@ class MainActivity : ComponentActivity() {
             backgroundLocation = AmbientTracking.hasBackgroundLocation(this),
             phoneLocationOn = gpsEnabled,
             batteryWhitelisted = power.isIgnoringBatteryOptimizations(packageName),
-            callbackAgeMs = ((lastFix?.time ?: 0L).takeIf { it > 0L }
-                ?: (diagnostic["gps_callback_at"] as? Number)?.toLong()?.takeIf { it > 0L })
-                ?.let { (now - it).coerceAtLeast(0L) },
+            callbackAgeMs = GpsReceipts.age(GpsReceipts.continuous,SystemClock.elapsedRealtime()),
             savedAgeMs = lastSaved?.let { (now - it).coerceAtLeast(0L) },
-            savedCount = (diagnostic["saved_count"] as? Number)?.toLong() ?: snapshot.realPointCount.toLong(),
+            savedCount = snapshot.realPointCount.toLong(),
             movingThisSession = (diagnostic["session_moving_count"] as? Number)?.toLong() ?: 0L,
             savedThisSession = (diagnostic["session_saved_count"] as? Number)?.toLong() ?: 0L,
             filteredCount = (diagnostic["session_filtered_count"] as? Number)?.toLong() ?: 0L,
             stationaryFiltered = (diagnostic["session_filter_stationary_count"] as? Number)?.toLong() ?: 0L,
             jumpFiltered = (diagnostic["session_filter_jump_count"] as? Number)?.toLong() ?: 0L,
             accuracyFiltered = (diagnostic["session_filter_accuracy_count"] as? Number)?.toLong() ?: 0L,
-            longestGapMs = (diagnostic["max_gap_ms"] as? Number)?.toLong() ?: 0L,
+            longestGapMs = 0L, // historical maxima belong in folded developer evidence
             serviceStartCount = (diagnostic["start_count"] as? Number)?.toLong() ?: 0L,
             databaseError = repository.lastError,
-            dozeIdle = power.isDeviceIdleMode
+            dozeIdle = power.isDeviceIdleMode,
+            statusCode=RecordingStatus.assess(RecordingDiagnostics.signals(this,repository.lastError)).code
         )
         return Diagnosis.report(facts) + "\n\n—— 原始计数（给开发者看） ——\n" +
             rows.joinToString("\n") + "\n\n" + RecordingDiagnostics.summary(this) +
@@ -1043,6 +1054,7 @@ class MainActivity : ComponentActivity() {
         val base=trackingDiagnostics()
         val state=snapshot; val roads=roadState
         diagnosticText=base
+        showDiagnosticDetails=false
         showDiagnostics=true
         refreshExecutor.execute {
             val details=runCatching { RoadMatchDiagnostics.report(state,roads) }
@@ -1055,6 +1067,34 @@ class MainActivity : ComponentActivity() {
         val clip = ClipData.newPlainText("WalkPaint 定位诊断", diagnosticText)
         getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
         toast("诊断已复制，不包含经纬度和个人路线")
+    }
+
+    private fun startShortGps() {
+        if(!AmbientTracking.hasFineLocation(this)) { toast("请先在更多设置允许精确定位");return }
+        stopShortGps("重新开始短测")
+        val manager=getSystemService(LocationManager::class.java)
+        ShortGpsSurvey.start(AmbientTracking.running)
+        val callback=object:android.location.GnssStatus.Callback() {
+            override fun onSatelliteStatusChanged(status:android.location.GnssStatus) { ShortGpsSurvey.satellites(status) }
+        }
+        shortGnss=callback
+        runCatching { manager.registerGnssStatusCallback(callback,mainHandler) }
+            .onFailure { ShortGpsSurvey.event("卫星订阅不可用") }
+        shortProbe=FreshGpsProbe(manager,mainHandler).also { p -> p.start { fix,reason ->
+            if(fix!=null) ShortGpsSurvey.fix(false)
+            ShortGpsSurvey.event(reason)
+        } }
+        ShortGpsSurvey.event(if(AmbientTracking.running) "持续记录监听运行中" else "自动记录未运行，仅做短测")
+        shortGpsText=ShortGpsSurvey.report();shortGpsActive=true
+        mainHandler.postDelayed(finishShortGps,60_000)
+    }
+    private fun stopShortGps(reason:String) {
+        mainHandler.removeCallbacks(finishShortGps)
+        shortProbe?.cancel();shortProbe=null
+        shortGnss?.let { runCatching { getSystemService(LocationManager::class.java).unregisterGnssStatusCallback(it) } }
+        shortGnss=null
+        ShortGpsSurvey.stop(reason)
+        shortGpsText=ShortGpsSurvey.report();shortGpsActive=false
     }
 
     private fun prepareFeedback(category:String,description:String) {
@@ -1491,6 +1531,12 @@ class MainActivity : ComponentActivity() {
         view.getMapAsync { loaded ->
             if (mapWidget !== view) return@getMapAsync
             mapInstance = loaded
+            loaded.addOnMapClickListener { clicked ->
+                if(mapLocation()?.provider=="network" && loaded.queryRenderedFeatures(loaded.projection.toScreenLocation(clicked),"wp-user-dot").isNotEmpty()) {
+                    toast("这是网络位置，仅用于找方向；GPS 连续记录尚需看定位状态。")
+                    true
+                } else false
+            }
             loaded.addOnCameraMoveStartedListener { reason ->
                 if(reason==MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
                     fallbackZoomSteps.reset();pauseMapFollowing()
@@ -1662,7 +1708,14 @@ class MainActivity : ComponentActivity() {
     private fun updateLocationLayer() {
         val location=mapLocation()
         if (amapActive) amapController.updateUser(location)
-        else mapInstance?.style?.getSourceAs<GeoJsonSource>("wp-user")?.setGeoJson(userJson(location))
+        else mapInstance?.style?.let { style ->
+            style.getSourceAs<GeoJsonSource>("wp-user")?.setGeoJson(userJson(location))
+            val network=location?.provider=="network"
+            style.getLayerAs<CircleLayer>("wp-user-dot")?.setProperties(
+                PropertyFactory.circleColor(if(network) android.graphics.Color.TRANSPARENT else android.graphics.Color.rgb(23,119,205)),
+                PropertyFactory.circleStrokeColor(if(network) android.graphics.Color.rgb(234,178,73) else android.graphics.Color.WHITE),
+                PropertyFactory.circleStrokeWidth(if(network) 2f else 1.5f))
+        }
         syncHeadingLifecycle()
         syncFollowCamera()
     }
@@ -1804,6 +1857,7 @@ class MainActivity : ComponentActivity() {
         }
     }
     override fun onPause() {
+        stopShortGps("离开前台，结束短测")
         activityResumed=false;syncHeadingLifecycle()
         locationManager?.let { runCatching { it.removeUpdates(visibleLocationListener) } }
         super.onPause()

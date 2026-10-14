@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.location.Location
+import android.location.LocationManager
 import com.amap.api.maps.AMap
 import com.amap.api.maps.CameraUpdateFactory
 import com.amap.api.maps.CoordinateConverter
@@ -115,7 +116,8 @@ internal class AmapMapController(private val context: Context, private val onGes
                 }
                 latestPosition?.let { fix ->
                     projection?.toScreenLocation(toAmap(fix.latitude,fix.longitude))?.let { point ->
-                        canvas.drawBitmap(blueDotImage,point.x-blueDotImage.width/2f,point.y-blueDotImage.height/2f,fogImagePaint)
+                        val marker=if(fix.provider==LocationManager.NETWORK_PROVIDER) networkDotImage else blueDotImage
+                        canvas.drawBitmap(marker,point.x-marker.width/2f,point.y-marker.height/2f,fogImagePaint)
                     }
                 }
                 canvas.restore()
@@ -163,6 +165,12 @@ internal class AmapMapController(private val context: Context, private val onGes
     }
 
     private var gestureActive = false
+    private val networkDotImage by lazy {
+        val bitmap=Bitmap.createBitmap((32*density).toInt(),(32*density).toInt(),Bitmap.Config.ARGB_8888)
+        val paint=Paint(Paint.ANTI_ALIAS_FLAG).apply { color=Color.rgb(234,178,73);style=Paint.Style.STROKE;strokeWidth=2*density }
+        Canvas(bitmap).drawCircle(bitmap.width/2f,bitmap.height/2f,6*density,paint)
+        bitmap
+    }
     fun create(state: TrackState, location: Location?, roads: RoadState, color:Int=ExploredRoadArgb): MapView {
         exploredColor=color
         check(BuildConfig.AMAP_KEY.isNotBlank()) { "高德地图 Key 尚未设置" }
@@ -190,6 +198,14 @@ internal class AmapMapController(private val context: Context, private val onGes
         val taps=android.view.GestureDetector(context,object:android.view.GestureDetector.SimpleOnGestureListener() {
             override fun onDown(e:android.view.MotionEvent)=true
             override fun onDoubleTap(e:android.view.MotionEvent):Boolean { nativeGesture();return false }
+            override fun onSingleTapConfirmed(e:android.view.MotionEvent):Boolean {
+                val fix=latestPosition ?: return false
+                if(fix.provider!=LocationManager.NETWORK_PROVIDER) return false
+                val p=map?.projection?.toScreenLocation(toAmap(fix.latitude,fix.longitude)) ?: return false
+                if(kotlin.math.hypot(e.x-p.x,e.y-p.y)>24*density) return false
+                android.widget.Toast.makeText(context,"这是网络位置，仅用于找方向；GPS 连续记录尚需看定位状态。",android.widget.Toast.LENGTH_LONG).show()
+                return true
+            }
         })
         map?.setOnMapTouchListener { event ->
             taps.onTouchEvent(event)
