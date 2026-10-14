@@ -1,3 +1,13 @@
+# v0.51：Codex 直接改进原生 UI（2026-10-14）
+
+用户最新决定：“UI太丑了，你来改进吧，别用open desgin了”。本轮直接写原生界面，不使用 OpenDesign Cloud/Local Codex 或委派；下方历史“保留OpenDesign视觉”不再是当前要求。唯一写手 agent/codex/native-ui-v051，现有自有 codex-opendesign-zoom-v045 只是目录名；正式目标仍 agent/codex/mobile-ui-redesign-v041，main不是本轮发布基线。Issue #68。
+
+最终0.51/code56/原签名V1/V2/V3/schema2，APK `7cb1f9b395c5340fb4e706fea9e5fbc525c82f13f735da631eca953eb6a3c8c2`，固定dist/v0.51/input。354 JVM/39 Python、最终包系统覆盖与原五表/记录外观保留、真实高德JNI、七项UI/320dp/130%字体、9000点145段/切页/当天/快速缩放/25次有效场景通过，详见docs/evidence/V051.md与v051。实际发布状态看Release和本机work/v051/handoff.json，不重建替换已验收文件。
+
+界面蓝色与保存的涂色独立；底部三入口不改，诊断暂停视图不误导，原始报告保持。定位/恢复/几何/数据库/授权逻辑未改。只操作5560，临时字体尺寸来源恢复；本人vivo/GPS/FPS/OAuth未验收，初始夹具等待帧不算缩放通过场景。回退同证书/schema2/code>=56，不卸载清库、不覆盖已发布版本。下面为历史记录和仍适用的模块边界。
+
+---
+
 # v0.50：最后诊断核对补丁（2026-10-14）
 
 0.49已发布/c2c0037f50dd32d7cb4ae2eff13e9c67d0ff1456；最后核对发现首点误计时间、暂存误计丢弃、初期借历史保存年龄报警，Issue #66。继续原任务最小修复，0.50/code53/原签名/schema2，不覆盖0.49。独立分支agent/codex/pending-diagnostics-v050，正式目标agent/codex/mobile-ui-redesign-v041。

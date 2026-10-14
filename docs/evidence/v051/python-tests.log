@@ -1,0 +1,54 @@
+test_complete_draft_only_publishes (test_release_remote.ReleaseRecoveryTest.test_complete_draft_only_publishes) ... ok
+test_different_release_commit_is_never_modified (test_release_remote.ReleaseRecoveryTest.test_different_release_commit_is_never_modified) ... ok
+上传缺少的资产：App-v1.0-arm64.apk
+上传缺少的资产：App-v1.0-release-notes.json
+test_new_release_is_draft_until_all_assets_are_verified (test_release_remote.ReleaseRecoveryTest.test_new_release_is_draft_until_all_assets_are_verified) ... ok
+上传缺少的资产：App-v1.0-release-notes.json
+test_partial_draft_only_uploads_missing_file (test_release_remote.ReleaseRecoveryTest.test_partial_draft_only_uploads_missing_file) ... ok
+test_public_repo_is_never_modified (test_release_remote.ReleaseRecoveryTest.test_public_repo_is_never_modified) ... ok
+test_published_release_is_read_only_even_without_verify_flag (test_release_remote.ReleaseRecoveryTest.test_published_release_is_read_only_even_without_verify_flag) ... ok
+上传缺少的资产：App-v1.0-arm64.apk
+上传缺少的资产：App-v1.0-release-notes.json
+test_uncertain_upload_recovers_from_server_state (test_release_remote.ReleaseRecoveryTest.test_uncertain_upload_recovers_from_server_state) ... ok
+test_unknown_or_incomplete_asset_is_preserved (test_release_remote.ReleaseRecoveryTest.test_unknown_or_incomplete_asset_is_preserved) ... ok
+test_verify_only_never_creates_or_publishes (test_release_remote.ReleaseRecoveryTest.test_verify_only_never_creates_or_publishes) ... ok
+test_wrong_digest_stops_before_any_mutation (test_release_remote.ReleaseRecoveryTest.test_wrong_digest_stops_before_any_mutation) ... ok
+test_wrong_tag_is_never_moved (test_release_remote.ReleaseRecoveryTest.test_wrong_tag_is_never_moved) ... ok
+test_all_keeps_original_date_keys (test_ui_acceptance_assertions.ResultAssertionTest.test_all_keeps_original_date_keys) ... ok
+test_month_results_cross_year_boundary (test_ui_acceptance_assertions.ResultAssertionTest.test_month_results_cross_year_boundary) ... ok
+test_theme_recording_and_artifact_mismatch_fail (test_ui_acceptance_assertions.ResultAssertionTest.test_theme_recording_and_artifact_mismatch_fail) ... ok
+test_week_results_exclude_previous_sunday_and_future (test_ui_acceptance_assertions.ResultAssertionTest.test_week_results_exclude_previous_sunday_and_future) ... ok
+test_wrong_filtered_results_fail_even_if_controls_were_clicked (test_ui_acceptance_assertions.ResultAssertionTest.test_wrong_filtered_results_fail_even_if_controls_were_clicked) ... ok
+
+----------------------------------------------------------------------
+Ran 16 tests in 0.088s
+
+OK
+test_changed_installed_artifact_is_rejected (test_amap_runtime_evidence.RuntimeEvidenceTest.test_changed_installed_artifact_is_rejected) ... ok
+test_dex_mapping_is_not_native_evidence (test_amap_runtime_evidence.RuntimeEvidenceTest.test_dex_mapping_is_not_native_evidence) ... ok
+test_direct_apk_elf_mapping_is_accepted (test_amap_runtime_evidence.RuntimeEvidenceTest.test_direct_apk_elf_mapping_is_accepted) ... ok
+test_unloaded_or_fallback_map_is_rejected (test_amap_runtime_evidence.RuntimeEvidenceTest.test_unloaded_or_fallback_map_is_rejected) ... ok
+test_avd_identity_must_match (test_google_avd_guard.GoogleAvdGuardTest.test_avd_identity_must_match) ... ok
+test_boot_incomplete_is_rejected (test_google_avd_guard.GoogleAvdGuardTest.test_boot_incomplete_is_rejected) ... ok
+test_isolated_avd_requires_its_exact_pair (test_google_avd_guard.GoogleAvdGuardTest.test_isolated_avd_requires_its_exact_pair) ... ok
+test_isolated_port_with_legacy_or_foreign_name_is_rejected (test_google_avd_guard.GoogleAvdGuardTest.test_isolated_port_with_legacy_or_foreign_name_is_rejected) ... ok
+test_offline_is_rejected (test_google_avd_guard.GoogleAvdGuardTest.test_offline_is_rejected) ... ok
+test_only_named_and_booted_google_avd_is_accepted (test_google_avd_guard.GoogleAvdGuardTest.test_only_named_and_booted_google_avd_is_accepted) ... ok
+test_other_emulator_is_never_contacted (test_google_avd_guard.GoogleAvdGuardTest.test_other_emulator_is_never_contacted) ... ok
+test_personal_mumu_is_never_contacted (test_google_avd_guard.GoogleAvdGuardTest.test_personal_mumu_is_never_contacted) ... ok
+test_real_phone_is_never_contacted (test_google_avd_guard.GoogleAvdGuardTest.test_real_phone_is_never_contacted) ... ok
+test_day_review_cannot_pass_with_live_gps_marker_or_other_days_fog (test_map_journey_acceptance.JourneyResultTest.test_day_review_cannot_pass_with_live_gps_marker_or_other_days_fog) ... ok
+test_failed_or_missing_native_report_never_becomes_a_pass (test_map_journey_acceptance.JourneyResultTest.test_failed_or_missing_native_report_never_becomes_a_pass) ... ok
+test_recreated_map_is_a_failure_even_when_native_command_returns_zero (test_map_journey_acceptance.JourneyResultTest.test_recreated_map_is_a_failure_even_when_native_command_returns_zero) ... ok
+test_different_identity_is_rejected (test_publish_signing.SigningGateTest.test_different_identity_is_rejected) ... ok
+test_legacy_identity_must_match_modern_identity (test_publish_signing.SigningGateTest.test_legacy_identity_must_match_modern_identity) ... ok
+test_missing_legacy_certificate_is_rejected (test_publish_signing.SigningGateTest.test_missing_legacy_certificate_is_rejected) ... ok
+test_missing_modern_scheme_is_rejected (test_publish_signing.SigningGateTest.test_missing_modern_scheme_is_rejected) ... ok
+test_original_identity_all_schemes_passes (test_publish_signing.SigningGateTest.test_original_identity_all_schemes_passes) ... ok
+test_previous_v2_only_release_is_rejected (test_publish_signing.SigningGateTest.test_previous_v2_only_release_is_rejected) ... ok
+test_windows_crlf_output_passes (test_publish_signing.SigningGateTest.test_windows_crlf_output_passes) ... ok
+
+----------------------------------------------------------------------
+Ran 23 tests in 0.019s
+
+OK
