@@ -3,6 +3,13 @@ import org.junit.Assert.*
 import org.junit.Test
 class RecordingStatusTest {
     private val base = RecordingSignals(now=100_000, startedAt=10_000, callbackAt=99_000, validAt=99_000)
+    @Test fun currentSessionReceiptsOverrideNineHourOldHistoryAndWallClock() {
+        val noCurrent=base.copy(receiptClock=true,startAgeMs=62_000,callbackAgeMs=null,validAgeMs=null,
+            callbackAt=1,savedAt=1,now=34_038_000)
+        assertEquals("STARTING",RecordingStatus.assess(noCurrent).code)
+        assertEquals("CALLBACK_INTERRUPTED",RecordingStatus.assess(noCurrent.copy(startAgeMs=181_000)).code)
+        assertEquals("WAITING_MOVEMENT",RecordingStatus.assess(noCurrent.copy(now=-50_000,callbackAgeMs=1000,validAgeMs=1000)).code)
+    }
     @Test fun serviceHeartbeatCannotHideStalledCallbackOrOldCommit() {
         val status=RecordingStatus.assess(base.copy(callbackAt=20_000,validAt=20_000,savedAt=20_000))
         assertEquals("CALLBACK_INTERRUPTED",status.code); assertFalse(status.healthy)

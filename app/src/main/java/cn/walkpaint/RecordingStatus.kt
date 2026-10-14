@@ -6,7 +6,9 @@ internal data class RecordingSignals(
     val fine: Boolean = true, val gpsEnabled: Boolean = true,
     val startedAt: Long = 0, val callbackAt: Long = 0, val validAt: Long = 0,
     val savedAt: Long = 0, val filterAt: Long = 0, val filter: String = "",
-    val failureAt: Long = 0, val failure: String = "", val databaseError: String? = null
+    val failureAt: Long = 0, val failure: String = "", val databaseError: String? = null,
+    val receiptClock: Boolean=false, val startAgeMs: Long?=null,
+    val callbackAgeMs: Long?=null, val validAgeMs: Long?=null
 )
 internal data class RecordingStatus(val code: String, val title: String, val hint: String,
                                     val healthy: Boolean = false) {
@@ -22,12 +24,17 @@ internal data class RecordingStatus(val code: String, val title: String, val hin
             if (s.failure.startsWith("GPS_REGISTER_") && s.failureAt >= s.startedAt && s.failureAt > s.callbackAt)
                 return RecordingStatus("REGISTER_FAILED", "定位没有启动", "正在重试，暂时还没在记录")
             val currentCallback = s.callbackAt.takeIf { it >= s.startedAt } ?: 0
-            if (!recent(currentCallback)) {
-                if (currentCallback > 0 || !recent(s.startedAt))
+            val callbackRecent=if(s.receiptClock) s.callbackAgeMs?.let { it in 0..45_000 }==true else recent(currentCallback)
+            if (!callbackRecent) {
+                val hasCallback=if(s.receiptClock) s.callbackAgeMs!=null else currentCallback>0
+                val acquiring=if(s.receiptClock) s.startAgeMs?.let { it in 0..GpsRecovery.ACQUIRE_MS }==true
+                    else recent(s.startedAt,GpsRecovery.ACQUIRE_MS)
+                if (hasCallback || !acquiring)
                     return RecordingStatus("CALLBACK_INTERRUPTED", "收不到定位信号", "监听还开着，但系统没有送来新的 GPS 位置；网络蓝点不能代替 GPS 足迹")
                 return RecordingStatus("STARTING", "正在搜寻定位", "还没拿到第一个有效定位，此时并没有在记录")
             }
-            if (s.validAt < s.startedAt || !recent(s.validAt) || s.filterAt > s.validAt && s.filter in setOf(
+            val validRecent=if(s.receiptClock) s.validAgeMs?.let { it in 0..45_000 }==true else s.validAt>=s.startedAt && recent(s.validAt)
+            if (!validRecent || s.filterAt > s.validAt && s.filter in setOf(
                     "UNRELIABLE_ACCURACY", "MISSING_ACCURACY", "INVALID_COORDINATE", "STALE_FIX")) {
                 val hint = when (s.filter) {
                     "UNRELIABLE_ACCURACY", "MISSING_ACCURACY" -> "定位精度不够，暂时不记录"
