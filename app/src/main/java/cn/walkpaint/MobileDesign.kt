@@ -96,7 +96,7 @@ internal fun RouteThumbnail(track: Track, modifier: Modifier = Modifier, color: 
     // Distant disconnected records should not squash a short real walk into two invisible dots.
     // Full history remains available on the map; the preview explicitly shows one continuous part.
     val preview = remember(track) {
-        RecordedTrail.paths(listOf(track)).maxByOrNull { Geo.distance(it) } ?: track.points.take(1)
+        RecordedTrail.visiblePaths(listOf(track)).maxByOrNull { Geo.distance(it) } ?: emptyList()
     }
     val lines = remember(preview) { preview.zipWithNext() }
     val background = CanvasSoft
@@ -163,6 +163,8 @@ internal fun DesignTripsPage(state: TrackState, roadColor: Int, onTrip: (Track) 
 private fun DesignTripDetail(day: DailyFootprint, color: Int, onBack: () -> Unit, onMap: () -> Unit, onExport: () -> Unit) {
     BackHandler(onBack = onBack)
     val summary = remember(day) { TrailSummary.of(day.tracks) }
+    val integrity=remember(day) { TrailIntegrity.of(day.tracks) }
+    var showIntegrity by remember(day.key) { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(painterResource(R.drawable.ic_back), "返回足迹列表", tint = Ink) }
@@ -186,6 +188,8 @@ private fun DesignTripDetail(day: DailyFootprint, color: Int, onBack: () -> Unit
             }
         }
         Button(onClick = onMap, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("在地图查看这天的足迹") }
+        TextButton(onClick={showIntegrity=!showIntegrity}) { Text(if(showIntegrity) "收起记录完整性" else "记录完整性") }
+        if(showIntegrity) Text(integrity.report(),color=Muted,fontSize=13.sp,lineHeight=20.sp)
         OutlinedButton(onClick = onExport, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("导出全部足迹备份") }
         Text("预览显示当天最长的一段连续足迹。完整路线可在地图查看；定位断档不会连线或计入有效记录时长。", color = Muted, fontSize = 12.sp, lineHeight = 18.sp)
     }

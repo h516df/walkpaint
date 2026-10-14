@@ -15,12 +15,12 @@ import org.json.JSONObject
  */
 internal object TrackMapJson {
     fun encode(tracks: List<Track>): String =
-        encodePaths(TrailShape.dedupe(RecordedTrail.paths(tracks)))
+        encodePaths(TrailShape.dedupe(RecordedTrail.visiblePaths(tracks)))
 
     fun encodePaths(paths: List<List<TrackPoint>>): String {
         val features = JSONArray()
         paths.forEach { run ->
-            if (run.size < 2) return@forEach
+            if (!RecordedTrail.visible(run)) return@forEach
             val coordinates = JSONArray()
             run.forEach { coordinates.put(JSONArray().put(it.lon).put(it.lat)) }
             features.put(JSONObject()

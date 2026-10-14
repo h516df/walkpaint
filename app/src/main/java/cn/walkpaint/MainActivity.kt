@@ -748,7 +748,7 @@ class MainActivity : ComponentActivity() {
                     val displayedRoad = RoadState()
                     val displayedTrack = DailyFootprints.select(next,day)
                     // Day review has its own ground, not later exploration or today's GPS dot.
-                    val veilPaths = RecordedTrail.paths(displayedTrack.realTracks)
+                    val veilPaths = RecordedTrail.visiblePaths(displayedTrack.realTracks)
                     val veilStart = System.nanoTime()
                     // The painter reuses its two buffers. A deferred handover and the SDK's GL
                     // thread can still be reading either one after the next paint starts.

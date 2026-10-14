@@ -57,7 +57,7 @@ internal object RecordingDiagnostics {
         }
     }
 
-    fun event(context: Context, kind: String, reason: String, gap: Long? = null, occurredAt: Long = System.currentTimeMillis()) {
+    fun event(context: Context, kind: String, reason: String, gap: Long? = null, occurredAt: Long = System.currentTimeMillis(), count: Int = 1) {
         val application = context.applicationContext
         val at = occurredAt
         // Mirrored into the in-memory field recorder, so an export carries the whole timeline
@@ -65,7 +65,7 @@ internal object RecordingDiagnostics {
         FieldRecorder.event(at, kind, reason)
         writer.execute {
             synchronized(lock) {
-                val immediate = state(application).record(kind, reason, at, gap)
+                val immediate = state(application).record(kind, reason, at, gap, count)
                 ProblemCode.fromRecording(kind,reason,gap)?.let { historyState(application).record(it,at,System.currentTimeMillis()) }
                 if (immediate) {
                     scheduledFlush?.cancel(false)

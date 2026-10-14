@@ -11,6 +11,10 @@ internal object RecordedTrail {
     const val MAX_SPEED_MPS=40.0
     /** Above this a fix counts as fast travel and must be corroborated, not taken on trust. */
     const val FAST_TRAVEL_MPS=8.0
+    /** A fix is an observation, not proof of a travelled corridor. Shared by both renderers. */
+    fun visible(path: List<TrackPoint>): Boolean = path.size >= 2 &&
+        path.zipWithNext().sumOf { (a,b) -> Geo.meters(a,b) } >= 3.0
+    fun visiblePaths(tracks: List<Track>): List<List<TrackPoint>> = paths(tracks).filter(::visible)
     fun connected(a:TrackPoint,b:TrackPoint):Boolean {
         val gap=b.time-a.time
         return a.segment==b.segment && gap in 1..MAX_GAP_MS &&

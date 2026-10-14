@@ -56,13 +56,13 @@ object Geo {
         if (previous == null) return null
         val seconds = (next.time - previous.time) / 1000.0
         if (seconds <= 0) return "NON_INCREASING_TIME"
-        // A new point after a callback gap begins a separate line in storage/display.
-        if (seconds * 1000 > RecordedTrail.MAX_GAP_MS) return null
         val distance = meters(previous, next)
         val maxAccuracy = max(previous.accuracy.toDouble(), next.accuracy.toDouble())
         val minimumMove = if (confidentlyMoving) max(3.0, maxAccuracy * 0.55)
                           else max(4.0, maxAccuracy * 1.25)
         if (distance < minimumMove) return "STATIONARY_OR_SMALL_MOVE"
+        // A gap changes continuity, never whether a stationary fix counts as movement.
+        if (seconds * 1000 > RecordedTrail.MAX_GAP_MS) return null
         val speed=distance/seconds
         if (speed>RecordedTrail.MAX_SPEED_MPS) return "JUMP_OR_TOO_FAST"
         // Fast travel needs precise fixes and, when the receiver measures its own speed, a
