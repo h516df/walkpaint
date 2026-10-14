@@ -28,8 +28,9 @@ internal class TrailIngress {
             fixes.removeAt(0); breakBefore = true
         }
         val first = fixes.first()
+        if(fixes.size<2) { rejection="STATIONARY_OR_SMALL_MOVE";return null }
         rejection = Geo.rejectionReason(first, point, moving, speed) ?: "NONE"
-        if (fixes.size < 2 || rejection != "NONE") return null
+        if (rejection != "NONE") return null
         // Keep original bends and original time anchors. Never synthesize coordinates or times.
         val keep = TrailShape.simplify(fixes).toMutableSet()
         var anchor = first

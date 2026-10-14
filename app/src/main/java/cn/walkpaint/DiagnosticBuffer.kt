@@ -19,7 +19,7 @@ internal class DiagnosticBuffer(initial: Map<String, Any?> = emptyMap()) {
                 // "moving" counts fixes where the receiver looked like it was genuinely travelling.
                 // Without it a diagnosis cannot tell "nothing to record because the phone is on a
                 // desk" from "recording is broken while the person walks".
-                listOf("gps", "valid_gps", "saved", "filtered", "moving", "probe_start", "probe_fix").forEach {
+                listOf("gps", "valid_gps", "saved", "filtered", "pending", "moving", "probe_start", "probe_fix").forEach {
                     values["session_${it}_count"] = 0L
                 }
                 GpsFilterCategory.entries.forEach { values[it.sessionKey] = 0L }
@@ -36,6 +36,7 @@ internal class DiagnosticBuffer(initial: Map<String, Any?> = emptyMap()) {
             "recovery" -> { values["recovery_at"] = at; values["recovery_reason"] = reason; count("recovery_count") }
             "saved" -> { values["saved_at"] = at; count("saved_count") }
             "moving" -> { values["moving_at"] = at; count("moving_count") }
+            "pending" -> { values["pending_at"]=at;count("pending_count") }
             "probe_start" -> { values["probe_start_at"]=at;count("session_probe_start_count") }
             "probe_fix" -> { values["probe_fix_at"]=at;count("session_probe_fix_count") }
             "probe_result" -> { values["probe_result_at"]=at;values["probe_result"]=reason }
@@ -47,7 +48,7 @@ internal class DiagnosticBuffer(initial: Map<String, Any?> = emptyMap()) {
             "register" -> { values["registration_at"] = at; values["registration"] = reason }
             "stop" -> { values["service_stop_at"] = at; values["stop_reason"] = reason }
         }
-        if (kind in setOf("gps", "valid_gps", "saved", "filtered", "moving")) count("session_${kind}_count")
+        if (kind in setOf("gps", "valid_gps", "saved", "filtered", "pending", "moving")) count("session_${kind}_count")
         if (kind == "gnss") { values["gnss_state_at"] = at; values["gnss_state"] = reason }
         if (kind == "gnss_first") { values["gnss_first_fix_at"] = at; values["gnss_ttff_ms"] = gap ?: 0L }
         if (kind == "provider") { values["provider_at"] = at; values["provider_state"] = reason }

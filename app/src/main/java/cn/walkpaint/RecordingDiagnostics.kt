@@ -145,6 +145,7 @@ internal object RecordingDiagnostics {
             "服务心跳：${age("heartbeat_at")}（仅进程活性）",
             "GPS 注册：${age("registration_at")} · ${string("registration")}",
             "本次服务：持续GPS回调 ${long("session_gps_count")} / 有效GPS ${long("session_valid_gps_count")} / 已入库 ${long("session_saved_count")} / 过滤 ${long("session_filtered_count")}",
+            "等待移动确认：${long("session_pending_count")} 次暂缓决定（可能随后随批入库，不是丢点统计）",
             "本次独立探测：${long("session_probe_start_count")} 次 / 新鲜回调 ${long("session_probe_fix_count")}；${string("probe_result")}（一次定位不代表持续恢复）",
             GpsFilterDiagnostics.session(values),
             GpsFilterDiagnostics.recent(recent.entries, recent.enabled, recent.saveFailed, now),

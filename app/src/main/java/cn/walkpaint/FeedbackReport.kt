@@ -39,6 +39,7 @@ internal object FeedbackReport {
             "授权：精确位置 ${flag(f.fine)} / 后台位置 ${flag(f.background)} / 通知 ${flag(f.notifications)}",
             "最近定位回调 ${recent("gps_callback_at")} / 有效定位 ${recent("valid_gps_at")} / 保存 ${recent("saved_at")}",
             "本次服务：回调 ${count("session_gps_count")} / 有效 ${count("session_valid_gps_count")} / 保存 ${count("session_saved_count")} / 过滤 ${count("session_filtered_count")}",
+            "等待移动确认 ${count("session_pending_count")} 次暂缓决定；可能随后随批入库，不是丢点统计",
             GpsFilterDiagnostics.session(f.diagnostics),
             GpsFilterDiagnostics.recent(f.history, f.collected, f.historySaveFailed, now),
             "系统退出原因码：$exitCode（仅系统线索，不推断厂商限制）",
