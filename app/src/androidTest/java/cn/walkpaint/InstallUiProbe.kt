@@ -19,7 +19,7 @@ internal object InstallUiProbe {
         candidate.parentFile!!.mkdirs();source.copyTo(candidate,overwrite=true)
         PrivateUpdatePolicy.verifyHash(candidate,UpdateAsset(1,candidate.length(),sha,"candidate.apk"))
         var nativeBridgeOnly=false
-        try { UpdateApkVerifier.verify(ctx,candidate,50,"0.48") }
+        try { UpdateApkVerifier.verify(ctx,candidate,52,"0.49") }
         catch(e:UpdateFailure) {
             // The guarded Google AVD runs this exact phone APK through ARM translation.
             // Production correctly selects universal for x86_64; do not weaken its ABI policy.

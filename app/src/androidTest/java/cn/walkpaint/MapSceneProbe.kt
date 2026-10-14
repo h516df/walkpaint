@@ -20,7 +20,7 @@ internal object MapSceneProbe {
         fun <T> main(block:()->T):T {var result:Result<T>?=null;i.runOnMainSync {result=runCatching(block)};return result!!.getOrThrow()}
         val controller=main {(field(activity,"amapController\$delegate") as Lazy<*>).value as AmapMapController}
         val end=android.os.SystemClock.uptimeMillis()+20_000
-        while(main {field(controller,"mapLoaded")!=true || (field(activity,"snapshot\$delegate") as State<*>).value.let {it as TrackState}.realPointCount!=7959}
+        while(main {field(controller,"mapLoaded")!=true || (field(activity,"snapshot\$delegate") as State<*>).value.let {it as TrackState}.realPointCount!=9000}
             && android.os.SystemClock.uptimeMillis()<end) Thread.sleep(100)
         val sdk=main {field(controller,"map") as AMap}
         val original=main {sdk.cameraPosition}
@@ -105,7 +105,7 @@ internal object MapSceneProbe {
                 Thread.sleep(220)
             }
             "MAP_SCENE_PASS: "+JSONObject().put("samples",samples).put("minimum_unknown_black",lowest)
-                .put("fixture_points",7959).put("sampling_overhead",true)
+                .put("fixture_points",9000).put("sampling_overhead",true)
         } finally {main {sdk.moveCamera(com.amap.api.maps.CameraUpdateFactory.newCameraPosition(original))}}
     }
 }

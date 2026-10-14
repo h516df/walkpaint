@@ -39,7 +39,7 @@ internal object MapReturnProbe {
         }
         awaitMap()
         val fixtureEnd=android.os.SystemClock.uptimeMillis()+10_000
-        while(main {(field(activity,"snapshot\$delegate") as State<*>).value.let {it as TrackState}.realPointCount}!=7959
+        while(main {(field(activity,"snapshot\$delegate") as State<*>).value.let {it as TrackState}.realPointCount}!=9000
             && android.os.SystemClock.uptimeMillis()<fixtureEnd) Thread.sleep(100)
         val endpoint=main {(field(activity,"snapshot\$delegate") as State<*>).value.let {it as TrackState}.realTracks.last().points.last()}
         main {
@@ -64,7 +64,7 @@ internal object MapReturnProbe {
             check(results.getJSONObject(index).getBoolean("kept_while_hidden")) {"Map was disposed while hidden"}
         }
         return "MAP_RETURN_RESULT: "+JSONObject().put("journeys",results)
-            .put("installed_version",installed).put("fixture_points",7959).put("fixture_segments",140)
+            .put("installed_version",installed).put("fixture_points",9000).put("fixture_segments",145)
             .put("fixture_distance_metres",main {(field(activity,"snapshot\$delegate") as State<*>).value.let {it as TrackState}.totalMeters})
     }
 }

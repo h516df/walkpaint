@@ -126,6 +126,7 @@ class MainActivity : ComponentActivity() {
     private var showRoadAppearance by mutableStateOf(false)
     private var retainedMapCamera:org.maplibre.android.camera.CameraPosition?=null
     private var snapshot by mutableStateOf(TrackState())
+    private var backupCount by mutableStateOf(0)
     private var userFix by mutableStateOf<Location?>(null)
     private var trackingStatus by mutableStateOf("正在检查位置状态")
     private var recordingTitle by mutableStateOf("正在检查记录状态")
@@ -289,7 +290,9 @@ class MainActivity : ComponentActivity() {
     }
     private val refreshTask = object : Runnable {
         override fun run() {
+            if(!activityResumed) return
             updateUi()
+            backupCount=repository.backupCountCached
             shortGpsText=ShortGpsSurvey.report();shortGpsActive=ShortGpsSurvey.active()
             mainHandler.postDelayed(this, 2000L)
         }
@@ -509,7 +512,7 @@ class MainActivity : ComponentActivity() {
                     onPowerSettings = { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) },
                     onRevoke = { AmbientTracking.stop(this); updateUi() },
                     onCopyDiagnostics = { openRecordingDiagnostics() },
-                    internalBackupCount = repository.backupFiles().size,
+                    internalBackupCount = backupCount,
                     mapProviderLabel = if (amapActive) "高德联网地图" else if(onlineMap) "OpenFreeMap 联网备用地图" else "离线足迹视图",
                     appearanceMode=appearanceMode,
                     onAppearanceMode={ mode ->
@@ -537,7 +540,11 @@ class MainActivity : ComponentActivity() {
                         { privateUpdater.authorize() },{ openUpdateBrowser(PrivateUpdatePolicy.VERIFY) },
                         { privateUpdater.download() },::installUpdate,{ privateUpdater.cancel() },
                         { privateUpdater.logout() },{ openUpdateBrowser(UpdateDestination.URL) }) },
-                    mapContent = { if (amapActive) AmapNativeView() else NativeMapView() }
+                    mapContent = { if (amapActive) AmapNativeView() else NativeMapView() },
+                    onBackupEntry={ refreshExecutor.execute {
+                        val count=repository.refreshBackupCount()
+                        runOnUiThread { backupCount=count }
+                    } }
                 )
 
                 if(showRoadAppearance) RoadColorDialog(roadColor,::chooseRoadColor) { showRoadAppearance=false }
@@ -693,7 +700,6 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
-        mainHandler.post(refreshTask)
         // Command-driven export: the app is launched with the extra and writes its own field report
         // where the reading side can fetch it. Nothing else in the app ever sends this.
         if (intent?.getBooleanExtra(EXTRA_EXPORT_FIELD_REPORT, false) == true) dumpFieldReport()
@@ -1847,6 +1853,8 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         activityResumed=true;syncHeadingLifecycle()
+        mainHandler.removeCallbacks(refreshTask)
+        mainHandler.post(refreshTask)
         updateUi()
         // Same reason as the tab switch: coming back to a resting camera would otherwise leave an
         // unveiled map on screen, and an unveiled map is indistinguishable from explored ground.
@@ -1857,6 +1865,7 @@ class MainActivity : ComponentActivity() {
         }
     }
     override fun onPause() {
+        mainHandler.removeCallbacks(refreshTask)
         stopShortGps("离开前台，结束短测")
         activityResumed=false;syncHeadingLifecycle()
         locationManager?.let { runCatching { it.removeUpdates(visibleLocationListener) } }

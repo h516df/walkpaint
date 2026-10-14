@@ -1,3 +1,21 @@
+# v0.49：可信轨迹、GPS恢复与诊断精简（2026-10-14）
+
+用户批准实施孤点/连续性、有限定位恢复/#55、后台UI轮询/#30三个切片。唯一写手Codex，自有codex-opendesign-zoom-v045；正式整合目标仍agent/codex/mobile-ui-redesign-v041，main不是本轮发布基线，不恢复旧DSH写手。
+
+0.49/code52/schema2最终候选已验收，APK 5af07513c19f061a39727764834eeae5ad28d5f6cbeefa2cf4b847d591ab82fc；原签名V1/V2/V3。发布状态以正式Release/本机work/v049/handoff为准，不把候选或PR当已发布。当前方案与实际证据见docs/evidence/V049.md，研究边界见AUDIT_20261014.md。
+
+GPS恢复以GpsRecovery为运行策略：首次180秒、健康流断90秒后15秒独立探测、至少5分钟间隔、每次断流一次重注册；只有持续回调重置。RecordingHealth旧shouldRetry不是运行入口。GpsReceipts本次单调时间与历史分开；探测不宣称连续恢复。60秒短测保持自动记录选择，离开前台取消，不导出坐标/卫星编号。网络标记空心可说明。
+
+TrailIngress只用真实观察，60秒/32点，确认移动后保存几何与时间锚；无可核对已存锚、重启/权限/位置变化、实际空窗或跳变保持分段。批量SQLite原子提交、真实提交计数、一次备份触发。孤点保留不挖孔，详情说明历史原因未知。onPause停止UI轮询，备份数量按需更新。
+
+348 JVM/39 Python；同最终ARM64包在独占5560实际高德JNI、9000点145段/切页/当天/快速缩放/25张未知像素、隔离SQLite回滚/恢复与后台/探测取消、系统FileProvider覆盖/已安装SHA/原五表和设置保持通过。test-only固定Google AVD native bridge ABI staging必须披露；模拟定位、ready时间和截图不是本人户外GPS/FPS/OAuth证据。本人最新报告0.48/Android16，未连接本人vivo，#6/#17保留；#30仅部分完成，备份#51/#52、GPX#53、播放#54不在本轮。
+
+直接SQLite测试必须同时隔离库、filesDir和设置，不共用自动备份、不向全局库追加夹具；显示压力夹具只修改内存cache且finally恢复。单点/零长度有真实bitmap像素门禁。只操作专属5560，不改其他模拟器、共享adb或canonical工作区。回退同证书/schema2/code>=52，不卸载清库，不覆盖旧Release。
+
+以下为历史记录，不替代本节。
+
+---
+
 # v0.48：手机安装证书兼容修复（2026-10-13）
 
 用户最新报告“软件包似乎无效，缺乏开发者证书”。Issue #60；唯一写手 Codex，现有自有 worktree，agent/codex/install-certificate-v048；基线正式45c3fc269602115714800db19ad61719845bcf23，整合目标仍 agent/codex/mobile-ui-redesign-v041。不要恢复其他旧 DSH 写手或写 canonical main。

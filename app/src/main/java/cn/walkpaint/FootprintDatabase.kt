@@ -37,6 +37,12 @@ class FootprintDatabase(private val context: Context) :
     @Volatile var revision: Long = 0
         private set
     private var cached: TrackState? = null
+    @Volatile internal var backupCountCached=0
+        private set
+    @Synchronized internal fun refreshBackupCount():Int {
+        backupCountCached=backupFiles().size
+        return backupCountCached
+    }
     private var roadCatalog: RoadCatalog? = null
     private val preferences = context.getSharedPreferences("footprint_settings", Context.MODE_PRIVATE)
 
@@ -483,7 +489,9 @@ class FootprintDatabase(private val context: Context) :
         try {
             val directory = File(context.filesDir, "auto-backups")
             if (!directory.exists()) directory.mkdirs()
-            val atomic = AtomicFile(File(directory, "footprints-$date.json"))
+            val file=File(directory,"footprints-$date.json")
+            val isNew=!file.exists()
+            val atomic = AtomicFile(file)
             val stream = atomic.startWrite()
             try {
                 stream.write(exportBackup().toByteArray(Charsets.UTF_8))
@@ -493,6 +501,7 @@ class FootprintDatabase(private val context: Context) :
                 throw e
             }
             preferences.edit().putLong("last_auto_backup_time", timestamp).apply()
+            if(isNew) backupCountCached++
         } catch (_: Exception) { /* Primary SQLite remains authoritative. */ }
     }
 

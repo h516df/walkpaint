@@ -1,0 +1,1 @@
+DIRECT_TRAIL_NO_ROADS_DB_PASS walking_cycling_driving_gap=7 atomic_batch_rollback_recovery=PASS global_db_and_backups=untouched
