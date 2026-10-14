@@ -39,7 +39,7 @@ import kotlin.math.cos
 internal fun DesignStat(value: String, label: String, modifier: Modifier = Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(value, color = Ink, fontSize = 20.sp, fontWeight = FontWeight.SemiBold,
-            fontFamily = FontFamily.Serif, style = TabularFigures)
+            fontFamily = FontFamily.SansSerif, style = TabularFigures)
         Text(label, color = Muted, fontSize = 12.sp)
     }
 }
@@ -47,7 +47,7 @@ internal fun DesignStat(value: String, label: String, modifier: Modifier = Modif
 @Composable
 internal fun DesignSummary(state: TrackState) {
     Surface(color = Canvas, shape = CardShape, border = BorderStroke(1.dp, Line)) {
-        Row(Modifier.fillMaxWidth().padding(vertical=16.dp),verticalAlignment=Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(vertical=20.dp),verticalAlignment=Alignment.CenterVertically) {
             DesignStat(exploredDistance(state.totalMeters),"累计里程",Modifier.weight(1f).padding(horizontal=12.dp))
             VerticalDivider(Modifier.height(44.dp),color=Line)
             DesignStat("${state.dayCount}","探索天数",Modifier.weight(1f).padding(horizontal=12.dp))
@@ -63,24 +63,46 @@ internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolea
     val uri = androidx.compose.ui.platform.LocalUriHandler.current
     Box(Modifier.fillMaxSize()) {
         mapContent()
-        if (day != null) Surface(onClick = onShowAll, color = Canvas, shape = ChipShape,
-            modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top=12.dp)) {
-            Text("$day 当天足迹 · 返回全部探索", color = Pigment, fontSize = 13.sp, modifier = Modifier.padding(12.dp))
-        }
-        if(notice!=null && day==null) Surface(onClick=onSettings,color=Canvas,shape=PanelShape,
-            border=BorderStroke(1.dp,Line),shadowElevation=1.dp,
+        val chrome=Color(0xFF172334)
+        val chromeInk=Color(0xFFE9EFFA)
+        if(day!=null) Surface(onClick=onShowAll,color=chrome,shape=RoundedCornerShape(16.dp),
             modifier=Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top=12.dp,start=16.dp,end=16.dp)) {
-            Text("$notice  ›",color=Ink,fontSize=13.sp,modifier=Modifier.padding(horizontal=14.dp,vertical=12.dp))
+            Row(Modifier.padding(horizontal=16.dp,vertical=12.dp),verticalAlignment=Alignment.CenterVertically,
+                horizontalArrangement=Arrangement.spacedBy(14.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text(day,color=chromeInk,fontSize=16.sp,fontWeight=FontWeight.SemiBold)
+                    Text("当天足迹与迷雾",color=chromeInk.copy(alpha=.8f),fontSize=12.sp)
+                }
+                Text("返回全部探索",color=Color(0xFFB8D3FF),fontSize=13.sp)
+            }
         }
-        Column(Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(end = 16.dp, bottom = 104.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("放大地图" to { onZoom(1) }, "缩小地图" to { onZoom(-1) }, "定位我" to onLocate).forEach { (label, action) ->
-                Surface(onClick = action, color = Canvas.copy(alpha=.97f), shape = RoundedCornerShape(13.dp),
-                    border = BorderStroke(1.dp, Line), shadowElevation = 2.dp, modifier = Modifier.size(48.dp)) {
-                    Box(Modifier.semantics { contentDescription = if(label=="定位我" && day!=null) "定位当天" else label }, contentAlignment = Alignment.Center) {
-                        if (label == "定位我") Icon(painterResource(R.drawable.ic_location), null, tint = Ink, modifier = Modifier.size(21.dp))
-                        else Text(if (label == "放大地图") "+" else "−", color = Ink, fontSize = 24.sp,fontWeight=FontWeight.Normal)
+        if(notice!=null && day==null) Surface(onClick=onSettings,color=chrome,shape=RoundedCornerShape(16.dp),
+            modifier=Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top=12.dp,start=16.dp,end=16.dp)) {
+            Row(Modifier.padding(horizontal=16.dp,vertical=12.dp),verticalAlignment=Alignment.CenterVertically) {
+                Icon(painterResource(R.drawable.ic_location),null,tint=Color(0xFFB8D3FF),modifier=Modifier.size(18.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(notice,color=chromeInk,fontSize=13.sp,lineHeight=20.sp,modifier=Modifier.weight(1f))
+                Text("›",color=chromeInk,fontSize=20.sp,modifier=Modifier.padding(start=8.dp))
+            }
+        }
+        Column(Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(end=16.dp,bottom=104.dp),
+            verticalArrangement=Arrangement.spacedBy(12.dp)) {
+            Surface(color=chrome,shape=RoundedCornerShape(16.dp),border=BorderStroke(1.dp,Color(0xFF34455C))) {
+                Column {
+                    listOf("放大地图" to 1,"缩小地图" to -1).forEachIndexed { index,(label,delta) ->
+                        if(index>0) HorizontalDivider(Modifier.width(48.dp).padding(horizontal=10.dp),color=Color(0xFF34455C))
+                        Surface(onClick={onZoom(delta)},color=Color.Transparent,modifier=Modifier.size(48.dp)) {
+                            Box(Modifier.semantics { contentDescription=label },contentAlignment=Alignment.Center) {
+                                Text(if(delta>0) "+" else "−",color=chromeInk,fontSize=26.sp)
+                            }
+                        }
                     }
+                }
+            }
+            Surface(onClick=onLocate,color=chrome,shape=RoundedCornerShape(16.dp),
+                border=BorderStroke(1.dp,Color(0xFF34455C)),modifier=Modifier.size(48.dp)) {
+                Box(Modifier.semantics { contentDescription=if(day!=null) "定位当天" else "定位我" },contentAlignment=Alignment.Center) {
+                    Icon(painterResource(R.drawable.ic_location),null,tint=Color(0xFFB8D3FF),modifier=Modifier.size(22.dp))
                 }
             }
         }
@@ -135,24 +157,34 @@ internal fun DesignTripsPage(state: TrackState, roadColor: Int, onTrip: (Track) 
         DesignTripDetail(selected, roadColor, { detailKey = null }, { onTrip(selected.focusTrack()) }, onExport)
         return
     }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        item {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("足迹", color = Ink, fontSize = 25.sp, fontWeight = FontWeight.SemiBold,fontFamily=FontFamily.Serif)
-                    Text("共 ${exploredDistance(state.totalMeters)} · ${days.size} 个探索日", color = Muted, fontSize = 13.sp,
-                        modifier = Modifier.padding(top = 6.dp))
-                }
-                TextButton(onClick = { showStats = !showStats }) { Text(if(showStats) "日历" else "统计") }
-                IconButton(onClick = onExport) { Icon(painterResource(R.drawable.ic_export), "导出全部足迹", tint = Pigment) }
-            }
-        }
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal=20.dp,vertical=12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { TrailHeader("足迹","${days.size} 个探索日，记录每一次出发") {
+            TextButton(onClick={showStats=!showStats}) { Text(if(showStats) "日历" else "统计") }
+            IconButton(onClick=onExport) { Icon(painterResource(R.drawable.ic_export),"导出全部足迹",tint=Pigment) }
+        } }
+        item { DesignSummary(state) }
         if (showStats) item { RecapCard(RecapMaker.of(days, java.time.LocalDate.now().toString().take(7)),
             RecapMaker.of(days, java.time.LocalDate.now().toString().take(4))) }
         else item { FootprintCalendar(days, DailyFootprints.key(System.currentTimeMillis())) { track ->
             detailKey = days.firstOrNull { it.tracks.any { original -> original.id == track.id } }?.key
                 ?: track.points.firstOrNull()?.let { DailyFootprints.key(it.time) }
         } }
+        if(days.isNotEmpty()) {
+            item { TrailSectionLabel("最近探索") }
+            items(days.take(5),key={"recent:${it.key}"}) { day ->
+                Surface(onClick={detailKey=day.key},color=Canvas,shape=RoundedCornerShape(16.dp),border=BorderStroke(1.dp,Line)) {
+                    Row(Modifier.fillMaxWidth().padding(12.dp),verticalAlignment=Alignment.CenterVertically,
+                        horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                        RouteThumbnail(day.focusTrack(),Modifier.size(56.dp),roadColor)
+                        Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(5.dp)) {
+                            Text(day.key,color=Ink,fontSize=15.sp,fontWeight=FontWeight.Medium)
+                            Text(exploredDistance(day.meters),color=Muted,fontSize=13.sp)
+                        }
+                        Text("›",color=Faint,fontSize=22.sp)
+                    }
+                }
+            }
+        }
         if (days.isEmpty()) item {
             Text("第一段足迹，等你出发。开启自动记录后，已保存的路线会出现在日历里。", color = Muted, fontSize = 14.sp)
         }
@@ -165,34 +197,31 @@ private fun DesignTripDetail(day: DailyFootprint, color: Int, onBack: () -> Unit
     val summary = remember(day) { TrailSummary.of(day.tracks) }
     val integrity=remember(day) { TrailIntegrity.of(day.tracks) }
     var showIntegrity by remember(day.key) { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(painterResource(R.drawable.ic_back), "返回足迹列表", tint = Ink) }
-            Column {
-                Text("行程详情", color = Ink, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                Text(day.key, color = Muted, fontSize = 13.sp)
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal=20.dp,vertical=12.dp),
+        verticalArrangement=Arrangement.spacedBy(14.dp)) {
+        TrailHeader("当天足迹",day.key,onBack)
+        RouteThumbnail(day.focusTrack(),Modifier.fillMaxWidth().height(180.dp),color)
+        TrailPanel {
+            Row(Modifier.fillMaxWidth()) {
+                DesignStat(exploredDistance(summary.meters),"里程",Modifier.weight(1f))
+                DesignStat(summary.duration,"有效记录时长",Modifier.weight(1f))
             }
+            HorizontalDivider(color=Line)
+            Text("${summary.points} 个足迹点，${day.segments} 段记录",color=Muted,fontSize=13.sp)
         }
-        RouteThumbnail(day.focusTrack(), Modifier.fillMaxWidth().height(190.dp), color)
-        Surface(color = Canvas, shape = CardShape, border = BorderStroke(1.dp, Line)) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                Row(Modifier.fillMaxWidth()) {
-                    DesignStat(exploredDistance(summary.meters), "里程", Modifier.weight(1f))
-                    DesignStat(summary.duration, "有效记录时长", Modifier.weight(1f))
-                }
-                HorizontalDivider(color = Line)
-                Row(Modifier.fillMaxWidth()) {
-                    DesignStat("${summary.points}", "足迹点", Modifier.weight(1f))
-                    DesignStat("${day.segments}", "记录分段", Modifier.weight(1f))
-                }
-            }
+        Button(onClick=onMap,shape=PanelShape,modifier=Modifier.fillMaxWidth().heightIn(min=50.dp)) {
+            Icon(painterResource(R.drawable.ic_map),null,modifier=Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp));Text("在地图查看这天的足迹")
         }
-        Button(onClick = onMap, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("在地图查看这天的足迹") }
-        TextButton(onClick={showIntegrity=!showIntegrity}) { Text(if(showIntegrity) "收起记录完整性" else "记录完整性") }
-        if(showIntegrity) Text(integrity.report(),color=Muted,fontSize=13.sp,lineHeight=20.sp)
-        OutlinedButton(onClick = onExport, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("导出全部足迹备份") }
-        Text("预览显示当天最长的一段连续足迹。完整路线可在地图查看；定位断档不会连线或计入有效记录时长。", color = Muted, fontSize = 12.sp, lineHeight = 18.sp)
+        Text("地图将回到当天的足迹、迷雾和最后位置。预览显示最长连续路线；定位断档保留分段。",
+            color=Muted,fontSize=13.sp,lineHeight=21.sp)
+        TextButton(onClick={showIntegrity=!showIntegrity},modifier=Modifier.fillMaxWidth()) {
+            Text(if(showIntegrity) "收起记录完整性" else "记录完整性")
+        }
+        if(showIntegrity) TrailPanel { Text(integrity.report(),color=Muted,fontSize=13.sp,lineHeight=21.sp) }
+        OutlinedButton(onClick=onExport,modifier=Modifier.fillMaxWidth().heightIn(min=48.dp)) { Text("导出全部足迹备份") }
     }
+
 }
 
 @Composable

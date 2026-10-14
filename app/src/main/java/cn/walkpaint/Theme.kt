@@ -10,13 +10,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.dp
 internal data class DesignPalette(val brand:Color,val soft:Color,val ink:Color,val muted:Color,
     val faint:Color,val line:Color,val surface:Color,val paper:Color)
-// OpenDesign design-system.md: accent-ink for text, cold paper surfaces, independent saved paint.
-internal val DayPalette=DesignPalette(Color(0xFF006653),Color(0xFFD5F1E9),Color(0xFF1D2C26),
-    Color(0xFF505E5B),Color(0xFF7D8988),Color(0xFFD8E0DF),Color(0xFFFCFEFE),Color(0xFFF2F7F7))
-internal val NightPalette=DesignPalette(Color(0xFF7BD1BB),Color(0xFF123A31),Color(0xFFE2EAE8),
-    Color(0xFF9DA7A6),Color(0xFF75807F),Color(0xFF2B3537),Color(0xFF151E20),Color(0xFF0C1415))
+// Interface blue is independent of the user's saved trail colour. All fonts remain on-device.
+internal val DayPalette=DesignPalette(Color(0xFF205BC5),Color(0xFFE8EFFC),Color(0xFF18253B),
+    Color(0xFF59667A),Color(0xFF66738A),Color(0xFFE1E6EF),Color.White,Color(0xFFF3F5F9))
+internal val NightPalette=DesignPalette(Color(0xFFA1C4FF),Color(0xFF233959),Color(0xFFE9EFFA),
+    Color(0xFFB0BCD0),Color(0xFF98A8C1),Color(0xFF2D3D55),Color(0xFF182538),Color(0xFF0F1929))
 internal val LocalDesignPalette=staticCompositionLocalOf { DayPalette }
 /** 0 follows Android, 1 is daylight, 2 is night. Fonts remain local and work offline. */
 @Composable
@@ -41,16 +42,21 @@ internal fun WalkPaintTheme(mode:Int=0,immersiveMap:Boolean=false,content:@Compo
         primary=p.brand,onPrimary=p.paper,primaryContainer=p.soft,onPrimaryContainer=p.ink,
         secondary=p.brand,onSecondary=p.paper,secondaryContainer=p.soft,onSecondaryContainer=p.ink,
         background=p.paper,onBackground=p.ink,surface=p.surface,onSurface=p.ink,
-        surfaceVariant=p.paper,onSurfaceVariant=p.muted,outline=p.line,outlineVariant=p.line,
-        surfaceContainerLowest=p.surface,surfaceContainerLow=p.surface,surfaceContainer=p.paper)
+        surfaceVariant=p.paper,onSurfaceVariant=p.muted,outline=p.muted,outlineVariant=p.line,
+        surfaceContainerLowest=p.surface,surfaceContainerLow=p.surface,surfaceContainer=p.paper,
+        surfaceContainerHigh=p.surface,surfaceContainerHighest=p.surface)
     else lightColorScheme(
         primary=p.brand,onPrimary=Color.White,primaryContainer=p.soft,onPrimaryContainer=p.ink,
         secondary=p.brand,onSecondary=Color.White,secondaryContainer=p.soft,onSecondaryContainer=p.ink,
         background=p.paper,onBackground=p.ink,surface=p.surface,onSurface=p.ink,
-        surfaceVariant=p.paper,onSurfaceVariant=p.muted,outline=p.line,outlineVariant=p.line,
-        surfaceContainerLowest=p.surface,surfaceContainerLow=p.surface,surfaceContainer=p.paper)
+        surfaceVariant=p.paper,onSurfaceVariant=p.muted,outline=p.muted,outlineVariant=p.line,
+        surfaceContainerLowest=p.surface,surfaceContainerLow=p.surface,surfaceContainer=p.paper,
+        surfaceContainerHigh=p.surface,surfaceContainerHighest=p.surface)
     CompositionLocalProvider(LocalDesignPalette provides p) {
-        MaterialTheme(colorScheme=scheme,typography=Typography(
+        MaterialTheme(colorScheme=scheme,shapes=Shapes(
+            small=androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+            medium=androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+            large=androidx.compose.foundation.shape.RoundedCornerShape(20.dp)),typography=Typography(
             bodyLarge=TextStyle(fontFamily=FontFamily.SansSerif,fontSize=16.sp,lineHeight=24.sp),
             bodyMedium=TextStyle(fontFamily=FontFamily.SansSerif,fontSize=14.sp,lineHeight=21.sp)),content=content)
     }

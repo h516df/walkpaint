@@ -1,0 +1,6 @@
+{
+  "mapReturnProbe": true,
+  "historyCameraProbe": true,
+  "rapidZoomProbe": true,
+  "mapSceneProbe": true
+}

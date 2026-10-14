@@ -155,7 +155,7 @@ class MainActivity : ComponentActivity() {
     private val amapActive get() = amapSupported && BuildConfig.AMAP_KEY.isNotBlank() && amapConsent
     private var showDiagnostics by mutableStateOf(false)
     private var diagnosticText by mutableStateOf("")
-    private var showDiagnosticDetails by mutableStateOf(false)
+    private var diagnosticFacts by mutableStateOf<DiagnosisFacts?>(null)
     private var shortGpsText by mutableStateOf("")
     private var shortGpsActive by mutableStateOf(false)
     private var shortProbe:FreshGpsProbe?=null
@@ -609,17 +609,8 @@ class MainActivity : ComponentActivity() {
                     dismissButton={ TextButton(onClick={ downloadArea=null }) { Text("暂不下载") } }
                 ) }
 
-                if (showDiagnostics) AlertDialog(
-                    onDismissRequest = { showDiagnostics = false },
-                    title = { Text("记录诊断 · 不含坐标") },
-                    text = { Column(Modifier.verticalScroll(rememberScrollState())) {
-                        Text(diagnosticText.substringBefore("\n\n—— 原始计数"), fontSize = 13.sp)
-                        TextButton(onClick={showDiagnosticDetails=!showDiagnosticDetails}) { Text(if(showDiagnosticDetails) "收起开发者信息" else "展开开发者信息") }
-                        if(showDiagnosticDetails) Text(diagnosticText.substringAfter("\n\n—— 原始计数",""),fontSize=13.sp)
-                    } },
-                    confirmButton = { TextButton(onClick = { copyTrackingDiagnostics() }) { Text("复制诊断") } },
-                    dismissButton = { TextButton(onClick = { showDiagnostics = false }) { Text("关闭") } }
-                )
+                if (showDiagnostics) RecordingDiagnosisSheet(diagnosticFacts,diagnosticText,
+                    { copyTrackingDiagnostics() },{ showDiagnostics=false })
                 if (showAmapConsent && !showIntro && !confirmEnable && !pendingEnable && !showBackgroundPrompt && !showFineSettings) AlertDialog(
                     onDismissRequest = {
                         showAmapConsent = false
@@ -995,7 +986,7 @@ class MainActivity : ComponentActivity() {
         syncFollowCamera(force=center || firstMapCenter, streetZoom=streetZoom)
     }
 
-    private fun trackingDiagnostics(): String {
+    private fun trackingDiagnostics(onFacts:(DiagnosisFacts)->Unit={}): String {
         // No coordinates, route identifiers or exact street names leave the app.
         val now = System.currentTimeMillis()
         fun age(whenAt: Long?): String =
@@ -1052,6 +1043,7 @@ class MainActivity : ComponentActivity() {
             serviceAgeMs=GpsReceipts.age(GpsReceipts.started,SystemClock.elapsedRealtime()),
             pendingThisSession=(diagnostic["session_pending_count"] as? Number)?.toLong() ?: 0L
         )
+        onFacts(facts)
         return Diagnosis.report(facts) + "\n\n—— 原始计数（给开发者看） ——\n" +
             rows.joinToString("\n") + "\n\n" + RecordingDiagnostics.summary(this) +
             "\n\n绘制来源：已保存的定位直接涂色。连续轨迹 ${RecordedTrail.paths(snapshot.realTracks).count { it.size>=2 }} 段；累计记录 ${snapshot.totalMeters.toLong()} 米（重复出行累计，不是去重道路里程）。" +
@@ -1059,10 +1051,9 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openRecordingDiagnostics() {
-        val base=trackingDiagnostics()
+        val base=trackingDiagnostics { diagnosticFacts=it }
         val state=snapshot; val roads=roadState
         diagnosticText=base
-        showDiagnosticDetails=false
         showDiagnostics=true
         refreshExecutor.execute {
             val details=runCatching { RoadMatchDiagnostics.report(state,roads) }
