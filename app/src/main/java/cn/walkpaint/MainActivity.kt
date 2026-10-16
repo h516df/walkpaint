@@ -406,6 +406,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Local-only snapshot: legacy authorization cleanup must be reachable before any network request.
+        privateUpdateState=privateUpdater.snapshot()
         roadColor=roadAppearance.color
         pendingEnable = savedInstanceState?.getBoolean("pendingEnable") ?: false
         pendingSettingsEnable = savedInstanceState?.getBoolean("pendingSettingsEnable") ?: false
