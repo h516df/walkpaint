@@ -1,0 +1,1 @@
+PUBLIC_UPDATE_STATE_PASS: {"automatic":false,"mode":0,"skin":"city","color":-12747777,"legacy_authorization_present":false}
