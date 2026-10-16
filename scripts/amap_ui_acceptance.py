@@ -57,13 +57,11 @@ def report():
     path='/sdcard/Android/data/cn.walkpaint/files/field-report.txt'
     text=''
     for attempt in range(8):
-        previous=run('shell','stat','-c','%y',path)
-        run('shell','am','start','-n','cn.walkpaint/.MainActivity','--ez','cn.walkpaint.extra.EXPORT_FIELD_REPORT','true')
-        time.sleep(1.5)
-        changed=run('shell','stat','-c','%y',path)!=previous
+        result=run('shell','am','instrument','-w','-e','fieldReportProbe','true',
+                   'cn.walkpaint.test/cn.walkpaint.RoadAcceptanceInstrumentation',timeout=45)
+        assert 'FIELD_REPORT_PROBE_PASS' in result, 'Install matching same-signature test instrumentation'
         text=run('exec-out','cat',path)
-        if changed and '引擎判定=正在用高德' in text and '地图加载完成=true' in text: break
-    assert changed
+        if '引擎判定=正在用高德' in text and '地图加载完成=true' in text: break
     assert '引擎判定=正在用高德' in text and '地图加载完成=true' in text
     match = re.search(r'缩放=([\d.]+) 中心=([-\d.]+),([-\d.]+)',text)
     assert match

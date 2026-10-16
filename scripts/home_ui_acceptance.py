@@ -57,12 +57,12 @@ def bottom_navigation(name, map_controls=False):
 def camera():
     report_path='/sdcard/Android/data/cn.walkpaint/files/field-report.txt'
     for _ in range(8):
-        prior=ui.shell('stat','-c','%y',report_path)
-        ui.shell('am','start','-n','cn.walkpaint/.MainActivity','--ez','cn.walkpaint.extra.EXPORT_FIELD_REPORT','true')
-        time.sleep(1.2)
+        result=ui.run('shell','am','instrument','-w','-e','fieldReportProbe','true',
+                      'cn.walkpaint.test/cn.walkpaint.RoadAcceptanceInstrumentation',timeout=45)
+        assert 'FIELD_REPORT_PROBE_PASS' in result, 'Install matching same-signature test instrumentation'
         text=ui.run('exec-out','cat',report_path)
         match=re.search(r'缩放=([\d.]+) 中心=([-\d.]+),([-\d.]+)',text)
-        if ui.shell('stat','-c','%y',report_path)!=prior and match and '地图加载完成=true' in text and '引擎判定=正在用高德' in text:
+        if match and '地图加载完成=true' in text and '引擎判定=正在用高德' in text:
             return dict(zoom=float(match[1]),lat=float(match[2]),lon=float(match[3]))
     raise AssertionError('Fresh loaded AMap camera report unavailable')
 def settled_camera():

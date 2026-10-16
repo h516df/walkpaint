@@ -20,13 +20,7 @@ internal object AmapGestureProbe {
         instrumentation.startActivitySync(Intent(context,MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         fun report(): String {
-            instrumentation.runOnMainSync {
-                context.startActivity(Intent(context,MainActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    .putExtra("cn.walkpaint.extra.EXPORT_FIELD_REPORT",true))
-            }
-            Thread.sleep(1800)
-            return File(context.getExternalFilesDir(null),"field-report.txt").readText()
+            return FieldReportProbe.capture(instrumentation)
         }
         fun zoom(text: String): Double = Regex("缩放=([0-9.]+)").find(text)?.groupValues?.get(1)?.toDouble()
             ?: error("Camera did not report zoom")
