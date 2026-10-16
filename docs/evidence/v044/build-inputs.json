@@ -1,0 +1,10 @@
+{
+  "production_sha256": "019c454be3775fb9009f2c512f8f141c9b06543260986cc050ad2ce840b040a2",
+  "code_commit": "50a25dfbf12753483e7a2e68caf77e7c8db5907d",
+  "apk_sha256": "567080ebcf316892d5879c85c79b6bf68f7017f3a572f11b03a4a2a0b12f3a50",
+  "apk_bytes": 65955655,
+  "version": "0.44",
+  "version_code": 46,
+  "phone_path": "not_verified",
+  "instrumentation_apk_sha256": "dd4757f380a5085ff9f88da38bc140eb7aba775ba2e8a22ca07ed63c6f959eef"
+}

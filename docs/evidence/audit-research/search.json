@@ -1,0 +1,464 @@
+[
+  {
+    "query": "fog-of-war gps",
+    "total_count": 10,
+    "items": [
+      {
+        "full_name": "mxvlk/FogOff",
+        "description": "A fog of war GPS app",
+        "stargazers_count": 9,
+        "pushed_at": "2024-05-29T18:09:31Z",
+        "archived": false,
+        "html_url": "https://github.com/mxvlk/FogOff"
+      },
+      {
+        "full_name": "bartek8903/fog_map",
+        "description": "GPS fog of war game",
+        "stargazers_count": 0,
+        "pushed_at": "2026-05-29T21:36:08Z",
+        "archived": false,
+        "html_url": "https://github.com/bartek8903/fog_map"
+      },
+      {
+        "full_name": "vasilejureschi/Umbra",
+        "description": "Umbra is a exploration application based on the the Fog Of War concept used in strategy games. \t  \tOn the map the unexplored area is displayed grayed out while the explored part is clear. The application needs a GPS fix in order \tto mark an area as explored as the accuracy from the other location sources is not good enough. Currently the minimum accuracy needed \tfor saving the explored area is set at 100 m (600 feet). The accuracy is displayed as a disc around the current position. \tUmbra saves your exploration in an internal database (nothing is sent over the network). ",
+        "stargazers_count": 29,
+        "pushed_at": "2026-06-12T06:14:53Z",
+        "archived": false,
+        "html_url": "https://github.com/vasilejureschi/Umbra"
+      },
+      {
+        "full_name": "Meprithviraj309/explore-your-dream",
+        "description": "Location-based social exploration platform with Fog-of-War GPS tracking",
+        "stargazers_count": 0,
+        "pushed_at": "2026-08-05T12:30:54Z",
+        "archived": false,
+        "html_url": "https://github.com/Meprithviraj309/explore-your-dream"
+      },
+      {
+        "full_name": "moskil2/FogRider",
+        "description": "Native Windows desktop app for GPS track visualization and analysis - Fog of War, HeatMap, SpeedMap, ElevationMap and more.",
+        "stargazers_count": 0,
+        "pushed_at": "2026-09-07T20:01:19Z",
+        "archived": false,
+        "html_url": "https://github.com/moskil2/FogRider"
+      },
+      {
+        "full_name": "OneZee23/trip-track-ios",
+        "description": "Road trip diary for iPhone: automatic GPS trip recording, fog-of-war atlas of the roads you've driven, places, garage. Swift, SwiftUI, MapKit.",
+        "stargazers_count": 1,
+        "pushed_at": "2026-10-13T13:18:39Z",
+        "archived": false,
+        "html_url": "https://github.com/OneZee23/trip-track-ios"
+      },
+      {
+        "full_name": "rezmoss/myexplore",
+        "description": "Private, offline fog-of-war map for iPhone—reveal a honeycomb of places you have explored while walking or driving, with background GPS tracking and local SQLite storage.",
+        "stargazers_count": 0,
+        "pushed_at": "2026-06-23T21:00:22Z",
+        "archived": false,
+        "html_url": "https://github.com/rezmoss/myexplore"
+      },
+      {
+        "full_name": "kuanadam/Fog-of-Earth",
+        "description": "Mobile app that clears the fog on your GPS map as you explore in real life, inspired by Elden Ring's Fog of War | Built using Flutter/Dart, Firebase",
+        "stargazers_count": 0,
+        "pushed_at": "2024-07-26T04:51:52Z",
+        "archived": false,
+        "html_url": "https://github.com/kuanadam/Fog-of-Earth"
+      },
+      {
+        "full_name": "JitamB/explore-kgp",
+        "description": "[In building phase] A gamified exploration app that uses a \"fog of war\" mechanic to reveal the map only as one physically travel through the world. Built with React Native and Expo, it features real-time GPS tracking, persistent local storage, and interactive path visualization.",
+        "stargazers_count": 0,
+        "pushed_at": "2026-01-22T15:54:33Z",
+        "archived": false,
+        "html_url": "https://github.com/JitamB/explore-kgp"
+      },
+      {
+        "full_name": "DLohmann/MesaDroneGoogleMap",
+        "description": "This project is to create a user interface for the UC Merced MESA Lab's drones, in order to plot out a drone's GPS location on satellite map imagery, add a darkened \"fog of war\" overlay on map areas that have not yet been explored by the drone, and color the map based on the methane concentration that the drone has detected at a location. Future versions will also account for wind speed and direction in determining where the methane concentration in the air is coming from.",
+        "stargazers_count": 0,
+        "pushed_at": "2018-05-06T19:49:50Z",
+        "archived": false,
+        "html_url": "https://github.com/DLohmann/MesaDroneGoogleMap"
+      }
+    ]
+  },
+  {
+    "query": "\"fog of world\"",
+    "total_count": 40,
+    "items": [
+      {
+        "full_name": "CaviarChen/Fog-of-World-Data-Parser",
+        "description": "A data parser for the internal syncing data format used by Fog of World.",
+        "stargazers_count": 50,
+        "pushed_at": "2021-11-07T12:24:52Z",
+        "archived": true,
+        "html_url": "https://github.com/CaviarChen/Fog-of-World-Data-Parser"
+      },
+      {
+        "full_name": "CaviarChen/fog-machine",
+        "description": "Fog Machine is a 3rd party extension tool for the app Fog of World. ",
+        "stargazers_count": 260,
+        "pushed_at": "2026-06-08T14:58:07Z",
+        "archived": false,
+        "html_url": "https://github.com/CaviarChen/fog-machine"
+      },
+      {
+        "full_name": "WilliamYuhangLee/FogOfWorld",
+        "description": "Discover the world like exploring a game map covered by fog of war!",
+        "stargazers_count": 9,
+        "pushed_at": "2020-04-15T12:03:54Z",
+        "archived": false,
+        "html_url": "https://github.com/WilliamYuhangLee/FogOfWorld"
+      },
+      {
+        "full_name": "tomcatter/FogOfWorld",
+        "description": "迷雾地图",
+        "stargazers_count": 5,
+        "pushed_at": "2014-12-12T05:58:42Z",
+        "archived": false,
+        "html_url": "https://github.com/tomcatter/FogOfWorld"
+      },
+      {
+        "full_name": "garfieldw33/Exif-GPS-to-GPX",
+        "description": "3rd party Fog of World* toolbox",
+        "stargazers_count": 5,
+        "pushed_at": "2025-05-07T07:50:38Z",
+        "archived": false,
+        "html_url": "https://github.com/garfieldw33/Exif-GPS-to-GPX"
+      },
+      {
+        "full_name": "ry-li/google-maps-timeline-to-fow",
+        "description": "Google Maps Timeline to Fog of World Converter",
+        "stargazers_count": 6,
+        "pushed_at": "2025-12-08T05:32:12Z",
+        "archived": false,
+        "html_url": "https://github.com/ry-li/google-maps-timeline-to-fow"
+      },
+      {
+        "full_name": "kfstorm/fow2gpx",
+        "description": "Export your Fog of World track data to GPX files",
+        "stargazers_count": 7,
+        "pushed_at": "2021-12-29T14:58:54Z",
+        "archived": false,
+        "html_url": "https://github.com/kfstorm/fow2gpx"
+      },
+      {
+        "full_name": "tetreault/fog-ios",
+        "description": "Fog of World, a simple app where you unlock the map as you physically walk around.",
+        "stargazers_count": 3,
+        "pushed_at": "2021-06-30T14:45:22Z",
+        "archived": false,
+        "html_url": "https://github.com/tetreault/fog-ios"
+      },
+      {
+        "full_name": "BoomBoomMushroom/FogOfWorld",
+        "description": null,
+        "stargazers_count": 0,
+        "pushed_at": "2024-11-09T13:35:02Z",
+        "archived": false,
+        "html_url": "https://github.com/BoomBoomMushroom/FogOfWorld"
+      },
+      {
+        "full_name": "hjabbot/FogOfWorld",
+        "description": null,
+        "stargazers_count": 0,
+        "pushed_at": "2025-10-03T16:20:07Z",
+        "archived": false,
+        "html_url": "https://github.com/hjabbot/FogOfWorld"
+      },
+      {
+        "full_name": "kylelee0728-commits/Fog-of-world",
+        "description": null,
+        "stargazers_count": 0,
+        "pushed_at": "2026-08-23T02:44:40Z",
+        "archived": false,
+        "html_url": "https://github.com/kylelee0728-commits/Fog-of-world"
+      },
+      {
+        "full_name": "maxis1718/fog-of-world",
+        "description": "Create Fog of World with React Native",
+        "stargazers_count": 1,
+        "pushed_at": "2018-09-04T16:11:20Z",
+        "archived": false,
+        "html_url": "https://github.com/maxis1718/fog-of-world"
+      },
+      {
+        "full_name": "SandMartex/Fog_of_World",
+        "description": "Convert your Fog of World data into a US county map — see which counties you've visited and how many states you've covered.",
+        "stargazers_count": 0,
+        "pushed_at": "2026-06-20T22:20:48Z",
+        "archived": false,
+        "html_url": "https://github.com/SandMartex/Fog_of_World"
+      },
+      {
+        "full_name": "Zr1RAM/fog_of_world_clone",
+        "description": "Creating a clone of fog-of-world using flutter",
+        "stargazers_count": 0,
+        "pushed_at": "2023-12-11T07:21:54Z",
+        "archived": false,
+        "html_url": "https://github.com/Zr1RAM/fog_of_world_clone"
+      },
+      {
+        "full_name": "Jeffreyhung/fog_of_world_eraser",
+        "description": null,
+        "stargazers_count": 0,
+        "pushed_at": "2026-06-26T18:36:12Z",
+        "archived": false,
+        "html_url": "https://github.com/Jeffreyhung/fog_of_world_eraser"
+      }
+    ]
+  },
+  {
+    "query": "gpx parser android",
+    "total_count": 12,
+    "items": [
+      {
+        "full_name": "ticofab/android-gpx-parser",
+        "description": "A library to parse XML Gpx files, built for Android.",
+        "stargazers_count": 127,
+        "pushed_at": "2024-10-08T14:53:58Z",
+        "archived": false,
+        "html_url": "https://github.com/ticofab/android-gpx-parser"
+      },
+      {
+        "full_name": "FrancescoRigoni/Android_GPX",
+        "description": "Small Android library to parse and create GPX files",
+        "stargazers_count": 18,
+        "pushed_at": "2018-03-11T12:31:52Z",
+        "archived": false,
+        "html_url": "https://github.com/FrancescoRigoni/Android_GPX"
+      },
+      {
+        "full_name": "FedericoMatera/Android-GPX-Parser",
+        "description": "A GPX Parser for Android",
+        "stargazers_count": 7,
+        "pushed_at": "2020-07-18T07:07:15Z",
+        "archived": false,
+        "html_url": "https://github.com/FedericoMatera/Android-GPX-Parser"
+      },
+      {
+        "full_name": "k3b/k3b-geoHelper",
+        "description": "A j2se geo support library that is compatible with Android with support parsing/generating geo-uri, gpx, kml and kmz",
+        "stargazers_count": 7,
+        "pushed_at": "2023-03-17T17:16:07Z",
+        "archived": false,
+        "html_url": "https://github.com/k3b/k3b-geoHelper"
+      },
+      {
+        "full_name": "jandrop/GpxParseLibrary",
+        "description": "A GPX Parser Library for Android",
+        "stargazers_count": 1,
+        "pushed_at": "2017-02-07T11:24:42Z",
+        "archived": false,
+        "html_url": "https://github.com/jandrop/GpxParseLibrary"
+      },
+      {
+        "full_name": "JazzyLazzy/Simple_GPX_Parser",
+        "description": "A simple GPX Parser for Java/Kotlin/Android apps.",
+        "stargazers_count": 0,
+        "pushed_at": "2022-10-24T01:45:59Z",
+        "archived": false,
+        "html_url": "https://github.com/JazzyLazzy/Simple_GPX_Parser"
+      },
+      {
+        "full_name": "sHuewe/secureGpxParser",
+        "description": null,
+        "stargazers_count": 0,
+        "pushed_at": "2025-07-14T10:48:31Z",
+        "archived": false,
+        "html_url": "https://github.com/sHuewe/secureGpxParser"
+      },
+      {
+        "full_name": "daniilkrant/GPXCoPilot",
+        "description": "Android app to be your rally co-pilot on roads. Parses GPX file and gives you a rally hints",
+        "stargazers_count": 1,
+        "pushed_at": "2021-08-01T06:50:42Z",
+        "archived": false,
+        "html_url": "https://github.com/daniilkrant/GPXCoPilot"
+      },
+      {
+        "full_name": "realchrisolin/wheellog2gpx",
+        "description": "parses CSV data from Wheellog/Wheellog.Android and converts it to GPX using gpxpy",
+        "stargazers_count": 0,
+        "pushed_at": "2022-08-26T21:03:05Z",
+        "archived": false,
+        "html_url": "https://github.com/realchrisolin/wheellog2gpx"
+      },
+      {
+        "full_name": "jeff32819/gps-logger-basic-air-data",
+        "description": "Will parse the *.gpx export file from https://basicairdata.eu/projects/android/android-gps-logger/",
+        "stargazers_count": 0,
+        "pushed_at": "2025-09-07T18:39:06Z",
+        "archived": false,
+        "html_url": "https://github.com/jeff32819/gps-logger-basic-air-data"
+      },
+      {
+        "full_name": "DK-com2/universal-location-parser",
+        "description": "複数のGIS/位置情報データ形式を統合して単一のタイムラインに変換するパーサー。Google Timeline（Android/iOS）やGPXなどの形式に対応し、Pathfinderプロジェクトのためのデータベース構築をサポート。",
+        "stargazers_count": 2,
+        "pushed_at": "2025-08-02T18:16:23Z",
+        "archived": false,
+        "html_url": "https://github.com/DK-com2/universal-location-parser"
+      },
+      {
+        "full_name": "gpotamianos/ROUTEFORGE",
+        "description": "RouteForge is a distributed GPS data processing system. It parses GPX files, splits data into chunks, and uses multiple workers to process the data in parallel. The Android app allows users to upload GPX files, visualize results, and interact with processed data. Built with Java, Android, and multithreading.",
+        "stargazers_count": 0,
+        "pushed_at": "2025-08-23T23:20:47Z",
+        "archived": false,
+        "html_url": "https://github.com/gpotamianos/ROUTEFORGE"
+      }
+    ]
+  },
+  {
+    "query": "gps logger android stars:>100",
+    "total_count": 2,
+    "items": [
+      {
+        "full_name": "BasicAirData/GPSLogger",
+        "description": "A GPS logger for Android mobile devices",
+        "stargazers_count": 508,
+        "pushed_at": "2026-05-25T19:54:39Z",
+        "archived": false,
+        "html_url": "https://github.com/BasicAirData/GPSLogger"
+      },
+      {
+        "full_name": "bfabiszewski/ulogger-android",
+        "description": "μlogger • android application for real-time collection and publishing of geolocation data ",
+        "stargazers_count": 364,
+        "pushed_at": "2025-09-21T09:12:55Z",
+        "archived": false,
+        "html_url": "https://github.com/bfabiszewski/ulogger-android"
+      }
+    ]
+  },
+  {
+    "query": "maplibre offline android",
+    "total_count": 45,
+    "items": [
+      {
+        "full_name": "maplibre/flutter-maplibre-gl",
+        "description": "Flutter plugin for MapLibre: vendor‑neutral vector & raster maps on Android, iOS and Web, with custom styles, offline regions, GeoJSON layers and PMTiles (fork of flutter-mapbox-gl)",
+        "stargazers_count": 372,
+        "pushed_at": "2026-10-12T22:22:11Z",
+        "archived": false,
+        "html_url": "https://github.com/maplibre/flutter-maplibre-gl"
+      },
+      {
+        "full_name": "khoa083/map-offline-navigation",
+        "description": "Kblack: Offline Android navigation with GraphHopper & MapLibre.",
+        "stargazers_count": 12,
+        "pushed_at": "2026-10-01T16:45:19Z",
+        "archived": false,
+        "html_url": "https://github.com/khoa083/map-offline-navigation"
+      },
+      {
+        "full_name": "ellenhp/cardinal",
+        "description": "Cardinal Maps is a FOSS maps application for Android. Get around with ease, online and offline. Development has moved to: https://gitlab.e.foundation/e/os/cardinal",
+        "stargazers_count": 47,
+        "pushed_at": "2025-10-06T02:04:02Z",
+        "archived": false,
+        "html_url": "https://github.com/ellenhp/cardinal"
+      },
+      {
+        "full_name": "lozpeng/maplibre-native-offline",
+        "description": "An off line android maplibre native sdk demo",
+        "stargazers_count": 2,
+        "pushed_at": "2026-09-12T03:06:47Z",
+        "archived": false,
+        "html_url": "https://github.com/lozpeng/maplibre-native-offline"
+      },
+      {
+        "full_name": "TonyGnk/map-libre-demo",
+        "description": "An elegant offline mapping solution for Android apps",
+        "stargazers_count": 5,
+        "pushed_at": "2024-11-17T16:40:05Z",
+        "archived": false,
+        "html_url": "https://github.com/TonyGnk/map-libre-demo"
+      },
+      {
+        "full_name": "drzeeb/VeloSpot",
+        "description": "🚲 Offline-first Android app to find and navigate to 100,000+ bike parking spots across Germany, France & Luxembourg. Built with Kotlin, Jetpack Compose, MapLibre & BRouter offline routing.",
+        "stargazers_count": 7,
+        "pushed_at": "2026-10-12T05:42:17Z",
+        "archived": false,
+        "html_url": "https://github.com/drzeeb/VeloSpot"
+      },
+      {
+        "full_name": "fsdhr1/maplibre-tools-android",
+        "description": "SDK for map drawing, annotation, rendering, offline and other functions based on MapLibre on the Android platform",
+        "stargazers_count": 1,
+        "pushed_at": "2024-06-18T07:56:27Z",
+        "archived": false,
+        "html_url": "https://github.com/fsdhr1/maplibre-tools-android"
+      },
+      {
+        "full_name": "Mobile-Artificial-Intelligence/atlas",
+        "description": "Fully-offline Android maps: MapLibre + BeeRouter + PMTiles",
+        "stargazers_count": 0,
+        "pushed_at": "2026-09-15T02:27:06Z",
+        "archived": false,
+        "html_url": "https://github.com/Mobile-Artificial-Intelligence/atlas"
+      },
+      {
+        "full_name": "Subhashnaidudulla/Cogniscape-Android",
+        "description": "Open-source Android navigation app for visually impaired users. Combines OpenStreetMap pedestrian data, 3D spatial audio beacons, and on-device AI obstacle detection (TensorFlow Lite) to enable eyes-free navigation. Built with MapLibre Native, GraphHopper offline routing, and Android Oboe.",
+        "stargazers_count": 4,
+        "pushed_at": "2026-03-23T09:49:49Z",
+        "archived": false,
+        "html_url": "https://github.com/Subhashnaidudulla/Cogniscape-Android"
+      },
+      {
+        "full_name": "qtekfun/UltimateMaps",
+        "description": "Offline, private Android maps and navigation app (MapLibre + CoMaps core). GPLv3.",
+        "stargazers_count": 1,
+        "pushed_at": "2026-10-12T19:50:04Z",
+        "archived": false,
+        "html_url": "https://github.com/qtekfun/UltimateMaps"
+      },
+      {
+        "full_name": "francescobuzle-a11y/navmaster",
+        "description": "Navigatore Android offline per camion, autobus e camper (MapLibre + Valhalla + Ferrostar)",
+        "stargazers_count": 0,
+        "pushed_at": "2026-10-13T09:52:21Z",
+        "archived": false,
+        "html_url": "https://github.com/francescobuzle-a11y/navmaster"
+      },
+      {
+        "full_name": "Afaqz2/Resilience",
+        "description": "Offline-first Android emergency preparedness app — Jetpack Compose, Hilt, Room/SQLCipher, MapLibre",
+        "stargazers_count": 0,
+        "pushed_at": "2026-04-15T10:36:12Z",
+        "archived": false,
+        "html_url": "https://github.com/Afaqz2/Resilience"
+      },
+      {
+        "full_name": "kernmod/offline-routing-demo",
+        "description": "Offline-first Android routing demo: embedded PMTiles, on-device Rust CCH, Worker/D1 API, and web viewer.",
+        "stargazers_count": 0,
+        "pushed_at": "2026-10-13T10:06:19Z",
+        "archived": false,
+        "html_url": "https://github.com/kernmod/offline-routing-demo"
+      },
+      {
+        "full_name": "lewishadden/offline-flight-tracker",
+        "description": "Offline-first Android flight tracker. Pre-downloads flight route + MapLibre map tiles before boarding so you can watch your live GPS position track along the filed great-circle path at 35,000 ft with zero connectivity. Powered by FlightAware AeroAPI, MapLibre Native, Room, and Jetpack Compose.",
+        "stargazers_count": 1,
+        "pushed_at": "2026-04-24T08:22:38Z",
+        "archived": false,
+        "html_url": "https://github.com/lewishadden/offline-flight-tracker"
+      },
+      {
+        "full_name": "up1t3/2circle",
+        "description": "Offline-first bicycle-touring app for Android — MapLibre + BRouter + Room, 138 unit + 7 instrumentation tests",
+        "stargazers_count": 0,
+        "pushed_at": "2026-07-23T10:22:24Z",
+        "archived": false,
+        "html_url": "https://github.com/up1t3/2circle"
+      }
+    ]
+  }
+]

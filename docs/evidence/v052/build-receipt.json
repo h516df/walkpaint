@@ -1,0 +1,17 @@
+{
+  "JVM": {
+    "tests": 360,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "Python_tests": 39,
+  "Python_failures": 0,
+  "production_files": 95,
+  "apk": {
+    "sha256": "513dff652ec7482e975e409a29f0f8bb8af2076f32ce6472b860b5d405e73e58",
+    "size": 66417113,
+    "version": "0.52",
+    "code": 58
+  }
+}

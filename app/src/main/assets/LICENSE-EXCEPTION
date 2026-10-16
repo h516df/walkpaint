@@ -1,0 +1,22 @@
+WalkPaint additional permission under GNU GPL version 3, section 7
+
+Copyright (C) 2026 h516df and WalkPaint contributors
+
+If you modify this Program, or any covered work, by linking or combining it
+with the AMap Android map, location, and search SDKs distributed by AMap
+(or modified versions of those SDKs that you are legally permitted to use),
+the licensors of this Program grant you additional permission to convey
+the resulting work.
+
+When conveying such a combination, the Corresponding Source for the
+GPL-covered portions must still be provided under GNU GPL version 3.
+This additional permission permits omission of the separately licensed
+AMap SDK source from that Corresponding Source. It does not grant any
+rights to the AMap SDKs, map data, services, API keys, or trademarks;
+you must obtain and comply with their applicable terms independently.
+
+This permission applies only to material whose copyright holders have
+granted it. Contributions to WalkPaint are accepted under GNU GPL
+version 3 with this additional permission unless explicitly stated
+otherwise. You may remove this additional permission from a copy, as
+provided in section 7 of GNU GPL version 3.

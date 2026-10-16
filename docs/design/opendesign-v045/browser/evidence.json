@@ -1,0 +1,24 @@
+{
+  "prototype_only": true,
+  "real_browser": true,
+  "viewports": [
+    {
+      "width": 320,
+      "overflow": false
+    },
+    {
+      "width": 360,
+      "overflow": false
+    },
+    {
+      "width": 393,
+      "overflow": false
+    },
+    {
+      "width": 412,
+      "overflow": false
+    }
+  ],
+  "console_errors": [],
+  "passed": true
+}

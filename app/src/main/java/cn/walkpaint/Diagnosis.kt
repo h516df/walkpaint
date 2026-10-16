@@ -39,6 +39,9 @@ internal data class DiagnosisFacts(
     val serviceStartCount: Long,
     val databaseError: String?,
     val dozeIdle: Boolean,
+    val statusCode: String? = null,
+    val serviceAgeMs: Long? = null,
+    val pendingThisSession: Long = 0L,
 )
 
 /**
@@ -76,6 +79,8 @@ internal object Diagnosis {
         !f.phoneLocationOn -> SCREEN_PHONE_LOCATION_OFF
         f.databaseError != null -> SCREEN_STORAGE
         !f.running -> SCREEN_BACKGROUND_STOPPED
+        f.statusCode == "STARTING" -> "ACQUIRING_FIRST_GPS"
+        f.statusCode == "INVALID_FIX" -> SCREEN_WEAK_SIGNAL
         f.callbackAgeMs == null || f.callbackAgeMs > SIGNAL_WINDOW_MS -> SCREEN_NO_SIGNAL
         // Positioning is arriving and nothing has been saved for a while, yet almost everything is
         // being dropped as "not moving". That is the signature of a walk being mistaken for a
@@ -84,7 +89,8 @@ internal object Diagnosis {
             // Only call the recorder broken when the receiver itself reported travel and nothing
             // was stored anyway. A phone lying on a desk produces the same filter counters and is
             // completely normal, so counts alone must never raise this alarm.
-            if (f.movingThisSession >= 3 && f.savedThisSession == 0L) SCREEN_WALKING_FILTERED
+            if (f.movingThisSession >= 3 && f.savedThisSession == 0L &&
+                (f.serviceAgeMs==null || f.serviceAgeMs>=STALE_SAVE_MS)) SCREEN_WALKING_FILTERED
             else if (dominantFilter(f) == FilterKind.ACCURACY && f.accuracyFiltered > 0) SCREEN_WEAK_SIGNAL
             else SCREEN_UNCLEAR
         }
@@ -93,15 +99,16 @@ internal object Diagnosis {
     }
 
     fun verdict(f: DiagnosisFacts): String = when (syndromeId(f)) {
+        "ACQUIRING_FIRST_GPS" -> "本次服务正在首次搜寻 GPS，尚未收到持续定位；历史定位时间不代表本次断流。首次搜星保留180秒稳定等待。"
         SCREEN_PAUSED -> "记录是关的。打开「自动记录」就会开始。"
         SCREEN_PERMISSION -> "缺少精确定位权限，现在记不了。去系统设置里允许「精确位置」。"
         SCREEN_PHONE_LOCATION_OFF -> "手机定位关着，现在收不到位置。打开它就自己恢复。"
         SCREEN_STORAGE -> "位置收到了，但写不进手机存储。检查一下剩余空间。"
         SCREEN_BACKGROUND_STOPPED -> "记录被系统停掉了。回到应用能恢复；把本应用加入省电白名单能减少这种情况。"
-        SCREEN_NO_SIGNAL -> "收不到定位。多半是在室内或信号被挡住，到室外试试。"
+        SCREEN_NO_SIGNAL -> "记录后台在运行，但系统没有送来新的 GPS 位置。网络蓝点不代表 GPS 已定位；目前不能确定是信号、系统还是订阅问题。"
         SCREEN_WEAK_SIGNAL -> "定位精度不够，暂时没记录。到空旷一点的地方会好。"
         SCREEN_WALKING_FILTERED -> "定位在更新，但你走的路被当成「没移动」丢掉了。这是需要修的问题，把这份诊断发我。"
-        SCREEN_LONG_GAP -> "整体正常，但中间出现过一次较长的断档。系统清理后台时会这样，断档不是数据被删。"
+        SCREEN_LONG_GAP -> "历史出现过较长断档，现有证据不能确定原因；断档不是数据被删，没有记录的路段不会补画。"
         SCREEN_UNCLEAR -> "定位正常。手机放着不动时本来就不记录；如果你刚才一直在走却一个点都没记上，把这份诊断发我。"
         else -> "一切正常，不用管它。"
     }
@@ -114,7 +121,7 @@ internal object Diagnosis {
         ),
         DiagnosisItem(
             "记录后台", if (f.running) Health.OK else Health.BAD,
-            if (f.running) "在运行，本次已启动 ${f.serviceStartCount} 次" else "没有在运行",
+            if (f.running) "在运行，历史累计启动 ${f.serviceStartCount} 次" else "没有在运行",
             when {
                 !f.running -> "回到应用就能恢复；把本应用加入省电白名单能减少这种情况"
                 !f.batteryWhitelisted -> "建议把本应用加入省电白名单，减少被系统停掉"
@@ -159,7 +166,6 @@ internal object Diagnosis {
             append(verdict(f)).append("\n")
             append("症状编号：").append(id).append("\n\n")
             append(lines)
-            append("\n\n（下面的原始计数是给开发者看的，可以一起发出来。）")
         }
     }
 
@@ -180,6 +186,7 @@ internal object Diagnosis {
 
     private fun signalLevel(f: DiagnosisFacts): Health = when {
         !f.fineLocation || !f.phoneLocationOn -> Health.BAD
+        f.statusCode=="STARTING" -> Health.WARN
         f.callbackAgeMs == null || f.callbackAgeMs > SIGNAL_WINDOW_MS -> Health.BAD
         dominantFilter(f) == FilterKind.ACCURACY && f.accuracyFiltered > f.savedCount -> Health.WARN
         else -> Health.OK
@@ -188,6 +195,7 @@ internal object Diagnosis {
     private fun signalDetail(f: DiagnosisFacts): String {
         val age = f.callbackAgeMs
         return when {
+            f.statusCode=="STARTING" -> "首次搜星中，本次尚无持续回调"
             !f.fineLocation -> "没有精确定位权限"
             !f.phoneLocationOn -> "手机定位已关闭"
             age == null -> "本次还没有收到过定位"
@@ -210,8 +218,9 @@ internal object Diagnosis {
     }
 
     private fun filterDetail(f: DiagnosisFacts): String {
-        if (f.filteredCount <= 0) return "没有丢过点"
-        return "丢下 ${f.filteredCount} 次（没移动 ${f.stationaryFiltered} / 跳得太远 ${f.jumpFiltered} / 精度不够 ${f.accuracyFiltered}）"
+        val waiting=if(f.pendingThisSession>0) "；等待移动确认 ${f.pendingThisSession} 次（可能随后入库，不是丢点数）" else ""
+        if (f.filteredCount <= 0) return "没有即时拒绝的位置"+waiting
+        return "即时拒绝 ${f.filteredCount} 次（没移动 ${f.stationaryFiltered} / 跳得太远 ${f.jumpFiltered} / 精度不够 ${f.accuracyFiltered}）"+waiting
     }
 
     private fun filterAdvice(f: DiagnosisFacts): String? = when (dominantFilter(f)) {

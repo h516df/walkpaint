@@ -70,9 +70,11 @@ WALK_SPACING_S = 3.0
 # red and green), which now matches nothing because the veil carries no tint at all. A bare
 # OpenFreeMap street pixel is light. The gate below stays low on purpose: it asks "is the fog on
 # screen", and the exact opacity is asserted by FogPixelProbe instead of inferred from a screenshot.
-VEIL_BLACK_LEVEL = 24
-VEIL_DARK_LEVEL = 70
-VEIL_PRESENTED_RATIO = 0.05
+#
+# The predicate itself lives in veil_measure.py because the phone lane has to ask the same question
+# of a different screen. Two copies of "what counts as veil" is how a pass on one lane stops meaning
+# a pass on the other.
+from veil_measure import classify_region, VEIL_BLACK_LEVEL, VEIL_PRESENTED_RATIO  # noqa: E402
 # Two clusters about twelve kilometres apart: the far one has to keep its paint and the ground
 # between them has to keep its veil.
 FAR_CLUSTER_MIN_METRES = 11000
@@ -82,11 +84,15 @@ parser.add_argument('--apk', default='app/build/outputs/apk/debug/app-debug.apk'
 parser.add_argument('--label', required=True, help='evidence folder, e.g. before / after')
 parser.add_argument('--skip-install', action='store_true')
 parser.add_argument('--skip-walk', action='store_true', help='do not inject extra fixes on top of the fixture')
+parser.add_argument('--require-engine', choices=('amap', 'fallback'), help='fail if the actual engine differs')
+parser.add_argument('--fixture-region', choices=('paris', 'china'), default='paris')
 parser.add_argument('--allow-missing-perf', action='store_true',
                     help='baseline runs only: the build being replaced has no counters at all')
 parser.add_argument('--online-basemap', action='store_true',
                     help='turn the fallback basemap on so the veil is judged over real streets')
 args = parser.parse_args()
+if args.require_engine == 'amap' and (args.fixture_region != 'china' or args.online_basemap):
+    parser.error('AMap acceptance requires --fixture-region china and must preserve AMap consent')
 
 require_walkpaint_google_avd(ADB, SERIAL)
 base = [ADB, '-s', SERIAL]
@@ -191,30 +197,17 @@ def veil_stats(name):
 
     This is the observable signal that the fog layer is actually on screen, rather than merely
     having been handed to the map engine: the counters say the image was passed over, a picture
-    says whether a person can see it. The veil is dark navy, so it is the only thing in this scene
-    with blue above both red and green while still being dark; the pale veil of 0.36 scores ~0.002
-    on this test, which is what makes it a usable signal rather than a colour guess.
+    says whether a person can see it. The veil is opaque black, so it is the only thing in this
+    scene that is both very dark and neutral; the pale veil of 0.36 scored ~0.002 on this test,
+    which is what makes it a usable signal rather than a colour guess. The classifier itself is
+    shared with the phone lane in veil_measure.py.
     """
     from PIL import Image
     image = Image.open(out / (name + '.png')).convert('RGB')
     # Skip the top chip and the bottom tab bar; keep the map itself.
     region = image.crop((0, 300, image.width, image.height - 300)).resize((216, 360))
-    veil = 0
-    bare = 0
-    tinted = 0
-    total = 0
-    for r, g, b in region.getdata():
-        total += 1
-        luminance = 0.299 * r + 0.587 * g + 0.114 * b
-        if r < VEIL_BLACK_LEVEL and g < VEIL_BLACK_LEVEL and b < VEIL_BLACK_LEVEL:
-            veil += 1
-        elif luminance > 200 and g >= r:
-            bare += 1
-        if g > r + 8 and g > b and 90 < g < 200:
-            tinted += 1
-    return {'veil_ratio': round(veil / total, 3),
-            'bare_map_ratio': round(bare / total, 3),
-            'tint_ratio': round(tinted / total, 3)}
+    stats = classify_region(region.getdata())
+    return {key: stats[key] for key in ('veil_ratio', 'bare_map_ratio', 'tint_ratio')}
 
 
 def map_presented_ms(started, timeout_s=25):
@@ -436,9 +429,9 @@ def require_scene(name, predicate, description):
     return check_scene(name, camera_state(), predicate, description)
 
 
-def person_stayed_near(state, expected_lon=2.3523, tolerance=0.004):
+def person_stayed_near(state, expected_lon=None, tolerance=0.004):
     """The person's own position must not have moved just because the map did."""
-    return state is not None and abs(state.get('fixLon', 0.0) - expected_lon) < tolerance
+    return state is not None and abs(state.get('fixLon', 0.0) - (NEAR_LON if expected_lon is None else expected_lon)) < tolerance
 
 
 def pan_camera(to_lon, to_lat, tolerance=0.0015, max_swipes=90, on_way=None):
@@ -625,8 +618,9 @@ try:
     checks['device_abilist'] = sh('getprop', 'ro.product.cpu.abilist').strip()
     checks['device_sdk'] = sh('getprop', 'ro.build.version.sdk').strip()
     first_abi = checks['device_abilist'].split(',')[0].strip()
-    # AmapPlatform only accepts an ARM process, so this AVD cannot run the AMap renderer at all.
-    checks['amap_supported_on_this_device'] = first_abi in ('arm64-v8a', 'armeabi-v7a')
+    # Availability is not runtime proof. ARM64-only APKs can use an advertised native bridge.
+    checks['amap_supported_on_this_device'] = any(abi in ('arm64-v8a', 'armeabi-v7a')
+                                                for abi in checks['device_abilist'].split(','))
 
     apk = (ROOT / args.apk).resolve()
     checks['apk'] = str(apk)
@@ -637,9 +631,8 @@ try:
     time.sleep(1)
     rows_installed_before = row_map()
     if not args.skip_install:
-        # -d: the baseline run installs the build being replaced, whose version code is lower.
-        assert 'Success' in run('install', '-r', '-d', str(apk), timeout=240), 'app install failed'
-        assert 'Success' in run('install', '-r', '-d',
+        assert 'Success' in run('install', '-r', str(apk), timeout=240), 'app install failed'
+        assert 'Success' in run('install', '-r',
             str(ROOT / 'app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk'),
             timeout=240), 'test install failed'
     # The package manager can still be busy straight after an install on a loaded host, so the
@@ -669,6 +662,14 @@ try:
     checks['installed_apk_sha256'] = installed
     if installed != checks['apk_sha256']:
         fail('installed package is not the file that was built')
+    if args.require_engine == 'amap':
+        from amap_runtime_evidence import verify_runtime
+        runtime = sh('am', 'instrument', '-w', '-e', 'amapRuntimeProbe', 'true',
+                     TEST_PKG + '/' + RUNNER, timeout=150)
+        runtime_match = re.search(r'AMAP_RUNTIME_PASS: (\{[^\r\n]+\})', runtime)
+        if not runtime_match:
+            fail('required AMap renderer did not load; no fallback evidence accepted')
+        checks['amap_runtime'] = verify_runtime(apk, json.loads(runtime_match.group(1)))
 
     # Installing over the previous build must not touch a single stored row. With the install
     # skipped there is nothing to compare, so the check is recorded as not applicable rather than
@@ -683,9 +684,9 @@ try:
             checks['rows_changed_by_install'] = changed[:20]
             fail('installing the build changed or lost stored rows: %s' % changed[:5])
 
-    # One deterministic scene: the test AVD's tables are cleared and the same anonymous fixture is
-    # written again, so the replaced build and the candidate are shown exactly the same thing.
+    # Replace only this probe's owned fixture rows, preserving every unrelated trip and road.
     seeded = sh('am', 'instrument', '-w', '-e', 'fogTrailProbe', 'true', '-e', 'fogTrailReset', 'true',
+                '-e', 'fogFixtureRegion', args.fixture_region,
                 TEST_PKG + '/' + RUNNER, timeout=240)
     checks['fixture_probe'] = [line for line in seeded.splitlines() if 'FOG_TRAIL_PROBE' in line]
     if 'FOG_TRAIL_PROBE_PASS' not in seeded:
@@ -767,6 +768,8 @@ try:
         fail('the app reported no map provider; visible=' + str(profile))
     checks['engine_label'] = engine
     checks['engine'] = 'amap' if '高德' in engine else 'fallback'
+    if args.require_engine and checks['engine'] != args.require_engine:
+        fail('actual engine differs from --require-engine; downgrade is not acceptance')
     checks['amap_path_verified'] = checks['engine'] == 'amap'
     if not checks['amap_supported_on_this_device'] and checks['amap_path_verified']:
         fail('engine claims AMap on an ABI that cannot load it')

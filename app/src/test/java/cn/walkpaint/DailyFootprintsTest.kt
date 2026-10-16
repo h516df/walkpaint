@@ -3,7 +3,26 @@ import org.junit.Assert.*
 import org.junit.Test
 import java.text.SimpleDateFormat
 import java.util.Locale
+import java.util.TimeZone
 class DailyFootprintsTest {
+    @Test fun reusedSnapshotRebuildsCalendarAfterTimezoneChangesAndCopiesDoNotReuseStaleDays() {
+        val original=TimeZone.getDefault()
+        try {
+            TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
+            val t=at("2026-10-09 23:59:55")
+            val trip=Track("midnight",t,false,listOf(p(t),p(t+10_000)))
+            val state=TrackState(listOf(trip))
+            val days=DailyFootprints.days(state)
+            assertEquals(2,state.dayCount)
+            assertSame(days,DailyFootprints.days(state))
+            assertSame(days.first().focusTrack(),days.first().focusTrack())
+            TimeZone.setDefault(TimeZone.getTimeZone("Asia/Shanghai"))
+            assertEquals(1,state.dayCount)
+            assertEquals(listOf("2026-10-10"),DailyFootprints.days(state).map { it.key })
+            assertEquals(0,state.copy(tracks=emptyList()).dayCount)
+            assertEquals(2,state.realPointCount)
+        } finally {TimeZone.setDefault(original)}
+    }
     private fun at(s:String)=SimpleDateFormat("yyyy-MM-dd HH:mm:ss",Locale.ROOT).parse(s)!!.time
     private fun p(time:Long,lat:Double=31.0,segment:Int=0)=TrackPoint(lat,121.0,time,5f,segment)
     @Test fun sameDayFragmentsAreOneRowWithoutBridgingTheirRoutes() {

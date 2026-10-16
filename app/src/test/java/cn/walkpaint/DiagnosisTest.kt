@@ -7,6 +7,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DiagnosisTest {
+    @Test fun freshSessionWithHeldMovementDoesNotBorrowOldSaveAgeForAnAlarm() {
+        val f=healthy().copy(savedAgeMs=9*60*60_000L,movingThisSession=4,savedThisSession=0,
+            filteredCount=0,pendingThisSession=4,serviceAgeMs=10_000)
+        assertEquals(Diagnosis.SCREEN_UNCLEAR,Diagnosis.syndromeId(f))
+        assertTrue(Diagnosis.report(f).contains("等待移动确认 4 次"))
+        assertEquals(Diagnosis.SCREEN_WALKING_FILTERED,Diagnosis.syndromeId(f.copy(serviceAgeMs=200_000)))
+    }
 
     /** A session that is doing everything right. */
     private fun healthy() = DiagnosisFacts(
@@ -54,6 +61,13 @@ class DiagnosisTest {
         assertNotNull(signal.action)
     }
 
+    @Test fun missingGpsDoesNotGuessIndoorCauseAndLabelsLifetimeStarts() {
+        val f=healthy().copy(callbackAgeMs=3_691_000,filteredCount=0,stationaryFiltered=0,jumpFiltered=0,accuracyFiltered=0,serviceStartCount=36)
+        assertFalse(Diagnosis.verdict(f).contains("室内"))
+        assertTrue(Diagnosis.verdict(f).contains("网络蓝点"))
+        assertTrue(Diagnosis.report(f).contains("历史累计启动 36 次"))
+        assertTrue(Diagnosis.report(f).contains("没有即时拒绝的位置"))
+    }
     @Test fun aWalkRejectedAsStandingStillIsNamedAsAProblemToFix() {
         // Positioning is arriving, the receiver reported travel, and still nothing was stored.
         val f = healthy().copy(

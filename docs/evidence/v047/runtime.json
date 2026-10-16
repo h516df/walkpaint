@@ -1,0 +1,12 @@
+{
+  "serial": "emulator-5560",
+  "passed": true,
+  "phone_path": "not_verified",
+  "apk_sha256": "92c8ef5ab682ee889e3475def1b8dc44828a2d210c084f7b6447e7d44da4597a",
+  "engine": "amap",
+  "map_loaded": true,
+  "mapped_libraries": [
+    "lib/arm64-v8a/libAMapSDK_MAP_v11_3_100.so"
+  ],
+  "coordinate_roundtrip_max_metres": 1.7529707657116463e-05
+}

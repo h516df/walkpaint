@@ -69,9 +69,12 @@ internal object TrailPaint {
      *
      * The veil is opaque, so a frame narrower than the screen would read as ground the person has
      * already explored — the opposite of what the veil means. This is deliberately as wide as any
-     * view the app accepts, so the frame's edge can never fall inside the screen. The cost is a
-     * coarse frame (the corridor lands under a pixel) for the moment before the camera reports
-     * where it is looking; the walked lines still show, because the map draws those itself.
+     * view the app accepts, so the frame's edge can never fall inside the screen. What made the
+     * first screen readable was *not* this width, and shrinking it was only ever a candidate fix:
+     * at sixty degrees the corridor is far under a pixel, and the stroke used to have a two pixel
+     * floor, so "thinner than a pixel" became a two pixel line — over thirty kilometres of ground
+     * reported as walked, covering the whole street-level first screen. The floor is gone (see
+     * [corridorVisible]); this stays wide because covering the view is its only job.
      */
     const val FALLBACK_SPAN_DEG = 60.0
     /** The veil covers the viewport plus this share of it, so a pan does not outrun the image. */
@@ -93,6 +96,22 @@ internal object TrailPaint {
      * and handing the map a line as well costs the UI thread a GeoJSON rebuild for nothing.
      */
     const val NETWORK_BELOW_PX = 2.0
+
+    /**
+     * Whether this frame can show the corridor at its true width.
+     *
+     * This is the rule that keeps the veil honest, and it exists because its absence was a visible
+     * defect: the stroke used to be widened to a two pixel floor so that *something* would show.
+     * On a wide frame that turned a sub-pixel corridor into a two pixel line — and two pixels of a
+     * sixty degree frame is over thirty kilometres of ground that had never been walked. Reported
+     * as explored, it erased the fog across the whole first screen.
+     *
+     * The invariant is therefore: the veil image either shows a corridor of the right ground width,
+     * or shows no corridor at all. It never shows one wider than the person actually cleared. When
+     * it shows none, the map draws the walked route as a line instead, so the record survives.
+     */
+    fun corridorVisible(frame: PaintFrame): Boolean =
+        CORRIDOR_M * TrailPainter.pixelsPerMeter(frame) >= NETWORK_BELOW_PX
 
     private const val METRES_PER_LAT = 111194.9
 
@@ -179,6 +198,7 @@ internal class TrailPainter {
     /** The buffer being drawn into next, so the map can keep reading the one it was handed. */
     private var scratch: Bitmap? = null
     private var colour = 0
+    private var paintedPaths:List<List<TrackPoint>>?=null
 
     private val fog = Paint().apply {
         style = Paint.Style.FILL
@@ -208,19 +228,38 @@ internal class TrailPainter {
     var lastUpdateRebuilt = false
         private set
 
+    /**
+     * Whether the last image handed out contains a cleared corridor.
+     *
+     * Kept because "the paths are empty" is not the same as "the image is empty". Ground that was
+     * walked and is now unknown — an emptied or reset dataset, a day selection cleared back to
+     * nothing — has to *lose* its corridor, so a skip that only looked at the input being empty
+     * would keep serving the old, partly revealed picture. The skip below needs this too.
+     */
+    private var paintedCorridor = false
+
     fun image(): Bitmap? = bitmap
 
     fun frame(): PaintFrame? = frame
 
     fun update(paths: List<List<TrackPoint>>, color: Int, anchor: TrackPoint? = null,
                viewport: ViewBounds? = null): Bitmap? {
-        if (paths.all { it.isEmpty() }) return bitmap
-        colour = color
+        val walked = paths.any { it.isNotEmpty() }
         val current = frame
         // The frame follows the map, so a pan or a zoom is what moves it; the person's own position
         // only matters before the map has reported a projection at all.
         val frameMoved = current == null || viewportMoved(current, viewport) ||
             (viewport == null && anchor != null && !current.contains(anchor.lat, anchor.lon))
+        if(!frameMoved && bitmap!=null && paintedPaths==paths && colour==color) {
+            lastUpdateRebuilt=false
+            return bitmap
+        }
+        colour=color
+        // Someone who has not walked anywhere yet still has unknown ground in front of them, so the
+        // veil is drawn all black rather than not drawn at all. Skipping it entirely is what showed
+        // a brand-new person the whole basemap on the first screen. The skip also requires that the
+        // image does not currently show a corridor: with no paths, an image that has one is wrong.
+        if (!walked && !frameMoved && bitmap != null && !paintedCorridor) return bitmap
         val next = if (!frameMoved && current != null) current
             else TrailPaint.frameFor(viewport, paths.flatten(), anchor) ?: return bitmap
         frame = next
@@ -241,7 +280,12 @@ internal class TrailPainter {
         bitmap = target
         val canvas = Canvas(target)
         canvas.drawRect(0f, 0f, next.widthPx.toFloat(), next.heightPx.toFloat(), fog)
-        strokeAll(canvas, next, segmentsIn(paths, next))
+        val segments = segmentsIn(paths, next)
+        // Recorded from the geometry actually stroked, so the skip above can never keep an image
+        // whose corridor has since stopped being justified.
+        paintedCorridor = segments.isNotEmpty() && TrailPaint.corridorVisible(next)
+        strokeAll(canvas, next, segments)
+        paintedPaths=paths
         revision++
         return target
     }
@@ -265,6 +309,8 @@ internal class TrailPainter {
         frame = null
         bitmap = null
         scratch = null
+        paintedCorridor = false
+        paintedPaths=null
         revision++
     }
 
@@ -272,6 +318,8 @@ internal class TrailPainter {
         bitmap = null
         scratch = null
         frame = null
+        paintedCorridor = false
+        paintedPaths=null
     }
 
     /**
@@ -300,16 +348,7 @@ internal class TrailPainter {
             }
         }
         for (path in paths) {
-            if (path.isEmpty()) continue
-            if (path.size == 1) {
-                // A lone fix is still ground: it gets the corridor as a dot.
-                val p = path[0]
-                if (p.lat.isFinite() && p.lon.isFinite() && target.contains(p.lat, p.lon)) {
-                    val x = target.pixelX(p.lon); val y = target.pixelY(p.lat)
-                    if (seen.add(keyOf(x, y, x, y))) out.add(floatArrayOf(x, y, x, y))
-                }
-                continue
-            }
+            if (!RecordedTrail.visible(path)) continue
             for (index in 1 until path.size) {
                 val a = path[index - 1]
                 val b = path[index]
@@ -334,9 +373,15 @@ internal class TrailPainter {
      */
     private fun strokeAll(canvas: Canvas, target: PaintFrame, segments: List<FloatArray>) {
         if (segments.isEmpty()) return
+        // No corridor rather than a false one: see corridorVisible. Widening it to keep something
+        // visible is what reported thirty kilometres of never-walked ground as explored.
+        if (!TrailPaint.corridorVisible(target)) return
         val perMetre = pixelsPerMeter(target)
-        val core = (TrailPaint.CORRIDOR_M * perMetre).toFloat().coerceAtLeast(2f)
-        val feather = (TrailPaint.FEATHER_M * perMetre).toFloat().coerceAtLeast(1f)
+        // At this point the corridor is at least NETWORK_BELOW_PX pixels wide by definition, so the
+        // old two pixel floor would have been a no-op; it is gone from the width and from the
+        // feather, which is what used to inflate the reveal on wide frames.
+        val core = (TrailPaint.CORRIDOR_M * perMetre).toFloat()
+        val feather = (TrailPaint.FEATHER_M * perMetre).toFloat().coerceAtLeast(0.5f)
         val veilAlpha = (TrailPaint.FOG_COLOR ushr 24).toFloat()
         paint.color = TrailPaint.FOG_COLOR or (0xFF shl 24)
         ringsFor(feather).forEach { ring ->

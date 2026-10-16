@@ -1,0 +1,73 @@
+{
+  "passed": true,
+  "serial": "emulator-5556",
+  "avd": "WalkPaint_Google_API36",
+  "test_apk_sha256": "854e4f06d71963024f65ebe7319e094f2b2dfc4e7c2cbaaf015a8c950f0005cb",
+  "installed_apk_sha256": "b8aa5e7479a925e109dc2e544ee186c5acd7addfd575be6e2cf64c2a80e4c5a2",
+  "ui_state": {
+    "days": {
+      "2026-10-13": 7
+    },
+    "today": "2026-10-13",
+    "automatic_enabled": true,
+    "appearance_mode": 0,
+    "installed_apk_sha256": "b8aa5e7479a925e109dc2e544ee186c5acd7addfd575be6e2cf64c2a80e4c5a2"
+  },
+  "runtime": {
+    "apk_sha256": "b8aa5e7479a925e109dc2e544ee186c5acd7addfd575be6e2cf64c2a80e4c5a2",
+    "engine": "amap",
+    "map_loaded": true,
+    "mapped_libraries": [
+      "lib/arm64-v8a/libAMapSDK_MAP_v11_3_100.so"
+    ],
+    "phone_path": "not_verified",
+    "coordinate_roundtrip_max_metres": 1.7529707657116463e-05
+  },
+  "data_before": {
+    "trips": {
+      "count": 1,
+      "sha256": "346ae30c184b701e2aa08a981a19518c30b74c291c73f7efb8100ff9588d1ae0"
+    },
+    "points": {
+      "count": 7,
+      "sha256": "b2dfb1d43c19413cb01f553da19c94ca0693fc576af0a21d1f143535f6bd00a7"
+    },
+    "roads": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "road_matches": {
+      "count": 6,
+      "sha256": "52c9594849539336a286760917a1ff0b4b7fae19d6a9e5208a4f6fad4e315552"
+    },
+    "coverage": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "data_after": {
+    "trips": {
+      "count": 1,
+      "sha256": "346ae30c184b701e2aa08a981a19518c30b74c291c73f7efb8100ff9588d1ae0"
+    },
+    "points": {
+      "count": 7,
+      "sha256": "b2dfb1d43c19413cb01f553da19c94ca0693fc576af0a21d1f143535f6bd00a7"
+    },
+    "roads": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "road_matches": {
+      "count": 6,
+      "sha256": "52c9594849539336a286760917a1ff0b4b7fae19d6a9e5208a4f6fad4e315552"
+    },
+    "coverage": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "all_rows_preserved": true,
+  "phone_path": "not_verified",
+  "production_apk_reinstalled": false
+}

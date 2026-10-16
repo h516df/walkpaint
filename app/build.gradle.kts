@@ -10,6 +10,9 @@ rootProject.file("local.properties").takeIf { it.isFile }?.inputStream()?.use { 
 val amapKey = (mapProperties.getProperty("walkpaintAmapKey")
     ?: providers.gradleProperty("walkpaintAmapKey").orNull).orEmpty().trim()
 require(amapKey.matches(Regex("[A-Za-z0-9]*"))) { "Invalid AMap Android Key" }
+val arm64Only = providers.gradleProperty("walkpaintArm64Only").orNull == "true"
+// A clean public checkout can build an isolated debug app without the official private key.
+val developerBuild = providers.gradleProperty("walkpaintDeveloperBuild").orNull == "true"
 // Public GitHub App client id only. Never put a client secret or a PC token here.
 val updateClientId = (providers.gradleProperty("walkpaintUpdateClientId").orNull ?: "Iv23liQM3N2avCTc0QAd").trim()
 require(updateClientId.matches(Regex("[A-Za-z0-9.]*"))) { "Invalid public update client id" }
@@ -21,13 +24,14 @@ android {
         applicationId = "cn.walkpaint"
         minSdk = 26
         targetSdk = 36
-        versionCode = 42
-        versionName = "0.40"
+        versionCode = 62
+        versionName = "0.54"
         testInstrumentationRunner = "cn.walkpaint.RoadAcceptanceInstrumentation"
         // Optional phone-sized APK; the default universal debug APK remains emulator-compatible.
-        if (providers.gradleProperty("walkpaintArm64Only").orNull == "true") {
+        if (arm64Only) {
             ndk { abiFilters.add("arm64-v8a") }
         }
+        buildConfigField("boolean", "ARM64_ONLY", arm64Only.toString())
         buildConfigField("String", "AMAP_KEY", "\"$amapKey\"")
         buildConfigField("String", "UPDATE_CLIENT_ID", "\"$updateClientId\"")
         manifestPlaceholders["AMAP_API_KEY"] = amapKey
@@ -39,20 +43,27 @@ android {
     // Reuse the existing local debug certificate so v0.2 upgrades v0.1 without uninstalling.
     signingConfigs {
         getByName("debug") {
-            val existing = rootProject.file("${System.getProperty("user.home")}/.android/debug.keystore")
-            require(existing.isFile) { "Original WalkPaint signing certificate is missing; refusing an incompatible update" }
-            run {
+            if (!developerBuild) {
+                val existing = rootProject.file("${System.getProperty("user.home")}/.android/debug.keystore")
+                require(existing.isFile) { "Original WalkPaint signing certificate is missing; refusing an incompatible update" }
                 storeFile = existing
                 storePassword = "android"
                 keyAlias = "androiddebugkey"
                 keyPassword = "android"
+                // OEM installers may inspect the JAR certificate before platform verification.
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
             }
         }
     }
     buildTypes {
+        getByName("debug") {
+            if (developerBuild) applicationIdSuffix = ".dev"
+        }
         getByName("release") {
             // Preserve the identity of every distributed version, without a debuggable release.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (developerBuild) null else signingConfigs.getByName("debug")
         }
     }
     buildFeatures { compose = true; buildConfig = true }

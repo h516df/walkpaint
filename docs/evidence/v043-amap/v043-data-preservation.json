@@ -1,0 +1,52 @@
+{
+  "version": "0.43",
+  "code": 45,
+  "apk_sha256": "b8aa5e7479a925e109dc2e544ee186c5acd7addfd575be6e2cf64c2a80e4c5a2",
+  "before": {
+    "trips": {
+      "count": 7,
+      "sha256": "fac15929bd14c0f7df6d4cc83446c2178115804d5c0c031e3630f2be8599a886"
+    },
+    "points": {
+      "count": 4865,
+      "sha256": "f86502de303445d4b604d2395c4c760f3f1962ca3c4d8f191fb8d93f8ab91df5"
+    },
+    "roads": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "road_matches": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "coverage": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "after": {
+    "trips": {
+      "count": 7,
+      "sha256": "fac15929bd14c0f7df6d4cc83446c2178115804d5c0c031e3630f2be8599a886"
+    },
+    "points": {
+      "count": 4865,
+      "sha256": "f86502de303445d4b604d2395c4c760f3f1962ca3c4d8f191fb8d93f8ab91df5"
+    },
+    "roads": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "road_matches": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "coverage": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "all_five_tables_unchanged": true,
+  "uninstalled": false,
+  "cleared_data": false
+}

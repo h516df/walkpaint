@@ -57,7 +57,7 @@ internal object RecordingDiagnostics {
         }
     }
 
-    fun event(context: Context, kind: String, reason: String, gap: Long? = null, occurredAt: Long = System.currentTimeMillis()) {
+    fun event(context: Context, kind: String, reason: String, gap: Long? = null, occurredAt: Long = System.currentTimeMillis(), count: Int = 1) {
         val application = context.applicationContext
         val at = occurredAt
         // Mirrored into the in-memory field recorder, so an export carries the whole timeline
@@ -65,7 +65,7 @@ internal object RecordingDiagnostics {
         FieldRecorder.event(at, kind, reason)
         writer.execute {
             synchronized(lock) {
-                val immediate = state(application).record(kind, reason, at, gap)
+                val immediate = state(application).record(kind, reason, at, gap, count)
                 ProblemCode.fromRecording(kind,reason,gap)?.let { historyState(application).record(it,at,System.currentTimeMillis()) }
                 if (immediate) {
                     scheduledFlush?.cancel(false)
@@ -124,7 +124,10 @@ internal object RecordingDiagnostics {
             startedAt=at("service_start_at"),callbackAt=at("gps_callback_at"),validAt=at("valid_gps_at"),
             savedAt=maxOf(AmbientTracking.lastSaved,at("saved_at")),
             filterAt=at("filtered_at"),filter=values["filter_reason"] as? String ?: "",
-            failureAt=at("failure_at"),failure=values["failure_reason"] as? String ?: "",databaseError=databaseError)
+            failureAt=at("failure_at"),failure=values["failure_reason"] as? String ?: "",databaseError=databaseError,
+            receiptClock=true,startAgeMs=GpsReceipts.age(GpsReceipts.started,android.os.SystemClock.elapsedRealtime()),
+            callbackAgeMs=GpsReceipts.age(GpsReceipts.continuous,android.os.SystemClock.elapsedRealtime()),
+            validAgeMs=GpsReceipts.age(GpsReceipts.valid,android.os.SystemClock.elapsedRealtime()))
     }
 
     fun summary(context: Context): String {
@@ -141,7 +144,9 @@ internal object RecordingDiagnostics {
             "服务启动：${age("service_start_at")} · 累计 ${long("start_count")} 次",
             "服务心跳：${age("heartbeat_at")}（仅进程活性）",
             "GPS 注册：${age("registration_at")} · ${string("registration")}",
-            "本次服务：GPS回调 ${long("session_gps_count")} / 有效GPS ${long("session_valid_gps_count")} / 已入库 ${long("session_saved_count")} / 过滤 ${long("session_filtered_count")}",
+            "本次服务：持续GPS回调 ${long("session_gps_count")} / 有效GPS ${long("session_valid_gps_count")} / 已入库 ${long("session_saved_count")} / 过滤 ${long("session_filtered_count")}",
+            "等待移动确认：${long("session_pending_count")} 次暂缓决定（可能随后随批入库，不是丢点统计）",
+            "本次独立探测：${long("session_probe_start_count")} 次 / 新鲜回调 ${long("session_probe_fix_count")}；${string("probe_result")}（一次定位不代表持续恢复）",
             GpsFilterDiagnostics.session(values),
             GpsFilterDiagnostics.recent(recent.entries, recent.enabled, recent.saveFailed, now),
             "系统GPS/订阅：${string("provider_state")} · ${age("provider_at")}（订阅成功不代表已定位）",
@@ -156,7 +161,7 @@ internal object RecordingDiagnostics {
             "回调断档 >45秒：${long("gap_count")} 次 · 最近 ${long("last_gap_ms") / 1000} 秒 · 最长 ${long("max_gap_ms") / 1000} 秒",
             "服务停止：${string("stop_reason")} · ${age("service_stop_at")}",
             "最近恢复：${string("recovery_reason")} · ${age("recovery_at")}",
-            "系统进程退出：${string("process_exit_reason")} · ${age("process_exit_at")}（系统原因码，不推断厂商策略）",
+            "${if(long("process_exit_at")>0 && long("process_exit_verified_at")==long("process_exit_at")) "本应用记录进程退出" else "历史退出线索（进程归属未知）"}：${string("process_exit_reason")} · ${age("process_exit_at")}（${if(string("process_exit_reason")=="ANDROID_REASON_10") "REASON_USER_REQUESTED；系统记录的用户请求类退出，不据此归因操作或厂商" else "仅系统原因码"}）",
             "屏幕/省电/待机：${string("power_state")} · ${age("power_at")}",
             "最近事件：${string("last_event")}",
             "诊断保存：${if (failed) "写入失败，等待重试" else "正常"}",

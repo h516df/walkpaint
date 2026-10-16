@@ -1,0 +1,17 @@
+{
+  "apk_sha256": "2089cbdb54691f1b16324e2dde6e9cde42bd2f68fc03d628b59ac03e23c0841f",
+  "serial": "emulator-5560",
+  "phone_path": "not_verified",
+  "passed": true,
+  "facts": {
+    "start_zoom": 17,
+    "four_out_zoom": 13,
+    "four_in_zoom": 17,
+    "gap_ms": 45,
+    "actual_sdk": true,
+    "rapid_mixed_zoom": 17,
+    "max_zoom": 20,
+    "one_out_after_max": 19,
+    "centre_shift_metres": 0.11438786840082997
+  }
+}

@@ -17,11 +17,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
 import java.util.Locale
 
 internal fun exploredDistance(meters: Double): String = if(meters < 1000)
@@ -33,57 +36,70 @@ internal fun AppShell(
     automatic: Boolean, running: Boolean, trackingStatus: String, recordingTitle: String,
     recordingHealthy: Boolean, profileNotice: String?, onResolveTracking: () -> Unit, mapNotice: String?, selectedDay: String?, mapRoadState: RoadState,
     dailyRoads: Map<String,RoadState>, roadAreaHint: String, onShowAll: () -> Unit,
-    needsBackground: Boolean, onLocate: () -> Unit, onToggleTracking: (Boolean) -> Unit,
+    needsBackground: Boolean, onLocate: () -> Unit, onZoom: (Int) -> Unit, onToggleTracking: (Boolean) -> Unit,
     onDemo: () -> Unit, onTrip: (Track) -> Unit, onExport: () -> Unit, onImport: () -> Unit,
     onBackgroundSettings: () -> Unit, onPowerSettings: () -> Unit, onRevoke: () -> Unit,
     onCopyDiagnostics: () -> Unit, internalBackupCount: Int, mapProviderLabel: String,
     onChooseAmap: () -> Unit, onOnlineMap: () -> Unit, roadState: RoadState,
     onRoadPack: () -> Unit, roadColor:Int, onRoadAppearance:()->Unit,
+    appearanceMode:Int, onAppearanceMode:(Int)->Unit, onShowIntro:()->Unit,
     feedbackContent: @Composable (onBack:()->Unit)->Unit,
-    updatesContent: @Composable (onBack:()->Unit)->Unit, mapContent: @Composable () -> Unit
+    updatesContent: @Composable (onBack:()->Unit)->Unit, mapContent: @Composable () -> Unit,
+    onBackupEntry:()->Unit={},onSkin:()->Unit={},onNotifications:()->Unit={},backupStatus:String?=null
 ) {
-    // The share is anchored to the last place the person was, so the number carries a name instead
-    // of being an abstract count of cells.
-    val lastPoint=state.realTracks.lastOrNull()?.points?.lastOrNull()
-    val anchorLat=fix?.latitude ?: lastPoint?.lat
-    val anchorLon=fix?.longitude ?: lastPoint?.lon
-    val share=remember(state,anchorLat,anchorLon) {
-        if(anchorLat==null||anchorLon==null) PlaceShare(0,0,0)
-        else PlaceProgress.of(state,anchorLat,anchorLon)
-    }
-    val explored=remember(state) {
-        Explorer.of(state,java.time.LocalDate.now().atStartOfDay(java.time.ZoneId.systemDefault())
-            .toInstant().toEpochMilli())
-    }
-    Scaffold(containerColor=PageBackground, bottomBar={
-        Surface(color=PageBackground.copy(alpha=0.98f)) {
-            Row(Modifier.fillMaxWidth().navigationBarsPadding().height(58.dp)) {
-                listOf("地图","足迹","我的").forEachIndexed { index,label ->
-                    val chosen=index==selectedTab
-                    Column(Modifier.weight(1f).fillMaxHeight().clickable { onTab(index) },
-                        horizontalAlignment=Alignment.CenterHorizontally,
-                        verticalArrangement=Arrangement.Center) {
-                        Icon(painterResource(when(index) { 0->R.drawable.ic_map;1->R.drawable.ic_route;else->R.drawable.ic_person }),
-                            contentDescription=label,tint=if(chosen) Accent else Muted,modifier=Modifier.size(22.dp))
-                        Spacer(Modifier.height(3.dp))
-                        Text(label,color=if(chosen) Accent else Muted,fontSize=11.sp,
-                            fontWeight=if(chosen) FontWeight.SemiBold else FontWeight.Normal)
-                    }
+    Box(Modifier.fillMaxSize().background(PageBackground)) {
+        // Keep the SDK and GL surface alive across bottom-tab journeys. Only the controls/pages
+        // change; disposing a map here recreated every texture, marker and history overlay.
+        Box(Modifier.fillMaxSize()) { mapContent() }
+        val body=if(selectedTab==0) Modifier.fillMaxSize()
+            else Modifier.fillMaxSize().background(PageBackground).pointerInput(Unit) {
+                // Participating in hit testing keeps touches off the lower map sibling.
+                // Do not consume the child scroll detector's events in the Final pass: that
+                // cancels scrolling and turns the end of a swipe into an accidental row click.
+                awaitPointerEventScope { while(true) awaitPointerEvent(PointerEventPass.Final) }
+            }
+        Box(body) {
+            when(selectedTab) {
+                0 -> DesignMapOverlay(state,selectedDay,automatic,recordingTitle,recordingHealthy,mapNotice,
+                    mapProviderLabel,{onTab(2)},onToggleTracking,onLocate,onShowAll,
+                    mapProviderLabel.contains("OpenFreeMap"),onZoom,{})
+                1 -> Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(bottom=76.dp)) {
+                    DesignTripsPage(state,roadColor,onTrip,onExport,onSkin)
+                }
+                else -> Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(bottom=76.dp)) {
+                    ProfilePage(state,appearanceMode,onAppearanceMode,onShowIntro,automatic,profileNotice,onResolveTracking,
+                    onToggleTracking,onRevoke,onBackgroundSettings,onPowerSettings,onCopyDiagnostics,
+                    roadState,roadAreaHint,onRoadPack,onExport,onImport,internalBackupCount,
+                    mapProviderLabel,onChooseAmap,onOnlineMap,roadColor,onRoadAppearance,feedbackContent,updatesContent,onBackupEntry,onSkin,onNotifications,backupStatus)
                 }
             }
         }
-    }) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
-            when(selectedTab) {
-                0 -> MapPage(mapNotice,selectedDay,onShowAll,onLocate,{onTab(2)},
-                    placeName ?: PlaceProgress.UNKNOWN_PLACE,share,!mapProviderLabel.contains("高德"),mapContent)
-                1 -> TripsPage(state,onTrip,placeName ?: PlaceProgress.UNKNOWN_PLACE,share,
-                    Explorer.streak(DailyFootprints.days(state).map { it.key },
-                        DailyFootprints.key(System.currentTimeMillis())))
-                else -> ProfilePage(automatic,profileNotice,onResolveTracking,
-                    onToggleTracking,onRevoke,onBackgroundSettings,onPowerSettings,onCopyDiagnostics,
-                    roadState,roadAreaHint,onRoadPack,onExport,onImport,internalBackupCount,
-                    mapProviderLabel,onChooseAmap,onOnlineMap,roadColor,onRoadAppearance,feedbackContent,updatesContent)
+        val mapChrome=selectedTab==0
+        val dock=if(mapChrome) androidx.compose.ui.graphics.Color(0xFF151B26) else Canvas
+        val dockInk=if(mapChrome) androidx.compose.ui.graphics.Color(0xFFB7C1D0) else Muted
+        val selectedInk=if(mapChrome) skinPalette(LocalVisualSkin.current,true).brand else Pigment
+        Surface(color=dock,modifier=Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+            Column(Modifier.navigationBarsPadding()) {
+                HorizontalDivider(color=if(mapChrome) androidx.compose.ui.graphics.Color(0xFF2A3342) else Line)
+                Row(Modifier.widthIn(max=520.dp).fillMaxWidth().align(Alignment.CenterHorizontally)
+                    .padding(horizontal=16.dp,vertical=10.dp),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                    val labels=listOf("探索","足迹","我的")
+                    val icons=listOf(R.drawable.ic_map,R.drawable.ic_route,R.drawable.ic_person)
+                    labels.forEachIndexed { index,label ->
+                        val active=selectedTab==index
+                        Surface(onClick={onTab(index)},color=if(active) selectedInk.copy(alpha=.12f) else
+                            androidx.compose.ui.graphics.Color.Transparent,shape=RoundedCornerShape(14.dp),
+                            modifier=Modifier.weight(1f).heightIn(min=48.dp).semantics { selected=active }) {
+                            Row(Modifier.padding(horizontal=6.dp,vertical=12.dp),verticalAlignment=Alignment.CenterVertically,
+                                horizontalArrangement=Arrangement.spacedBy(7.dp,Alignment.CenterHorizontally)) {
+                                Icon(painterResource(icons[index]),null,tint=if(active) selectedInk else dockInk,
+                                    modifier=Modifier.size(20.dp))
+                                Text(label,color=if(active) selectedInk else dockInk,fontSize=14.sp,
+                                    fontWeight=if(active) FontWeight.SemiBold else FontWeight.Normal)
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -129,11 +145,7 @@ private fun MapPage(notice: String?,day: String?,onShowAll: ()->Unit,onLocate: (
 
 @Composable
 private fun Heading(title:String,subtitle:String) {
-    Column(Modifier.padding(top=4.dp,bottom=18.dp)) {
-        Text(title,color=Ink,fontSize=TitleSize,fontWeight=FontWeight.Bold,letterSpacing=(-0.6).sp)
-        Spacer(Modifier.height(8.dp))
-        Text(subtitle,color=Muted,fontSize=CaptionSize,lineHeight=20.sp)
-    }
+    TrailHeader(title,subtitle)
 }
 
 /**
@@ -142,11 +154,11 @@ private fun Heading(title:String,subtitle:String) {
  */
 @Composable
 private fun Section(title:String,content:@Composable ColumnScope.()->Unit) {
-    Surface(color=Canvas,shape=CardShape,border=BorderStroke(1.dp,Line),shadowElevation=2.dp,
+    Surface(color=Canvas,shape=CardShape,border=BorderStroke(1.dp,Line),
         modifier=Modifier.fillMaxWidth()) {
-        Column(Modifier.fillMaxWidth().padding(20.dp)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Text(title,color=Ink,fontSize=SectionSize,fontWeight=FontWeight.SemiBold)
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(10.dp))
             content()
         }
     }
@@ -154,10 +166,10 @@ private fun Section(title:String,content:@Composable ColumnScope.()->Unit) {
 
 @Composable
 private fun SettingRow(title:String,detail:String="",onClick:()->Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick=onClick).heightIn(min=56.dp).padding(vertical=10.dp),
+    Row(Modifier.fillMaxWidth().clickable(onClick=onClick).heightIn(min=56.dp).padding(vertical=8.dp),
         verticalAlignment=Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(title,color=Ink,fontSize=BodySize,fontWeight=FontWeight.Medium)
+            Text(title,color=Ink,fontSize=BodySize,lineHeight=22.sp,fontWeight=FontWeight.Medium)
             if(detail.isNotEmpty()) { Spacer(Modifier.height(4.dp));Text(detail,color=Muted,fontSize=CaptionSize,lineHeight=18.sp) }
         }
         Text("›",color=Faint,fontSize=20.sp,modifier=Modifier.padding(start=12.dp))
@@ -228,7 +240,7 @@ private fun monthLabel(month:String):String = "${month.take(4)} 年 ${month.subs
  * from the calendar below it.
  */
 @Composable
-private fun RecapCard(month:Recap?,year:Recap?) {
+internal fun RecapCard(month:Recap?,year:Recap?) {
     if(month==null && year==null) return
     Section("回顾") {
         month?.let { RecapRow("本月", it) }
@@ -322,6 +334,7 @@ private fun DayRow(day:DailyFootprint,today:String,onTrip:(Track)->Unit) {
 /** Day, month and year, drilled one into the other. */
 private enum class CalendarMode { DAY, MONTH, YEAR }
 
+@Composable
 private fun heatFill(level:Int) = when {
     level<0 -> androidx.compose.ui.graphics.Color.Transparent
     level==0 -> Line
@@ -329,6 +342,7 @@ private fun heatFill(level:Int) = when {
 }
 
 /** White text only where the tint is dark enough to need it. */
+@Composable
 private fun heatInk(level:Int) = if(level>=3) androidx.compose.ui.graphics.Color.White else Ink
 
 /**
@@ -340,7 +354,7 @@ private fun heatInk(level:Int) = if(level>=3) androidx.compose.ui.graphics.Color
  * share [YearHeatmap] banding, so a shade means the same thing wherever you are.
  */
 @Composable
-private fun FootprintCalendar(days:List<DailyFootprint>,todayKey:String,onTrip:(Track)->Unit) {
+internal fun FootprintCalendar(days:List<DailyFootprint>,todayKey:String,onTrip:(Track)->Unit) {
     val today=remember { java.time.LocalDate.now() }
     val byKey=remember(days) { days.associateBy { it.key } }
     val meters=remember(days) { byKey.mapValues { it.value.meters } }
@@ -367,7 +381,8 @@ private fun FootprintCalendar(days:List<DailyFootprint>,todayKey:String,onTrip:(
             CalendarMode.YEAR -> YearStrip(today,meters) { date ->
                 monthKey=date.toString().take(7); modeName=CalendarMode.MONTH.name }
             CalendarMode.MONTH -> MonthPage(monthKey,today,meters,byKey,dayKey,
-                onShiftMonth={ monthKey=it }, onPickDay={ dayKey=it; modeName=CalendarMode.DAY.name })
+                onShiftMonth={ monthKey=it }, onPickDay={ dayKey=it; modeName=CalendarMode.DAY.name
+                    byKey[it]?.let { selected -> onTrip(selected.focusTrack()) } })
             CalendarMode.DAY -> DayPage(dayKey,byKey,today,todayKey,onTrip)
         }
     }
@@ -432,22 +447,29 @@ private fun MonthPage(monthKey:String,today:java.time.LocalDate,meters:Map<Strin
                         if(cell!=null) {
                             val key=cell.date.toString()
                             val hasData=byKey.containsKey(key)
-                            Box(Modifier.fillMaxWidth().aspectRatio(1f)
-                                .background(heatFill(cell.level),RoundedCornerShape(9.dp))
+                            Column(Modifier.fillMaxWidth().heightIn(min=48.dp)
                                 .then(if(hasData) Modifier.clickable { onPickDay(key) } else Modifier),
-                                contentAlignment=Alignment.Center) {
+                                horizontalAlignment=Alignment.CenterHorizontally,
+                                verticalArrangement=Arrangement.Center) {
+                                val isToday=cell.date==today
+                                Box(Modifier.size(30.dp).then(if(isToday) Modifier.border(
+                                    1.dp,Pigment,CircleShape) else Modifier),contentAlignment=Alignment.Center) {
                                 Text(cell.date.dayOfMonth.toString(),
-                                    color=if(hasData) heatInk(cell.level) else Faint,
-                                    fontSize=CaptionSize,
-                                    fontWeight=if(key==selectedKey) FontWeight.Bold else FontWeight.Normal)
+                                    color=if(hasData || isToday) Ink else Muted,
+                                    fontSize=14.sp,fontFamily=androidx.compose.ui.text.font.FontFamily.SansSerif,
+                                    fontWeight=if(key==selectedKey) FontWeight.SemiBold else FontWeight.Normal)
+                                }
+                                Spacer(Modifier.height(2.dp))
+                                Box(Modifier.height(4.dp).width((6+4*cell.level.coerceIn(0,3)).dp)
+                                    .background(if(hasData) Pigment else androidx.compose.ui.graphics.Color.Transparent,CircleShape))
                             }
-                        } else Box(Modifier.fillMaxWidth().aspectRatio(1f))
+                        } else Box(Modifier.fillMaxWidth().heightIn(min=48.dp))
                     }
                 }
             }
         }
         Spacer(Modifier.height(10.dp))
-        Text("颜色越深，那天走得越多",color=Muted,fontSize=MicroSize)
+        Text("短横线标记有足迹的日子，点日期查看路线",color=Muted,fontSize=MicroSize)
     }
 }
 
@@ -456,6 +478,8 @@ private fun MonthPage(monthKey:String,today:java.time.LocalDate,meters:Map<Strin
 private fun DayPage(dayKey:String,byKey:Map<String,DailyFootprint>,today:java.time.LocalDate,
     todayKey:String,onTrip:(Track)->Unit) {
     val day=byKey[dayKey]
+    val integrity=remember(day) { TrailIntegrity.of(day?.tracks.orEmpty()) }
+    var showIntegrity by remember(dayKey) { mutableStateOf(false) }
     val hours=remember(dayKey) { YearHeatmap.hourStrip(day?.tracks.orEmpty()) }
     val peak=hours.maxOrNull() ?: 0.0
     Column {
@@ -481,7 +505,11 @@ private fun DayPage(dayKey:String,byKey:Map<String,DailyFootprint>,today:java.ti
             }
         }
         Spacer(Modifier.height(10.dp))
-        if(day!=null) SettingRow("在地图上查看这一天",onClick={ onTrip(day.focusTrack()) })
+        if(day!=null) SettingRow("查看当天足迹",onClick={ onTrip(day.focusTrack()) })
+        if(day!=null) {
+            TextButton(onClick={showIntegrity=!showIntegrity}) { Text(if(showIntegrity) "收起记录完整性" else "记录完整性") }
+            if(showIntegrity) Text(integrity.report(),color=Muted,fontSize=CaptionSize,lineHeight=20.sp)
+        }
     }
 }
 
@@ -495,69 +523,88 @@ private fun hourRange(hours:List<Double>):String {
 private val ExploredRoadColor=androidx.compose.ui.graphics.Color(ExploredRoadArgb)
 
 @Composable
-private fun ProfilePage(automatic:Boolean,notice:String?,onResolve:()->Unit,
+private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(Int)->Unit,onShowIntro:()->Unit,automatic:Boolean,notice:String?,onResolve:()->Unit,
     onToggle:(Boolean)->Unit,onRevoke:()->Unit,onPermissions:()->Unit,onPower:()->Unit,onDiagnostics:()->Unit,
     roads:RoadState,areaHint:String,onRoadPack:()->Unit,onExport:()->Unit,onImport:()->Unit,backupCount:Int,
     provider:String,onAmap:()->Unit,onOnline:()->Unit,roadColor:Int,onAppearance:()->Unit,
     feedbackContent: @Composable (onBack:()->Unit)->Unit,
-    updatesContent: @Composable (onBack:()->Unit)->Unit) {
+    updatesContent: @Composable (onBack:()->Unit)->Unit,onBackupEntry:()->Unit,onSkin:()->Unit,onNotifications:()->Unit,backupStatus:String?) {
     var page by rememberSaveable { mutableStateOf("我的") }
     var revokeConfirm by rememberSaveable { mutableStateOf(false) }
-    if(page=="问题反馈") { feedbackContent { page="更多设置" };return }
-    if(page=="检查更新") { updatesContent { page="更多设置" };return }
+    if(page=="问题反馈") { feedbackContent { page="我的" };return }
+    if(page=="检查更新") { updatesContent { page="我的" };return }
     BackHandler(enabled=page!="我的") { page=if(page=="更多设置") "我的" else "更多设置" }
-    LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
-        if(page!="我的") item {
-            TextButton(onClick={ page=if(page=="更多设置") "我的" else "更多设置" }) { Text("返回") }
-        }
-        item { Heading(page,if(page=="我的") "放心探索，足迹由自己保管。" else "按需设置，历史足迹始终保留。") }
+    LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(horizontal=20.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+        item { TrailHeader(page,if(page=="我的") "你的探索记录，都在这部手机里。" else "历史足迹始终保留。",
+            onBack=if(page=="我的") null else ({page=if(page=="更多设置") "我的" else "更多设置"})) }
         when(page) {
             "我的" -> {
-                item { Section("自动记录") {
-                    Row(Modifier.fillMaxWidth().heightIn(min=56.dp),verticalAlignment=Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(if(automatic) "已开启" else "未开启",color=Ink,fontSize=16.sp,fontWeight=FontWeight.Medium)
-                            Spacer(Modifier.height(6.dp))
-                            Text("开启后，步行、骑行和驾车都会记录足迹",color=Muted,fontSize=13.sp,lineHeight=20.sp)
+                item { SkinHero(exploredDistance(state.totalMeters),"${state.dayCount}",onSkin) }
+                item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                    Surface(onClick=onSkin,color=Canvas,shape=RoundedCornerShape(16.dp),
+                        modifier=Modifier.weight(1f)) {
+                        Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                            Icon(painterResource(R.drawable.ic_paint),null,tint=Pigment,modifier=Modifier.size(23.dp))
+                            Text("主图皮肤",color=Ink,fontSize=15.sp,fontWeight=FontWeight.Medium)
+                            Text(LocalVisualSkin.current.label,color=Muted,fontSize=12.sp)
+                        }
+                    }
+                    Surface(onClick=onAppearance,color=Canvas,shape=RoundedCornerShape(16.dp),
+                        modifier=Modifier.weight(1f)) {
+                        Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                            Box(Modifier.size(23.dp).background(androidx.compose.ui.graphics.Color(roadColor),CircleShape))
+                            Text("足迹颜色",color=Ink,fontSize=15.sp,fontWeight=FontWeight.Medium)
+                            Text(RoadPaintColor.name(roadColor),color=Muted,fontSize=12.sp)
+                        }
+                    }
+                } }
+                item { TrailPanel(spacing=0.dp) {
+                    Row(Modifier.fillMaxWidth().heightIn(min=64.dp),verticalAlignment=Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                            Text("自动记录",color=Ink,fontSize=16.sp,fontWeight=FontWeight.Medium)
+                            Text(if(automatic) "已开启，定位状态请查看下方" else "已暂停，历史足迹保留",
+                                color=Muted,fontSize=13.sp,lineHeight=19.sp)
                         }
                         Switch(checked=automatic,onCheckedChange=onToggle,
                             modifier=Modifier.semantics { contentDescription="自动记录" })
                     }
-                    if(automatic && notice!=null) SettingRow(notice,"去解决",onResolve)
-                    else if(automatic) {
-                        Spacer(Modifier.height(4.dp))
-                        Row(verticalAlignment=Alignment.CenterVertically) {
-                            Box(Modifier.size(8.dp).background(Pigment,CircleShape))
-                            Spacer(Modifier.width(8.dp))
-                            Text("记录中，不用管它",color=Muted,fontSize=CaptionSize)
-                        }
-                    }
+                    HorizontalDivider(color=Line)
+                    SettingRow("定位与记录状态",notice ?: if(automatic) "查看当前定位、记录与恢复情况" else "已暂停记录",onDiagnostics)
+                    HorizontalDivider(color=Line)
+                    SettingRow("隐藏记录通知","前往系统设置关闭显示，自动记录保持开启",onNotifications)
+                    HorizontalDivider(color=Line)
+                    AppearanceSelector(appearanceMode,onAppearanceMode)
+                    HorizontalDivider(color=Line)
+                    SettingRow("备份与数据","导出备份、恢复足迹") { onBackupEntry();page="备份与恢复" }
                 } }
-                // One screen, one switch and the colour. The first screen answers "is it recording,
-                // and what colour is my ground"; everything else moved into 更多设置, where the
-                // entries are no longer listed twice.
-                item { Section("偏好") {
-                    SettingRow("涂色颜色",RoadPaintColor.name(roadColor),onAppearance)
-                    SettingRow("更多设置","备份、隐私、地图、诊断与关于") { page="更多设置" }
+                item { TrailSectionLabel("帮助与管理") }
+                item { TrailPanel(spacing=0.dp) {
+                    SettingRow("问题反馈","定位短测、记录状态与反馈") { page="问题反馈" }
+                    HorizontalDivider(color=Line)
+                    SettingRow("检查更新","当前版本 ${BuildConfig.VERSION_NAME}") { page="检查更新" }
+                    HorizontalDivider(color=Line)
+                    SettingRow("更多设置","权限、隐私与使用说明") { page="更多设置" }
                 } }
-                item { Text("足迹涂色  ${BuildConfig.VERSION_NAME}",color=Muted,fontSize=12.sp,modifier=Modifier.padding(vertical=8.dp)) }
+                item { Text("足迹涂色  ${BuildConfig.VERSION_NAME}",color=Muted,fontSize=12.sp,
+                    modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),textAlign=TextAlign.Center) }
             }
             "更多设置" -> item { Section("设置") {
-                SettingRow("备份与恢复","保存或找回你的足迹") { page="备份与恢复" }
+                SettingRow("备份与恢复","保存或找回你的足迹") { onBackupEntry();page="备份与恢复" }
                 SettingRow("隐私与权限","管理授权与后台运行") { page="隐私与权限" }
-                SettingRow("检查更新","当前版本 ${BuildConfig.VERSION_NAME}") { page="检查更新" }
-                // The full page, not only the read-only dialog: this is where a problem is described,
-                // where the same diagnosis is previewed, and where the raw field material — the fixes
-                // themselves, the dropped ones and why — is exported. The dialog stays for anyone who
-                // only wants the text to copy.
-                SettingRow("诊断与反馈","预览报告，或导出记录现场") { page="问题反馈" }
                 SettingRow("完整诊断文本","原始计数与道路复算，可复制",onDiagnostics)
+                Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                    listOf("跟随系统","浅色","深色").forEachIndexed { mode,label ->
+                        FilterChip(selected=appearanceMode==mode,onClick={onAppearanceMode(mode)},label={Text(label)})
+                    }
+                }
+                SettingRow("首次使用引导","查看自动记录与隐私说明",onShowIntro)
                 SettingRow("关于","版本与地图来源") { page="关于" }
             } }
             "备份与恢复" -> item { Section("保护足迹") {
                 SettingRow("导出备份","保存到你选择的位置",onExport)
                 SettingRow("恢复备份","合并已有数据，不清空历史足迹",onImport)
                 Text("本机自动快照 $backupCount 份，建议定期导出备份。",color=Muted,fontSize=13.sp,lineHeight=20.sp)
+                backupStatus?.let {Text(it,color=Muted,fontSize=13.sp,lineHeight=20.sp)}
             } }
             "隐私与权限" -> {
                 item { Section("记录授权") {

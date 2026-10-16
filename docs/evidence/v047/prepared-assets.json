@@ -1,0 +1,18 @@
+{
+  "WalkPaint-v0.47-arm64-debug.apk": {
+    "size": 65971887,
+    "sha256": "92c8ef5ab682ee889e3475def1b8dc44828a2d210c084f7b6447e7d44da4597a"
+  },
+  "WalkPaint-v0.47-arm64.apk": {
+    "size": 65971887,
+    "sha256": "92c8ef5ab682ee889e3475def1b8dc44828a2d210c084f7b6447e7d44da4597a"
+  },
+  "WalkPaint-v0.47-release-notes.json": {
+    "size": 874,
+    "sha256": "763e2dbbd527e6ea02b6b08483ec1dcf49792780e16e3b9e51eeecb1324f434f"
+  },
+  "WalkPaint-v0.47-SHA256.txt": {
+    "size": 294,
+    "sha256": "452f140f953f6427f779145af51f6049f76c2cf433aa6fd2f2788f801edad189"
+  }
+}

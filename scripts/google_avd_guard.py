@@ -7,13 +7,14 @@ import subprocess
 
 GOOGLE_SERIAL = "emulator-5556"
 GOOGLE_AVD_NAME = "WalkPaint_Google_API36"
+GOOGLE_AVDS = {GOOGLE_SERIAL: GOOGLE_AVD_NAME, "emulator-5560": "WalkPaint_Google_API36_V044"}
 
 
 def require_walkpaint_google_avd(adb, serial):
-    if serial != GOOGLE_SERIAL:
+    if serial not in GOOGLE_AVDS:
         raise RuntimeError(
             "Test device denied: use Google AVD emulator-5556; "
-            "personal MuMu and phones must never be test targets."
+            "personal MuMu and phones must never be test targets. Only the fixed dedicated pairs are allowed."
         )
     try:
         result = subprocess.run(
@@ -23,7 +24,7 @@ def require_walkpaint_google_avd(adb, serial):
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise RuntimeError("Google AVD identity unavailable; refusing tests") from exc
     lines = [line.strip() for line in result.stdout.splitlines()]
-    if result.returncode != 0 or GOOGLE_AVD_NAME not in lines:
+    if result.returncode != 0 or GOOGLE_AVDS[serial] not in lines:
         raise RuntimeError(
             "Expected dedicated WalkPaint_Google_API36 AVD, not another emulator; "
             "refusing any device changes"

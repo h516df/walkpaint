@@ -1,6 +1,7 @@
 package cn.walkpaint
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -13,6 +14,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import android.net.Uri
 import android.widget.Toast
@@ -61,18 +63,22 @@ import java.util.Locale
  * fog still covers the screen between redraws; this only keeps a long drag from redrawing the
  * whole history on every frame.
  */
-private const val VEIL_REFRESH_MS = 500L
+private const val VEIL_REFRESH_MS = 120L
 /** Shortest gap between two redraws once the map has settled; a redraw that lands inside it is
  * coalesced into one shortly afterwards rather than dropped, so the last view is always drawn. */
-private const val VEIL_REFRESH_SETTLE_MS = 350L
+private const val VEIL_REFRESH_SETTLE_MS = 100L
 
 /**
  * A viewport wider than this is not a view of the map; it is the engine before it is ready. It was
- * five degrees, which also threw away a legitimately wide zoom-out; sixty still catches the
- * whole-world region the engines report at launch, and a real view of the planet is not something
- * this app shows.
+ * five degrees, which also threw away a legitimately wide zoom-out; sixty still threw away a real
+ * wide zoom-out as well, and rejecting a view the person is actually looking at is worse than
+ * framing it: the veil then falls back to a person-centred frame that may not cover the screen, and
+ * the basemap shows around its edge. So the limit is now only wide enough to catch the degenerate
+ * whole-world region the engines report at launch, and the frame follows whatever real view it gets.
+ * A frame too coarse to draw the corridor no longer widens it (see TrailPaint.corridorVisible), so a
+ * wide view is safe to accept: it stays fully veiled and the walked route is drawn as a line.
  */
-private const val MAX_SANE_VIEW_DEGREES = 60.0
+private const val MAX_SANE_VIEW_DEGREES = 170.0
 
 /**
  * Shortest gap between two handovers of the veil image to the map.
@@ -87,28 +93,44 @@ private const val VEIL_HANDOVER_MS = 600L
 class MainActivity : ComponentActivity() {
     private val repository by lazy { (application as WalkPaintApp).repository }
     private var currentTab by mutableIntStateOf(0)
+    private var appearanceMode by mutableIntStateOf(0)
+    private var visualSkin by mutableStateOf(VisualSkin.CITY)
+    private var showSkinPicker by mutableStateOf(false)
+    private var showIntro by mutableStateOf(false)
     private val roadAppearance by lazy { RoadAppearance(this) }
     private var roadColor by mutableIntStateOf(ExploredRoadArgb)
     /** Name of the place the progress is measured around; null until resolved, never an error. */
     private var placeName by mutableStateOf<String?>(null)
     private var placeAnchor: TrackPoint? = null
+    private var placeRequestRevision = 0
 
     /**
      * Resolves the current place name, but only after moving far enough to matter. Geocoding on
      * every fix would hammer the service for a name that has not changed.
      */
     private fun refreshPlaceName(fix: Location?) {
+        if (!amapConsent || BuildConfig.AMAP_KEY.isBlank()) {
+            placeRequestRevision++
+            placeAnchor = null
+            placeName = null
+            return
+        }
         val last = snapshot.realTracks.lastOrNull()?.points?.lastOrNull()
         val lat = fix?.latitude ?: last?.lat ?: return
         val lon = fix?.longitude ?: last?.lon ?: return
         val anchor = TrackPoint(lat, lon, 0L, 5f)
         placeAnchor?.let { if (Geo.meters(it, anchor) < 500.0) return }
         placeAnchor = anchor
-        PlaceName.resolve(this, lat, lon) { name -> runOnUiThread { if (name != null) placeName = name } }
+        val requestRevision = ++placeRequestRevision
+        PlaceName.resolve(this, lat, lon) { name -> runOnUiThread {
+            if (amapConsent && requestRevision == placeRequestRevision && placeAnchor == anchor && name != null) placeName = name
+        } }
     }
     private var showRoadAppearance by mutableStateOf(false)
     private var retainedMapCamera:org.maplibre.android.camera.CameraPosition?=null
     private var snapshot by mutableStateOf(TrackState())
+    private var backupCount by mutableStateOf(0)
+    private var backupStatus by mutableStateOf<String?>(null)
     private var userFix by mutableStateOf<Location?>(null)
     private var trackingStatus by mutableStateOf("正在检查位置状态")
     private var recordingTitle by mutableStateOf("正在检查记录状态")
@@ -123,6 +145,7 @@ class MainActivity : ComponentActivity() {
     private var amapConsent by mutableStateOf(false)
     private var showAmapConsent by mutableStateOf(false)
     private val follow=MapFollowState()
+    private val fallbackZoomSteps=StepZoomTarget()
     private var activityResumed=false
     private var mapHeading=0f
     private var lastCameraPoint:TrackPoint?=null
@@ -131,14 +154,27 @@ class MainActivity : ComponentActivity() {
         { @Suppress("DEPRECATION") windowManager.defaultDisplay.rotation },
         { bearing -> mapHeading=bearing ?: 0f;syncFollowCamera() }) }
     private val amapController by lazy { AmapMapController(this,::pauseMapFollowing,
-        { syncFollowCamera(force=true) }, ::onMapCameraMoved, ::onMapCameraSettled) }
-    private val amapSupported get() = AmapPlatform.supported(Build.SUPPORTED_ABIS.toList())
+        { refreshVeilForViewport(force=true) }, ::onMapCameraMoved, ::onMapCameraSettled) }
+    private val amapSupported get() = AmapPlatform.supported(Build.SUPPORTED_ABIS.toList(), BuildConfig.ARM64_ONLY)
     private val amapActive get() = amapSupported && BuildConfig.AMAP_KEY.isNotBlank() && amapConsent
     private var showDiagnostics by mutableStateOf(false)
     private var diagnosticText by mutableStateOf("")
+    private var diagnosticFacts by mutableStateOf<DiagnosisFacts?>(null)
+    private var shortGpsText by mutableStateOf("")
+    private var shortGpsActive by mutableStateOf(false)
+    private var shortProbe:FreshGpsProbe?=null
+    private var shortGnss:android.location.GnssStatus.Callback?=null
+    private val finishShortGps=Runnable { stopShortGps("60秒短测完成") }
     private var feedbackHistory by mutableStateOf(RecordingDiagnostics.HistoryView(emptyList(),true,false))
     private var feedbackReport by mutableStateOf<String?>(null)
     private var feedbackBusy by mutableStateOf(false)
+    /**
+     * Sending this extra asks the app to write its field export to its own external directory.
+     *
+     * Only an explicit command triggers it — nothing in the app sends it — because the export
+     * contains the person's coordinates and must never leave the phone on its own.
+     */
+    private val EXTRA_EXPORT_FIELD_REPORT = "cn.walkpaint.extra.EXPORT_FIELD_REPORT"
     private var privateUpdateState by mutableStateOf(PrivateUpdateState())
     private val privateUpdater by lazy { PrivateUpdater(this) { privateUpdateState=it } }
     private val currentRelease by lazy {
@@ -148,7 +184,6 @@ class MainActivity : ComponentActivity() {
     private var showBackgroundPrompt by mutableStateOf(false)
     private var showFineSettings by mutableStateOf(false)
     private var backgroundDeferred = false
-    private var notificationAttempted = false
     private var profileNotice by mutableStateOf<String?>(null)
     private var pendingSettingsEnable = false
     private var pendingBackgroundSettings = false
@@ -169,6 +204,8 @@ class MainActivity : ComponentActivity() {
     private var boundaryCatalog: RoadCatalog?=null
     private var boundaryRoads: List<RoadSegment>?=null
     private fun clearDaySelection(showExtent: Boolean = true) {
+        fallbackZoomSteps.reset()
+        mapSceneGeneration++;pendingVeil=null;fogPaths=emptyList()
         selectedDay=null;pendingTripFocus=null;follow.locate();lastCameraPoint=null
         lastRevision=-1;updateUi()
         // "Back to all exploration" shows what has actually been explored. Following the person at
@@ -224,6 +261,7 @@ class MainActivity : ComponentActivity() {
     private var fogSourceRevision = -1
     /** The whole-history geometry the veil is drawn from, reused when only the view moves. */
     private var fogPaths: List<List<TrackPoint>> = emptyList()
+    private var mapSceneGeneration=0L
     /** What was last handed to the map, so an unchanged submission is skipped. */
     private var submittedRoadJson = ""
     private var submittedPaintedJson = ""
@@ -255,7 +293,11 @@ class MainActivity : ComponentActivity() {
     }
     private val refreshTask = object : Runnable {
         override fun run() {
+            if(!activityResumed) return
             updateUi()
+            backupCount=repository.backupCountCached
+            backupStatus=repository.backupStatus
+            shortGpsText=ShortGpsSurvey.report();shortGpsActive=ShortGpsSurvey.active()
             mainHandler.postDelayed(this, 2000L)
         }
     }
@@ -280,13 +322,6 @@ class MainActivity : ComponentActivity() {
             backgroundDeferred=!AmbientTracking.hasBackgroundLocation(this)
             if(backgroundDeferred) RecordingDiagnostics.problem(this,ProblemCode.PERMISSION_DENIED)
             if(pendingEnable) continueEnable()
-        }
-
-    private val notificationPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) {
-            if(!notificationsGranted()) RecordingDiagnostics.problem(this,ProblemCode.PERMISSION_DENIED)
-            if(pendingEnable) continueEnable()
-            updateUi()
         }
 
     private val permissionSettingsLauncher =
@@ -337,9 +372,8 @@ class MainActivity : ComponentActivity() {
         registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
             if (uri != null) Thread {
                 runCatching {
-                    val payload = repository.exportBackup().toByteArray(Charsets.UTF_8)
-                    contentResolver.openOutputStream(uri)?.use { it.write(payload) }
-                        ?: error("无法写入目标文件")
+                    val output=contentResolver.openOutputStream(uri) ?: error("无法写入目标文件")
+                    output.bufferedWriter(Charsets.UTF_8).use {repository.exportBackup(it)}
                 }.onSuccess { runOnUiThread { toast("足迹备份已保存，可放入云盘") } }
                     .onFailure { runOnUiThread { RecordingDiagnostics.problem(this,ProblemCode.BACKUP_FAILED);toast("导出失败：请检查目标位置或空间") } }
             }.start()
@@ -361,10 +395,10 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     repository.importBackup(memory.toString("UTF-8"))
-                }.onSuccess { count ->
+                }.onSuccess { result ->
                     runOnUiThread {
                         updateUi()
-                        toast("已合并 $count 条历史足迹，原数据未删除")
+                        toast(result.message())
                     }
                 }.onFailure { runOnUiThread { RecordingDiagnostics.problem(this,ProblemCode.BACKUP_FAILED);toast("无法导入，请确认是有效的足迹备份") } }
             }.start()
@@ -372,12 +406,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Local-only snapshot: legacy authorization cleanup must be reachable before any network request.
+        privateUpdateState=privateUpdater.snapshot()
         roadColor=roadAppearance.color
         pendingEnable = savedInstanceState?.getBoolean("pendingEnable") ?: false
         pendingSettingsEnable = savedInstanceState?.getBoolean("pendingSettingsEnable") ?: false
         pendingBackgroundSettings = savedInstanceState?.getBoolean("pendingBackgroundSettings") ?: false
         backgroundDeferred = savedInstanceState?.getBoolean("backgroundDeferred") ?: false
-        notificationAttempted = savedInstanceState?.getBoolean("notificationAttempted") ?: false
         confirmEnable = savedInstanceState?.getBoolean("confirmEnable") ?: false
         showBackgroundPrompt = savedInstanceState?.getBoolean("showBackgroundPrompt") ?: false
         showFineSettings = savedInstanceState?.getBoolean("showFineSettings") ?: false
@@ -388,13 +423,15 @@ class MainActivity : ComponentActivity() {
         showAmapConsent = amapSupported && BuildConfig.AMAP_KEY.isNotBlank() &&
             !amapConsent && !mapPref.getBoolean("amap_sdk_decision_seen", false)
         updateUi()
+        appearanceMode=getSharedPreferences("ui_appearance",Context.MODE_PRIVATE).getInt("mode",0).coerceIn(0,2)
+        visualSkin=VisualSkin.stored(getSharedPreferences("ui_appearance",Context.MODE_PRIVATE).getString("skin",null))
+        showIntro=!trackingEnabled && !mapPref.getBoolean("mobile_intro_seen",false)
         setContent {
-            WalkPaintTheme {
+            WalkPaintTheme(appearanceMode,currentTab==0,visualSkin) {
                 AppShell(
                     selectedTab = currentTab,
                     onTab = {
                         if(it!=2 && privateUpdateState.busy) privateUpdater.cancel()
-                        if(it==0 && currentTab!=0 && selectedDay==null) { follow.locate();lastCameraPoint=null }
                         currentTab=it;syncHeadingLifecycle()
                         // The veil is opaque now, so entering the map tab without one shows a map the
                         // person has not explored. The camera may not move at all on this switch, so
@@ -416,7 +453,19 @@ class MainActivity : ComponentActivity() {
                     mapRoadState = mapRoadState,
                     roadAreaHint = roadAreaHint,
                     onShowAll = { clearDaySelection() },
-                    onLocate = { clearDaySelection(showExtent=false); centerUser() },
+                    onLocate = {
+                        val anchor=MapHistory.anchor(mapTrackState,selectedDay)
+                        if(anchor!=null) focusCoordinate(anchor.lat,anchor.lon,17.0)
+                        else { clearDaySelection(showExtent=false);centerUser() }
+                    },
+                    onZoom = { delta ->
+                        pauseMapFollowing()
+                        if(amapActive) amapController.zoomBy(delta)
+                        else mapInstance?.let { map ->
+                            val target=fallbackZoomSteps.request(map.cameraPosition.zoom.toFloat(),delta,3f,20f)
+                            map.animateCamera(CameraUpdateFactory.zoomTo(target.toDouble()))
+                        }
+                    },
                     onToggleTracking = { requested ->
                         if (requested) beginEnable()
                         else {
@@ -434,8 +483,12 @@ class MainActivity : ComponentActivity() {
                         }.onFailure { toast("演示数据不可写入，请检查存储") }
                     },
                     onTrip = { trip ->
+                        fallbackZoomSteps.reset()
                         follow.history();syncHeadingLifecycle()
+                        mapSceneGeneration++;pendingVeil=null;fogPaths=emptyList()
                         selectedDay=DailyFootprints.key(trip.started)
+                        mapTrackState=DailyFootprints.select(snapshot,selectedDay)
+                        updateLocationLayer()
                         lastRevision=-1
                         val p = trip.points.lastOrNull()
                         if (p != null) {
@@ -457,8 +510,15 @@ class MainActivity : ComponentActivity() {
                     onPowerSettings = { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) },
                     onRevoke = { AmbientTracking.stop(this); updateUi() },
                     onCopyDiagnostics = { openRecordingDiagnostics() },
-                    internalBackupCount = repository.backupFiles().size,
+                    internalBackupCount = backupCount,
+                    backupStatus=backupStatus,
                     mapProviderLabel = if (amapActive) "高德联网地图" else if(onlineMap) "OpenFreeMap 联网备用地图" else "离线足迹视图",
+                    appearanceMode=appearanceMode,
+                    onAppearanceMode={ mode ->
+                        appearanceMode=mode
+                        getSharedPreferences("ui_appearance",Context.MODE_PRIVATE).edit().putInt("mode",mode).apply()
+                    },
+                    onShowIntro={showIntro=true},
                     roadColor = roadColor,
                     onRoadAppearance = { showRoadAppearance=true },
                     onChooseAmap = {
@@ -472,15 +532,30 @@ class MainActivity : ComponentActivity() {
                         onBack={feedbackReport=null;onBack()},onPreview=::prepareFeedback,
                         onClosePreview={feedbackReport=null},onCopy={copyFeedback()},onShare={shareFeedback()},
                         onCollection={RecordingDiagnostics.collectHistory(this,it)},
-                        onClear={RecordingDiagnostics.clearHistory(this)}) },
+                        onClear={RecordingDiagnostics.clearHistory(this)},gpsSurvey=shortGpsText,
+                        gpsSurveyActive=shortGpsActive,onGpsSurvey=::startShortGps) },
                     updatesContent = { onBack -> UpdatesPage(currentRelease,privateUpdateState,
                         { if(privateUpdateState.busy) privateUpdater.cancel();onBack() },::checkUpdates,
-                        { privateUpdater.authorize() },{ openUpdateBrowser(PrivateUpdatePolicy.VERIFY) },
                         { privateUpdater.download() },::installUpdate,{ privateUpdater.cancel() },
-                        { privateUpdater.logout() },{ openUpdateBrowser(UpdateDestination.URL) }) },
-                    mapContent = { if (amapActive) AmapNativeView() else NativeMapView() }
+                        { privateUpdater.logout() },{ openUpdateBrowser(UpdateDestination.URL) },
+                        { openUpdateBrowser("https://github.com/h516df/walkpaint#隐私与许可") }) },
+                    mapContent = { if (amapActive) AmapNativeView() else NativeMapView() },
+                    onSkin={showSkinPicker=true},
+                    onNotifications=::openRecordingNotificationSettings,
+                    onBackupEntry={ refreshExecutor.execute {
+                        val count=repository.refreshBackupCount()
+                        runOnUiThread { backupCount=count }
+                    } }
                 )
 
+                if(showSkinPicker) SkinPicker(visualSkin,{ skin ->
+                    visualSkin=skin
+                    appearanceMode=if(skin==VisualSkin.NIGHT) 2 else 0
+                    getSharedPreferences("ui_appearance",Context.MODE_PRIVATE).edit()
+                        .putString("skin",skin.id).putInt("mode",appearanceMode).apply()
+                    chooseRoadColor(skin.paint)
+                    showSkinPicker=false
+                },{showSkinPicker=false})
                 if(showRoadAppearance) RoadColorDialog(roadColor,::chooseRoadColor) { showRoadAppearance=false }
                 if(showOnlineConsent) AlertDialog(
                     onDismissRequest={ showOnlineConsent=false },
@@ -543,16 +618,9 @@ class MainActivity : ComponentActivity() {
                     dismissButton={ TextButton(onClick={ downloadArea=null }) { Text("暂不下载") } }
                 ) }
 
-                if (showDiagnostics) AlertDialog(
-                    onDismissRequest = { showDiagnostics = false },
-                    title = { Text("记录诊断 · 不含坐标") },
-                    text = { Column(Modifier.verticalScroll(rememberScrollState())) {
-                        Text(diagnosticText, fontSize = 13.sp)
-                    } },
-                    confirmButton = { TextButton(onClick = { copyTrackingDiagnostics() }) { Text("复制诊断") } },
-                    dismissButton = { TextButton(onClick = { showDiagnostics = false }) { Text("关闭") } }
-                )
-                if (showAmapConsent && !confirmEnable && !pendingEnable && !showBackgroundPrompt && !showFineSettings) AlertDialog(
+                if (showDiagnostics) RecordingDiagnosisSheet(diagnosticFacts,diagnosticText,
+                    { copyTrackingDiagnostics() },{ showDiagnostics=false })
+                if (showAmapConsent && !showIntro && !confirmEnable && !pendingEnable && !showBackgroundPrompt && !showFineSettings) AlertDialog(
                     onDismissRequest = {
                         showAmapConsent = false
                         getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE).edit()
@@ -560,7 +628,7 @@ class MainActivity : ComponentActivity() {
                     },
                     title = { Text("是否使用高德地图？", fontWeight = FontWeight.Bold) },
                     text = { Column {
-                        Text("高德开放平台地图 SDK 由北京高德图强科技有限公司提供，用于地图展示；" +
+                        Text("高德开放平台地图与搜索 SDK 由北京高德图强科技有限公司提供，用于地图展示和地名查询；" +
                             "可能收集经纬度、IP/网络、GNSS、设备参数、系统和传感器信息。" +
                             "足迹数据库仍保留本机；拒绝使用高德不影响自动记录。")
                         TextButton(onClick = {
@@ -574,6 +642,8 @@ class MainActivity : ComponentActivity() {
                                 .putBoolean("amap_sdk_consent", true)
                                 .putBoolean("amap_sdk_decision_seen", true).apply()
                             amapConsent = true
+                            placeAnchor = null
+                            refreshPlaceName(userFix)
                             showAmapConsent = false
                         }) { Text("同意使用高德") }
                     },
@@ -581,7 +651,10 @@ class MainActivity : ComponentActivity() {
                         TextButton(onClick = {
                             showAmapConsent = false
                             amapConsent=false; onlineMap=false
+                            placeRequestRevision++
+                            placeAnchor=null; placeName=null
                             com.amap.api.maps.MapsInitializer.updatePrivacyAgree(applicationContext,false)
+                            com.amap.api.services.core.ServiceSettings.updatePrivacyAgree(applicationContext,false)
                             getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE).edit()
                                 .putBoolean("amap_sdk_decision_seen", true)
                                 .putBoolean("amap_sdk_consent", false)
@@ -589,18 +662,17 @@ class MainActivity : ComponentActivity() {
                         }) { Text(if(amapConsent) "撤回并用离线地图" else "暂不用") }
                     }
                 )
-                if (confirmEnable) AlertDialog(
-                    onDismissRequest = { confirmEnable=false;pendingEnable=false },
-                    title = { Text("开启自动记录") },
-                    text = { Text("为了在出门和锁屏后记录走过的路，需要允许精确定位。足迹保存在本机，记录时会保留通知，可能增加耗电；你随时可以关闭。地图联网另行征求同意。") },
-                    confirmButton = { Button(onClick={
-                        confirmEnable=false
+                if (showIntro || confirmEnable) DesignOnboarding(
+                    onEnable={
+                        showIntro=false;confirmEnable=false
                         getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE).edit()
-                            .putBoolean("auto_notice_v3_seen",true).apply()
-                        continueEnable()
-                    }) { Text("同意并继续") } },
-                    dismissButton = { TextButton(onClick={confirmEnable=false;pendingEnable=false}) { Text("暂不开启") } }
-                )
+                            .putBoolean("mobile_intro_seen",true).putBoolean("auto_notice_v3_seen",true).apply()
+                        if(pendingEnable) continueEnable() else beginEnable()
+                    },
+                    onSkip={
+                        showIntro=false;confirmEnable=false;pendingEnable=false
+                        getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE).edit().putBoolean("mobile_intro_seen",true).apply()
+                    })
                 if(showBackgroundPrompt) AlertDialog(
                     onDismissRequest={showBackgroundPrompt=false;pendingEnable=false},
                     title={Text("允许后台定位")},
@@ -628,7 +700,9 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
-        mainHandler.post(refreshTask)
+        // Command-driven export: the app is launched with the extra and writes its own field report
+        // where the reading side can fetch it. Nothing else in the app ever sends this.
+        if (intent?.getBooleanExtra(EXTRA_EXPORT_FIELD_REPORT, false) == true) dumpFieldReport()
     }
 
     private fun updateUi() {
@@ -656,7 +730,7 @@ class MainActivity : ComponentActivity() {
         val status = RecordingStatus.assess(RecordingDiagnostics.signals(this, repository.lastError))
         recordingTitle=status.title; recordingHealthy=status.healthy
         recordingCode=status.code
-        profileNotice=TrackingSetup.notice(status.code,backgroundGranted,notificationsGranted())
+        profileNotice=TrackingSetup.notice(status.code,backgroundGranted)
         mapNotice=MapNotice.from(status,recordedAt("gps_callback_at") > 0 && recordedAt("gps_callback_at") >= recordedAt("service_start_at"))
         val diagnosis = status.title + " · " + status.hint
         val gpsLabel = when {
@@ -672,6 +746,7 @@ class MainActivity : ComponentActivity() {
         currentViewport = mapViewport()
         if ((lastRevision != repository.revision || dailyRoadDate != DailyFootprints.key(System.currentTimeMillis())) && refreshing.compareAndSet(false, true)) {
             val day=selectedDay
+            val generation=mapSceneGeneration
             // Read on the UI thread: the worker must not race a fix arriving while it paints.
             val fogColour = roadColor
             val fogAnchor = userFix?.let { TrackPoint(it.latitude, it.longitude, it.time, it.accuracy) }
@@ -682,22 +757,21 @@ class MainActivity : ComponentActivity() {
                     val revision = repository.revision
                     val next = repository.snapshot()
                     // Compute expensive history/geometry work away from the UI thread.
-                    next.totalMeters; FootprintInsights.traveledDays(next); FootprintInsights.exploredCells(next)
+                    next.totalMeters
+                    DailyFootprints.days(next).forEach { it.points; it.meters; it.segments; it.focusTrack() }
                     val road = repository.roadSnapshot()
                     val roadBase = geoJson(emptyList())
                     val today = DailyFootprints.key(System.currentTimeMillis())
                     val daily = emptyMap<String,RoadState>()
                     val displayedRoad = RoadState()
                     val displayedTrack = DailyFootprints.select(next,day)
-                    // The veil is cumulative, like the explored ground: it shows everything walked,
-                    // never just the selected day, and it is the only thing that paints the ground.
-                    // The veil follows the viewport now, so what it covers is what the person is
-                    // looking at: old ground stays painted wherever it is, and the unknown ground
-                    // in between stays behind fog.
-                    val veilPaths = RecordedTrail.paths(next.realTracks)
-                    fogPaths = veilPaths
+                    // Day review has its own ground, not later exploration or today's GPS dot.
+                    val veilPaths = RecordedTrail.visiblePaths(displayedTrack.realTracks)
                     val veilStart = System.nanoTime()
-                    val fogImage = fogPainter.update(veilPaths, fogColour, fogAnchor, fogViewport)
+                    // The painter reuses its two buffers. A deferred handover and the SDK's GL
+                    // thread can still be reading either one after the next paint starts.
+                    val fogImage = fogPainter.update(veilPaths, fogColour, MapHistory.anchor(displayedTrack,day) ?: fogAnchor, fogViewport)
+                        ?.copy(android.graphics.Bitmap.Config.ARGB_8888,false)
                     val veilNanos = System.nanoTime() - veilStart
                     if (BuildConfig.DEBUG) {
                         PerfTrace.update(veilStart - updateStart, veilNanos, fogPainter.lastUpdateRebuilt)
@@ -710,20 +784,21 @@ class MainActivity : ComponentActivity() {
                     // where the person has been would vanish on exactly the screen where it matters
                     // most. Above that the cleared ground is plainly visible, so sending a line too
                     // would only cost the UI thread a GeoJSON rebuild per update while walking.
-                    val perMetre = fogBounds?.let { TrailPainter.pixelsPerMeter(it) } ?: 0.0
-                    val veilShowsCorridor = perMetre > 0.0 &&
-                        TrailPaint.CORRIDOR_M * perMetre >= TrailPaint.NETWORK_BELOW_PX
-                    val trailPaths = RecordedTrail.paths(displayedTrack.realTracks)
+                    // The predicate is TrailPaint's, not a copy of it: the veil leaves the corridor
+                    // out exactly when this line is drawn, and the two must not be able to disagree.
+                    val veilShowsCorridor = fogBounds?.let { TrailPaint.corridorVisible(it) } == true
+                    val trailPaths = veilPaths
                     val trail = when {
                         // A chosen day is always drawn: that is the route the person asked to see.
-                        day != null -> TrailShape.network(trailPaths, null)
+                        day != null -> TrailShape.network(trailPaths, fogBounds)
                         veilShowsCorridor -> emptyList()
                         else -> TrailShape.network(trailPaths, fogBounds)
                     }
                     val painted = TrackMapJson.encodePaths(trail)
                     runOnUiThread {
                         try {
-                            if(selectedDay!=day) return@runOnUiThread
+                            if(selectedDay!=day || generation!=mapSceneGeneration) return@runOnUiThread
+                            fogPaths=veilPaths
                             val uiStart = System.nanoTime()
                             snapshot = next; lastRevision = revision
                             dailyRoads=daily; dailyRoadDate=today
@@ -732,6 +807,7 @@ class MainActivity : ComponentActivity() {
                             roadState = road; roadJson = roadBase; paintedJson = painted
                             val assignNanos = System.nanoTime() - uiStart
                             handOverVeil(fogImage, fogBounds, fogStamp)
+                            updateLocationLayer()
                             if (BuildConfig.DEBUG) {
                                 android.util.Log.d("WalkPaintPerf", String.format(java.util.Locale.ROOT,
                                     "UI parts assign_ms=%.1f handover_ms=%.1f total_ms=%.1f",
@@ -762,7 +838,7 @@ class MainActivity : ComponentActivity() {
 
     private fun beginEnable() {
         if(pendingEnable) return
-        pendingEnable=true;backgroundDeferred=false;notificationAttempted=false
+        pendingEnable=true;backgroundDeferred=false
         if(!AmbientTracking.hasFineLocation(this) &&
             !getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE).getBoolean("auto_notice_v3_seen",false)) {
             confirmEnable=true
@@ -772,7 +848,7 @@ class MainActivity : ComponentActivity() {
     private fun continueEnable() {
         if(!pendingEnable) return
         when(TrackingSetup.next(Build.VERSION.SDK_INT,AmbientTracking.hasFineLocation(this),
-            AmbientTracking.hasBackgroundLocation(this),notificationsGranted(),backgroundDeferred,notificationAttempted)) {
+            AmbientTracking.hasBackgroundLocation(this),backgroundDeferred)) {
             TrackingSetup.Step.LOCATION -> {
                 val prefs=getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE)
                 if(prefs.getBoolean("fine_request_seen",false) &&
@@ -784,10 +860,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
             TrackingSetup.Step.BACKGROUND -> showBackgroundPrompt=true
-            TrackingSetup.Step.NOTIFICATIONS -> {
-                notificationAttempted=true
-                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
             TrackingSetup.Step.START -> {
                 pendingEnable=false;pendingSettingsEnable=false
                 AmbientTracking.setEnabled(this,true)
@@ -803,8 +875,18 @@ class MainActivity : ComponentActivity() {
             startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
         else if(recordingCode in setOf("SAVE_FAILED","REGISTER_FAILED","SERVICE_STOPPED")) openRecordingDiagnostics()
         else if(!AmbientTracking.hasBackgroundLocation(this)) beginEnable()
-        else if(!notificationsGranted()) openAppSettings()
         else openRecordingDiagnostics()
+    }
+
+    private fun openRecordingNotificationSettings() {
+        val settings=Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE,packageName)
+            .putExtra(Settings.EXTRA_CHANNEL_ID,"ambient-footprints")
+        runCatching { startActivity(settings) }.onFailure {
+            runCatching { startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE,packageName)) }
+                .onFailure { toast("无法打开通知设置，请在手机设置中管理足迹涂色的通知") }
+        }
     }
 
     private fun askLocation() {
@@ -845,6 +927,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @SuppressLint("MissingPermission") // Fine permission is checked below; revocation exceptions return null.
     private fun latestSystemLocation(): Location? {
         if (!AmbientTracking.hasFineLocation(this)) return null
         val manager = locationManager ?: getSystemService(LocationManager::class.java).also { locationManager = it }
@@ -855,6 +938,7 @@ class MainActivity : ComponentActivity() {
         } catch (_: Exception) { null }
     }
 
+    @SuppressLint("MissingPermission") // Fine permission is checked below; runCatching also covers revocation.
     private fun beginVisibleLocation() {
         if (!AmbientTracking.hasFineLocation(this)) return
         val lm = locationManager ?: getSystemService(LocationManager::class.java).also { locationManager = it }
@@ -920,7 +1004,7 @@ class MainActivity : ComponentActivity() {
         syncFollowCamera(force=center || firstMapCenter, streetZoom=streetZoom)
     }
 
-    private fun trackingDiagnostics(): String {
+    private fun trackingDiagnostics(onFacts:(DiagnosisFacts)->Unit={}): String {
         // No coordinates, route identifiers or exact street names leave the app.
         val now = System.currentTimeMillis()
         fun age(whenAt: Long?): String =
@@ -945,7 +1029,8 @@ class MainActivity : ComponentActivity() {
             "当前屏幕亮起：" + power.isInteractive,
             "当前 Doze 待机：" + power.isDeviceIdleMode,
             "当前省电模式：" + power.isPowerSaveMode,
-            "最近 GPS 信号：" + age(lastFix?.time),
+            "本次持续 GPS 回调：" + (GpsReceipts.age(GpsReceipts.continuous,SystemClock.elapsedRealtime())?.let { "${it/1000} 秒前" } ?: "尚无"),
+            "历史最近 GPS 回调：" + age((diagnostic["gps_callback_at"] as? Number)?.toLong()),
             "最近 GPS 精度：" + (lastFix?.accuracy?.toInt()?.toString() ?: "未知") + "米",
             "地图蓝点来源：" + (userFix?.provider?.takeIf { it in setOf("gps","network") } ?: "无"),
             "上次足迹写入：" + age(lastSaved),
@@ -959,22 +1044,24 @@ class MainActivity : ComponentActivity() {
             backgroundLocation = AmbientTracking.hasBackgroundLocation(this),
             phoneLocationOn = gpsEnabled,
             batteryWhitelisted = power.isIgnoringBatteryOptimizations(packageName),
-            callbackAgeMs = ((lastFix?.time ?: 0L).takeIf { it > 0L }
-                ?: (diagnostic["gps_callback_at"] as? Number)?.toLong()?.takeIf { it > 0L })
-                ?.let { (now - it).coerceAtLeast(0L) },
+            callbackAgeMs = GpsReceipts.age(GpsReceipts.continuous,SystemClock.elapsedRealtime()),
             savedAgeMs = lastSaved?.let { (now - it).coerceAtLeast(0L) },
-            savedCount = (diagnostic["saved_count"] as? Number)?.toLong() ?: snapshot.realPointCount.toLong(),
+            savedCount = snapshot.realPointCount.toLong(),
             movingThisSession = (diagnostic["session_moving_count"] as? Number)?.toLong() ?: 0L,
             savedThisSession = (diagnostic["session_saved_count"] as? Number)?.toLong() ?: 0L,
-            filteredCount = (diagnostic["filtered_count"] as? Number)?.toLong() ?: 0L,
+            filteredCount = (diagnostic["session_filtered_count"] as? Number)?.toLong() ?: 0L,
             stationaryFiltered = (diagnostic["session_filter_stationary_count"] as? Number)?.toLong() ?: 0L,
             jumpFiltered = (diagnostic["session_filter_jump_count"] as? Number)?.toLong() ?: 0L,
             accuracyFiltered = (diagnostic["session_filter_accuracy_count"] as? Number)?.toLong() ?: 0L,
-            longestGapMs = (diagnostic["max_gap_ms"] as? Number)?.toLong() ?: 0L,
+            longestGapMs = 0L, // historical maxima belong in folded developer evidence
             serviceStartCount = (diagnostic["start_count"] as? Number)?.toLong() ?: 0L,
             databaseError = repository.lastError,
-            dozeIdle = power.isDeviceIdleMode
+            dozeIdle = power.isDeviceIdleMode,
+            statusCode=RecordingStatus.assess(RecordingDiagnostics.signals(this,repository.lastError)).code,
+            serviceAgeMs=GpsReceipts.age(GpsReceipts.started,SystemClock.elapsedRealtime()),
+            pendingThisSession=(diagnostic["session_pending_count"] as? Number)?.toLong() ?: 0L
         )
+        onFacts(facts)
         return Diagnosis.report(facts) + "\n\n—— 原始计数（给开发者看） ——\n" +
             rows.joinToString("\n") + "\n\n" + RecordingDiagnostics.summary(this) +
             "\n\n绘制来源：已保存的定位直接涂色。连续轨迹 ${RecordedTrail.paths(snapshot.realTracks).count { it.size>=2 }} 段；累计记录 ${snapshot.totalMeters.toLong()} 米（重复出行累计，不是去重道路里程）。" +
@@ -982,7 +1069,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openRecordingDiagnostics() {
-        val base=trackingDiagnostics()
+        val base=trackingDiagnostics { diagnosticFacts=it }
         val state=snapshot; val roads=roadState
         diagnosticText=base
         showDiagnostics=true
@@ -997,6 +1084,35 @@ class MainActivity : ComponentActivity() {
         val clip = ClipData.newPlainText("WalkPaint 定位诊断", diagnosticText)
         getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
         toast("诊断已复制，不包含经纬度和个人路线")
+    }
+
+    @SuppressLint("MissingPermission") // Fine permission is checked below; GNSS registration failure is handled.
+    private fun startShortGps() {
+        if(!AmbientTracking.hasFineLocation(this)) { toast("请先在更多设置允许精确定位");return }
+        stopShortGps("重新开始短测")
+        val manager=getSystemService(LocationManager::class.java)
+        ShortGpsSurvey.start(AmbientTracking.running)
+        val callback=object:android.location.GnssStatus.Callback() {
+            override fun onSatelliteStatusChanged(status:android.location.GnssStatus) { ShortGpsSurvey.satellites(status) }
+        }
+        shortGnss=callback
+        runCatching { manager.registerGnssStatusCallback(callback,mainHandler) }
+            .onFailure { ShortGpsSurvey.event("卫星订阅不可用") }
+        shortProbe=FreshGpsProbe(manager,mainHandler).also { p -> p.start { fix,reason ->
+            if(fix!=null) ShortGpsSurvey.fix(false)
+            ShortGpsSurvey.event(reason)
+        } }
+        ShortGpsSurvey.event(if(AmbientTracking.running) "持续记录监听运行中" else "自动记录未运行，仅做短测")
+        shortGpsText=ShortGpsSurvey.report();shortGpsActive=true
+        mainHandler.postDelayed(finishShortGps,60_000)
+    }
+    private fun stopShortGps(reason:String) {
+        mainHandler.removeCallbacks(finishShortGps)
+        shortProbe?.cancel();shortProbe=null
+        shortGnss?.let { runCatching { getSystemService(LocationManager::class.java).unregisterGnssStatusCallback(it) } }
+        shortGnss=null
+        ShortGpsSurvey.stop(reason)
+        shortGpsText=ShortGpsSurvey.report();shortGpsActive=false
     }
 
     private fun prepareFeedback(category:String,description:String) {
@@ -1035,6 +1151,41 @@ class MainActivity : ComponentActivity() {
     private fun fmt(value: Double, digits: Int) = String.format(java.util.Locale.ROOT, "%.${digits}f", value)
 
     /**
+     * Which engine the phone is really running, and why.
+     *
+     * The record and the screen disagreed because the screen was never running the engine the
+     * record was written against, and nothing in the export said so. The AMap SDK ships ARM-only
+     * native libraries; a universal x86 process can fall back while an ARM64 artifact uses the
+     * advertised native bridge. This line distinguishes the actual engine's behaviour from the
+     * other's, on whichever engine the person happens to be holding.
+     */
+    private fun engineChoice(): String = VeilReport.engineChoice(
+        supported = amapSupported,
+        firstAbi = Build.SUPPORTED_ABIS.firstOrNull().orEmpty(),
+        keyConfigured = BuildConfig.AMAP_KEY.isNotBlank(),
+        consent = amapConsent,
+        active = amapActive,
+    )
+
+    /** What the active engine's overlay stack actually contains, read from the running engine. */
+    private fun mapEngineDetail(): String {
+        if (amapActive) return amapController.describe()
+        val style = mapInstance?.style ?: return "备用地图=样式还没加载（地图还没起来）"
+        return runCatching {
+            val layers = style.layers
+            val fog = layers.indexOfFirst { it.id == "wp-fog" }
+            val line = layers.indexOfFirst { it.id == "wp-painted-outline" }
+            val source = if (style.getSourceAs<
+                    org.maplibre.android.style.sources.ImageSource>("wp-fog") != null) "有" else "没有"
+            "备用地图=样式已加载 图层共${layers.size}个 " +
+                "雾图层=${if (fog >= 0) "序号$fog" else "没有"} 雾图源=$source " +
+                "行走线图层=${if (line >= 0) "序号$line" else "没有"} " +
+                "雾在行走线下面=${if (fog in 0 until line) "是" else "否（看不清，或图层不在）"} " +
+                "雾图版本=$fogSourceRevision"
+        }.getOrElse { "备用地图=图层读取失败（${it.javaClass.simpleName}）" }
+    }
+
+    /**
      * The raw material, gathered on demand.
      *
      * This is the answer to "I can feel something is wrong and cannot describe it": every fix the
@@ -1042,7 +1193,8 @@ class MainActivity : ComponentActivity() {
      * the accuracy it carried, the camera and veil the person was actually looking at, and the
      * database's own count. Nothing is uploaded; the person copies or shares the text themselves.
      */
-    private fun prepareFieldReport() {
+    private fun prepareFieldReport(onReady: ((String) -> Unit)? = null) {
+        if (feedbackBusy) return
         val application = applicationContext
         val enabled = AmbientTracking.enabled(this); val running = AmbientTracking.running
         val fine = AmbientTracking.hasFineLocation(this); val background = AmbientTracking.hasBackgroundLocation(this)
@@ -1063,11 +1215,23 @@ class MainActivity : ComponentActivity() {
         val viewport = currentViewport
         val frame = fogFrame
         val bitmap = fogBitmap
+        // The engine is asked what it is showing here, on the UI thread: both map SDKs have to be
+        // touched from it, and a report that described a different engine than the one on screen
+        // would be worse than no report at all.
+        val engineDetail = engineChoice() + "\n" + mapEngineDetail()
+        val lineByMap = mapTrailPaths.isNotEmpty()
         refreshExecutor.execute {
             val text = runCatching {
                 val state = repository.snapshot()
                 val now = System.currentTimeMillis()
                 val last = state.realTracks.flatMap { it.points }.maxByOrNull { it.time }
+                // Counted here rather than on the map thread: it is a plain array walk, and the
+                // painter cannot be redrawing the same image because this work is on its executor.
+                val stats = bitmap?.let { image ->
+                    val argb = IntArray(image.width * image.height)
+                    image.getPixels(argb, 0, image.width, 0, 0, image.width, image.height)
+                    VeilReport.of(argb)
+                }
                 FieldReport.build(
                     FieldFacts(
                         now = now,
@@ -1075,16 +1239,16 @@ class MainActivity : ComponentActivity() {
                         device = "${Build.BRAND} ${Build.MODEL}",
                         android = Build.VERSION.SDK_INT.toString(),
                         engine = engine,
+                        engineDetail = engineDetail,
                         permissions = "精确定位=$fine 后台定位=$background 通知=$notifications " +
                             "手机定位开关=$gpsProvider 电池白名单=$whitelisted 记录开关=$enabled 后台服务=$running",
                         recording = RecordingDiagnostics.summary(application),
                         camera = "$camera\n可见范围=" + (viewport?.let {
                             "纬度${fmt(it.latSpan, 4)}° 经度${fmt(it.lonSpan, 4)}°"
                         } ?: "地图还没报告（用兜底大帧）"),
-                        veil = "雾帧=" + (frame?.let {
-                            "${it.widthPx}x${it.heightPx} 覆盖纬度${fmt(it.latSpan, 4)}° 经度${fmt(it.lonSpan, 4)}°"
-                        } ?: "尚未生成") +
-                            " 位图=${bitmap?.let { "${it.width}x${it.height}" } ?: "无"} 版本=$fogRevision",
+                        veil = VeilReport.frame(frame, lineByMap) + "\n" +
+                            (stats?.let { VeilReport.image(it, fogRevision) }
+                                ?: "雾位图=无（还没画出来）"),
                         storage = "数据库点数=${state.realPointCount} 行程=${state.realTracks.size} " +
                             "记录里程=${state.totalMeters.toInt()}米" +
                             (last?.let { " 最后一点=${SimpleDateFormat("MM-dd HH:mm:ss", Locale.ROOT).format(Date(it.time))} 精度=${it.accuracy.toInt()}米" } ?: ""),
@@ -1093,8 +1257,41 @@ class MainActivity : ComponentActivity() {
                     FieldRecorder.snapshot(now),
                 )
             }.getOrElse { "记录现场暂时无法整理，足迹保留。请稍后重试。" }
-            runOnUiThread { feedbackBusy = false; feedbackReport = text }
+            runOnUiThread {
+                feedbackBusy = false; feedbackReport = text
+                // The command-driven export needs the same text the person would see, at the same
+                // moment, so it is handed over here rather than assembled a second time.
+                onReady?.invoke(text)
+            }
         }
+    }
+
+    /**
+     * Writes the field export to the app's own external directory when the app is launched with
+     * [EXTRA_EXPORT_FIELD_REPORT].
+     *
+     * The export lets the phone and the dedicated AVD report their actual engine and overlays.
+     * ARM64 native-bridge testing covers rendering, while the person's phone still supplies OEM,
+     * permissions and real location evidence. Nothing is uploaded unless shared, and the file
+     * is written only when this extra is explicitly sent; the
+     * file lives beside the app's own data and is the same text the person can already share.
+     */
+    private fun dumpFieldReport() {
+        prepareFieldReport { text ->
+            runCatching {
+                val file = java.io.File(getExternalFilesDir(null) ?: filesDir, "field-report.txt")
+                file.writeText(text)
+                // The path is logged so the reading side never has to guess between /sdcard and
+                // /storage/emulated/0, or a device with more than one user.
+                android.util.Log.i("WalkPaintField", "field report written: ${file.absolutePath}")
+            }.onFailure { android.util.Log.w("WalkPaintField", "field report write failed", it) }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_EXPORT_FIELD_REPORT, false)) dumpFieldReport()
     }
 
     private fun copyFeedback() {
@@ -1165,17 +1362,6 @@ class MainActivity : ComponentActivity() {
         return view
     }
 
-    /**
-     * The veil currently follows the walked ground around the person, not the map view.
-     *
-     * A viewport-following version was written and is kept in `TrailPaint.frameFor`, but its
-     * on-device rendering could not be made correct in this pass: after the frame changes, the
-     * image MapLibre actually draws is at the wrong scale (a bitmap dump showed the first,
-     * degenerate frame still on screen minutes later, and rebuilding the source fixed the
-     * staleness but not the scale). Shipping it would make the fog worse than what it replaced, so
-     * the screen keeps the version that renders correctly and the large-history limitation stays
-     * documented as open in `docs/evidence/V037_FOG_LINE.md`.
-     */
     private fun onMapCameraMoved() { refreshVeilForViewport(force = false) }
 
     private fun onMapCameraSettled() {
@@ -1192,11 +1378,12 @@ class MainActivity : ComponentActivity() {
     private fun cameraTrace(stage: String) {
         if (!BuildConfig.DEBUG) return
         val camera = mapInstance?.cameraPosition
+        val amapCamera = if (amapActive) amapController.cameraSource() else null
         val target = camera?.target
         val fix = userFix
         val view = currentViewport
-        android.util.Log.d("WalkPaintCam", "$stage lat=${target?.latitude} lon=${target?.longitude} " +
-            "zoom=${camera?.zoom} day=${selectedDay ?: "cumulative"} " +
+        android.util.Log.d("WalkPaintCam", "$stage lat=${amapCamera?.first ?: target?.latitude} lon=${amapCamera?.second ?: target?.longitude} " +
+            "zoom=${amapCamera?.third ?: camera?.zoom} day=${selectedDay ?: "cumulative"} " +
             "fixLat=${fix?.latitude} fixLon=${fix?.longitude} " +
             "viewLat=${view?.latSpan} viewLon=${view?.lonSpan} " +
             "frameLat=${fogFrame?.latMin}..${fogFrame?.latMax} " +
@@ -1253,7 +1440,10 @@ class MainActivity : ComponentActivity() {
     private fun handOverVeil(image: android.graphics.Bitmap?, frame: PaintFrame?, revision: Int) {
         val now = android.os.SystemClock.uptimeMillis()
         val elapsed = now - lastVeilHandover
-        if (elapsed < VEIL_HANDOVER_MS) {
+        // AMap's immutable Android display list has no asynchronous texture/bounds handover.
+        // Keeping the old SDK texture-upload throttle here delayed already completed fog by 600ms.
+        val handoverGap=if(amapActive) 0L else VEIL_HANDOVER_MS
+        if (elapsed < handoverGap) {
             pendingVeil = Triple(image, frame, revision)
             if (!veilHandoverPending) {
                 veilHandoverPending = true
@@ -1262,7 +1452,7 @@ class MainActivity : ComponentActivity() {
                     val pending = pendingVeil
                     pendingVeil = null
                     if (pending != null) handOverVeil(pending.first, pending.second, pending.third)
-                }, VEIL_HANDOVER_MS - elapsed)
+                }, handoverGap - elapsed)
             }
             return
         }
@@ -1310,23 +1500,34 @@ class MainActivity : ComponentActivity() {
         }
         val viewport = currentViewport
         val colour = roadColor
-        val handOver = force
-        val anchor = userFix?.let { TrackPoint(it.latitude, it.longitude, it.time, it.accuracy) }
+        val handOver = true
+        val day = selectedDay
+        val generation=mapSceneGeneration
+        val anchor = MapHistory.anchor(mapTrackState,day) ?: userFix?.let { TrackPoint(it.latitude, it.longitude, it.time, it.accuracy) }
+        val previousFogRevision=fogRevision
         refreshExecutor.execute {
             try {
                 val start = System.nanoTime()
-                val image = fogPainter.update(paths, colour, anchor, viewport)
+                val paintedImage = fogPainter.update(paths, colour, anchor, viewport)
                 val nanos = System.nanoTime() - start
                 if (BuildConfig.DEBUG) PerfTrace.pan(nanos)
                 val frame = fogPainter.frame()
                 val revision = fogPainter.revision
+                if(revision==previousFogRevision) { runOnUiThread {refreshing.set(false)};return@execute }
+                val image=paintedImage?.copy(android.graphics.Bitmap.Config.ARGB_8888,false)
+                val linePaths = paths
+                val route = if (day == null && frame?.let { TrailPaint.corridorVisible(it) } == true)
+                    emptyList() else TrailShape.network(linePaths, frame)
+                val routeJson = TrackMapJson.encodePaths(route)
                 runOnUiThread {
                     try {
-                        // While the camera is moving the image is painted but not handed over: the
-                        // rebuild costs a few tens of milliseconds on the UI thread, and doing it
-                        // under a finger is exactly the jank this work exists to remove. The
-                        // settled callback hands over the final view.
-                        if (handOver) handOverVeil(image, frame, revision)
+                        // The cheap coverage mask remains in place until this actual ground
+                        // frame is handed over, including during an active pinch.
+                        if (handOver && day == selectedDay && generation==mapSceneGeneration) {
+                            mapTrailPaths = route
+                            paintedJson = routeJson
+                            handOverVeil(image, frame, revision)
+                        }
                     } finally {
                         // Released here, not before the handover: the painter must not be drawing
                         // into the same bitmap while the map is reading it.
@@ -1348,18 +1549,28 @@ class MainActivity : ComponentActivity() {
         view.getMapAsync { loaded ->
             if (mapWidget !== view) return@getMapAsync
             mapInstance = loaded
+            loaded.addOnMapClickListener { clicked ->
+                if(mapLocation()?.provider=="network" && loaded.queryRenderedFeatures(loaded.projection.toScreenLocation(clicked),"wp-user-dot").isNotEmpty()) {
+                    toast("这是网络位置，仅用于找方向；GPS 连续记录尚需看定位状态。")
+                    true
+                } else false
+            }
             loaded.addOnCameraMoveStartedListener { reason ->
-                if(reason==MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) pauseMapFollowing()
+                if(reason==MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) {
+                    fallbackZoomSteps.reset();pauseMapFollowing()
+                }
             }
             // The veil follows the map, so it has to be redrawn for a new view; the throttling and
             // the "did it really move" test live in refreshVeilForViewport.
             loaded.addOnCameraMoveListener { onMapCameraMoved() }
-            loaded.addOnCameraIdleListener { onMapCameraSettled() }
+            loaded.addOnCameraIdleListener {
+                fallbackZoomSteps.settled(loaded.cameraPosition.zoom.toFloat());onMapCameraSettled()
+            }
             val builder = if(onlineMap) Style.Builder().fromUri("https://tiles.openfreemap.org/styles/liberty")
                 else Style.Builder().fromJson("""{"version":8,"sources":{},"layers":[{"id":"local-background","type":"background","paint":{"background-color":"#F4F7F5"}}]}""")
             loaded.setStyle(builder) { style ->
                 if (mapWidget !== view) return@setStyle
-                style.addSource(GeoJsonSource("wp-user", userJson(userFix)))
+                style.addSource(GeoJsonSource("wp-user", userJson(mapLocation())))
                 style.addSource(GeoJsonSource("wp-roads", roadJson))
                 style.addSource(GeoJsonSource("wp-painted", paintedJson))
                 // No explored-ground fill and no seed circles: the veil below paints the walked
@@ -1508,9 +1719,21 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun mapLocation():Location? = MapHistory.anchor(mapTrackState,selectedDay)?.let { p ->
+        Location("history").apply { latitude=p.lat;longitude=p.lon;time=p.time;accuracy=p.accuracy }
+    } ?: userFix?.takeIf {selectedDay==null}
+
     private fun updateLocationLayer() {
-        if (amapActive) amapController.updateUser(userFix)
-        else mapInstance?.style?.getSourceAs<GeoJsonSource>("wp-user")?.setGeoJson(userJson(userFix))
+        val location=mapLocation()
+        if (amapActive) amapController.updateUser(location)
+        else mapInstance?.style?.let { style ->
+            style.getSourceAs<GeoJsonSource>("wp-user")?.setGeoJson(userJson(location))
+            val network=location?.provider=="network"
+            style.getLayerAs<CircleLayer>("wp-user-dot")?.setProperties(
+                PropertyFactory.circleColor(if(network) android.graphics.Color.TRANSPARENT else android.graphics.Color.rgb(23,119,205)),
+                PropertyFactory.circleStrokeColor(if(network) android.graphics.Color.rgb(234,178,73) else android.graphics.Color.WHITE),
+                PropertyFactory.circleStrokeWidth(if(network) 2f else 1.5f))
+        }
         syncHeadingLifecycle()
         syncFollowCamera()
     }
@@ -1571,7 +1794,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun AmapNativeView() {
         val controller = remember { amapController }
-        val view = remember { controller.create(mapTrackState, userFix,mapRoadState,roadColor) }
+        val view = remember { controller.create(mapTrackState, mapLocation(),mapRoadState,roadColor) }
         pendingTripFocus?.let {
             controller.focus(it.first, it.second, it.third)
             pendingTripFocus = null
@@ -1617,6 +1840,8 @@ class MainActivity : ComponentActivity() {
             onDispose {
                 lifecycle.removeObserver(observer)
                 headingSensor.stop()
+                fallbackZoomSteps.target?.let { mapInstance?.moveCamera(CameraUpdateFactory.zoomTo(it.toDouble())) }
+                fallbackZoomSteps.reset()
                 retainedMapCamera=mapInstance?.cameraPosition
                 runCatching { view.onPause(); view.onStop(); view.onDestroy() }
                 if (mapWidget === view) { mapWidget = null; mapInstance = null }
@@ -1630,7 +1855,6 @@ class MainActivity : ComponentActivity() {
         outState.putBoolean("pendingSettingsEnable", pendingSettingsEnable)
         outState.putBoolean("pendingBackgroundSettings",pendingBackgroundSettings)
         outState.putBoolean("backgroundDeferred",backgroundDeferred)
-        outState.putBoolean("notificationAttempted",notificationAttempted)
         outState.putBoolean("confirmEnable",confirmEnable)
         outState.putBoolean("showBackgroundPrompt",showBackgroundPrompt)
         outState.putBoolean("showFineSettings",showFineSettings)
@@ -1640,6 +1864,8 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         activityResumed=true;syncHeadingLifecycle()
+        mainHandler.removeCallbacks(refreshTask)
+        mainHandler.post(refreshTask)
         updateUi()
         // Same reason as the tab switch: coming back to a resting camera would otherwise leave an
         // unveiled map on screen, and an unveiled map is indistinguishable from explored ground.
@@ -1650,6 +1876,8 @@ class MainActivity : ComponentActivity() {
         }
     }
     override fun onPause() {
+        mainHandler.removeCallbacks(refreshTask)
+        stopShortGps("离开前台，结束短测")
         activityResumed=false;syncHeadingLifecycle()
         locationManager?.let { runCatching { it.removeUpdates(visibleLocationListener) } }
         super.onPause()

@@ -1,0 +1,62 @@
+{
+  "baseline_commit": "491dd493a0052753ab60bc7e00c198e60597bfe7",
+  "apk": {
+    "sha256": "5af07513c19f061a39727764834eeae5ad28d5f6cbeefa2cf4b847d591ab82fc",
+    "size": 66029970,
+    "version": "0.49",
+    "code": 52
+  },
+  "original_signer": "21b74e3e2a10e12da8284d4e6bd7d99e55b00a385215902e94d7896f7a46c967",
+  "signatures": [
+    "v1",
+    "v2",
+    "v3"
+  ],
+  "schema": 2,
+  "build_source_identity": {
+    "head_at_accepted_build": "73866a4",
+    "final_normalized_source_manifest": "production-sources.json",
+    "dirty_changes_preserved_locally": true
+  },
+  "jvm_tests": 348,
+  "python_scripts_tests": 23,
+  "python_tests": 16,
+  "core_probes_test_apk": {
+    "sha256": "67170033d7136d51fb995bfed904ff54adf6202ce1f06ffae092c6da8ec07f79"
+  },
+  "pixel_test_apk": {
+    "sha256": "2baa5ecc823d61870e8472d28da87f9a72b4abd1c93ef8c24f638fda8878cb2a",
+    "singleton_and_zero_length_pixel_checks": true
+  },
+  "environment": {
+    "serial": "emulator-5560",
+    "avd": "WalkPaint_Google_API36_V044",
+    "android": 16,
+    "engine": "amap",
+    "primary_abi": "x86_64",
+    "tested_apk_abi": "arm64-v8a",
+    "native_bridge": true,
+    "production_abi_policy_unchanged": true
+  },
+  "ui": {
+    "short_gps_finished": true,
+    "diagnosis_folded": true,
+    "backup_page_count": true,
+    "integrity_actual_detail": true,
+    "day_context_zoom": true,
+    "width_320dp_controls_reachable": true
+  },
+  "native": {
+    "directTrailProbe": true,
+    "recoveryProbe": true,
+    "fogPixelProbe": true,
+    "mapReturnProbe": true,
+    "historyCameraProbe": true,
+    "mapSceneProbe": true,
+    "rapidZoomProbe": true
+  },
+  "owner_phone": "not_verified",
+  "owner_reported_version": "0.48",
+  "owner_oauth_update_chain": "not_verified",
+  "fps": "not_measured"
+}

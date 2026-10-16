@@ -10,7 +10,12 @@ internal class RecordingHealth(private var lastCallbackElapsed: Long? = null) {
 
     companion object {
         fun shouldRetry(registered: Boolean, providerEnabled: Boolean, lastCallbackAge: Long,
-                        lastRegistrationAge: Long): Boolean = providerEnabled &&
-            (!registered || (lastCallbackAge > 90_000L && lastRegistrationAge > 90_000L))
+                        lastRegistrationAge: Long, acquiringGnss: Boolean = false): Boolean {
+            // Let a fresh GNSS search finish, but a stream of zero-used satellite statuses must
+            // never postpone recovery forever. Re-register at most once per search interval.
+            val retryAfter = if(acquiringGnss) 180_000L else 90_000L
+            return providerEnabled && (!registered ||
+                (lastCallbackAge > retryAfter && lastRegistrationAge > retryAfter))
+        }
     }
 }

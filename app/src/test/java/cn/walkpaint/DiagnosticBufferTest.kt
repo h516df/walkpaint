@@ -4,6 +4,20 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class DiagnosticBufferTest {
+    @Test fun heldObservationsLaterStoredNeverCountAsImmediateRejection() {
+        val b=DiagnosticBuffer();b.record("start","START",1000)
+        b.record("pending","WAITING_MOVEMENT_CONFIRMATION",2000)
+        b.record("saved","SQLITE_SAVED",3000,amount=2)
+        assertEquals(1L,b.long("session_pending_count"));assertEquals(0L,b.long("session_filtered_count"))
+        assertEquals(2L,b.long("session_saved_count"))
+    }
+    @Test fun batchCountsAreCommittedRowsAndProbeDoesNotIncrementContinuousCallback() {
+        val b=DiagnosticBuffer();b.record("start","START",1000)
+        b.record("saved","SQLITE_SAVED",2000,amount=3)
+        b.record("probe_start","PROBE",3000);b.record("probe_fix","FRESH",4000)
+        assertEquals(3L,b.long("saved_count"));assertEquals(3L,b.long("session_saved_count"))
+        assertEquals(0L,b.long("session_gps_count"));assertEquals(1L,b.long("session_probe_fix_count"))
+    }
     @Test fun frequentCallbacksFoldWithoutRequestingPerFixDiskWrites() {
         val buffer = DiagnosticBuffer()
         repeat(1000) { i ->

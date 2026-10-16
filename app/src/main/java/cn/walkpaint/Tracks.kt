@@ -14,7 +14,17 @@ data class TrackState(val tracks: List<Track> = emptyList(), val activeId: Strin
     val realTracks by lazy { tracks.filter { !it.demo && it.points.isNotEmpty() } }
     val totalMeters by lazy { realTracks.sumOf { Geo.distance(it.points) } }
     val realPointCount by lazy { realTracks.sumOf { it.points.size } }
-    val dayCount by lazy { realTracks.flatMap { it.points }.map { java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ROOT).format(java.util.Date(it.time)) }.toSet().size }
+    // A snapshot is immutable; only the user's current calendar timezone can invalidate this view.
+    @Volatile private var dailyCache: Pair<java.util.TimeZone,List<DailyFootprint>>? = null
+    internal fun dailyFootprints(zone: java.util.TimeZone): List<DailyFootprint> {
+        dailyCache?.takeIf { it.first == zone }?.let { return it.second }
+        return synchronized(this) {
+            dailyCache?.takeIf { it.first == zone }?.second ?: DailyFootprints.build(this,zone).also {
+                dailyCache = (zone.clone() as java.util.TimeZone) to it
+            }
+        }
+    }
+    val dayCount get() = DailyFootprints.days(this).size
     val cellCount by lazy { realTracks.flatMap { it.points }.map { floor(it.lat / 0.005).toInt() to floor(it.lon / 0.005).toInt() }.toSet().size }
 }
 
@@ -56,13 +66,13 @@ object Geo {
         if (previous == null) return null
         val seconds = (next.time - previous.time) / 1000.0
         if (seconds <= 0) return "NON_INCREASING_TIME"
-        // A new point after a callback gap begins a separate line in storage/display.
-        if (seconds * 1000 > RecordedTrail.MAX_GAP_MS) return null
         val distance = meters(previous, next)
         val maxAccuracy = max(previous.accuracy.toDouble(), next.accuracy.toDouble())
         val minimumMove = if (confidentlyMoving) max(3.0, maxAccuracy * 0.55)
                           else max(4.0, maxAccuracy * 1.25)
         if (distance < minimumMove) return "STATIONARY_OR_SMALL_MOVE"
+        // A gap changes continuity, never whether a stationary fix counts as movement.
+        if (seconds * 1000 > RecordedTrail.MAX_GAP_MS) return null
         val speed=distance/seconds
         if (speed>RecordedTrail.MAX_SPEED_MPS) return "JUMP_OR_TOO_FAST"
         // Fast travel needs precise fixes and, when the receiver measures its own speed, a

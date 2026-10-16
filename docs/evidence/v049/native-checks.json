@@ -1,0 +1,9 @@
+{
+  "directTrailProbe": true,
+  "recoveryProbe": true,
+  "fogPixelProbe": true,
+  "mapReturnProbe": true,
+  "historyCameraProbe": true,
+  "mapSceneProbe": true,
+  "rapidZoomProbe": true
+}

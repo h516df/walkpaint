@@ -1,0 +1,1287 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="system">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>足迹涂色 · WalkPaint 界面重设计</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+@layer od-layout {
+  :where(.od-stack,.od-row,.od-row-top,.od-cluster,.od-grid,.od-field,.od-stat,.od-cell,.od-tile) > :where(*) { min-width: 0; }
+
+  /* containers */
+  .od-stack   { display: flex; flex-direction: column; gap: var(--od-gap, 8px); }
+  .od-row     { display: flex; align-items: center; gap: var(--od-gap, 8px); }
+  .od-row-top { display: flex; align-items: flex-start; gap: var(--od-gap, 8px); }
+  .od-cluster { display: flex; flex-wrap: wrap; align-items: center; gap: var(--od-gap, 8px); }
+  .od-fill    { flex: 1 1 0; min-width: 0; }
+  .od-fixed   { flex: none; }
+  .od-grid    { display: grid; gap: var(--od-gap, 12px); grid-template-columns: repeat(var(--od-cols, 3), minmax(0, 1fr)); }
+
+  /* stacked information: each piece is its own line — never sibling inline spans */
+  .od-stat, .od-field, .od-cell { display: grid; gap: var(--od-gap, 2px); }
+  :where(.od-stat,.od-field,.od-cell) > :where(*) { display: block; }
+  .od-tile { display: grid; grid-template-rows: auto 1fr; }
+  :where(.od-tile) > :where(*) { display: block; }
+
+  /* media keeps its intrinsic ratio by default; never a distorted or cropped
+     cover by accident. height:auto lets the ratio win over an <img height="…">
+     attribute. Cropping to a uniform box is an explicit opt-in: set --od-ratio
+     AND add .od-media-cover together (per the core rule, only where a crop is
+     deliberate — tile thumbs, decorative fills — never on full-frame content). */
+  .od-media { display: block; width: 100%; height: auto; aspect-ratio: var(--od-ratio, auto); }
+  .od-media-cover { object-fit: cover; }
+
+  /* data text only — authored copy is rewritten to its budget instead */
+  .od-truncate { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .od-clamp-2, .od-clamp-3 { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .od-clamp-2 { -webkit-line-clamp: 2; }
+  .od-clamp-3 { -webkit-line-clamp: 3; }
+  .od-lines-2 { min-height: calc(2 * 1.4em); }   /* block-level reservation for a shared baseline */
+  .od-nowrap  { white-space: nowrap; }           /* 数字+单位 · 价格+起 · 日期+星期 */
+  .od-keep    { word-break: keep-all; overflow-wrap: anywhere; } /* CJK labels break at spaces / <wbr> first */
+
+  /* screen skeleton (optional): bars take their own space, the middle scrolls — no padding guessed for chrome */
+  .od-screen { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100%; }
+  .od-scroll { overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
+
+  /* horizontal rail: the next item peeks at the edge; trailing room survives overflow */
+  .od-rail { display: flex; gap: var(--od-gap, 8px); overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none;
+             padding-inline: var(--od-rail-pad, 16px); scroll-padding-inline: var(--od-rail-pad, 16px); }
+  .od-rail::-webkit-scrollbar { display: none; }
+  :where(.od-rail) > :where(*) { flex: none; scroll-snap-align: start; }
+  :where(.od-rail) > :where(:last-child) { margin-inline-end: var(--od-rail-pad, 16px); }
+
+  .od-spacer { flex: none; visibility: hidden; pointer-events: none; }
+  .od-touch  { min-width: 44px; min-height: 44px; }
+}
+/* /OD-LAYOUT-PRIMITIVES v1 */
+
+/* ============================================================
+   Handheld shell (platform-neutral phone) — presentation only
+   ============================================================ */
+:root {
+  --phone-screen-width: 390px;
+  --phone-screen-height: 844px;
+  --phone-bezel: 10px;
+  --phone-outer-radius: 52px;
+  --phone-screen-radius: 42px;
+  --phone-safe-top: 50px;
+  --phone-safe-bottom: 29px;
+  --phone-system-fg: #10201e;
+  --phone-screen-bg: #eef2f0;
+  --phone-stage-bg: #e3e7e5;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background:
+    radial-gradient(circle at 50% 12%, rgba(255,255,255,.9), transparent 38%),
+    var(--phone-stage-bg);
+  color: #10201e;
+  font-family: 'Manrope', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+}
+.phone-frame {
+  position: relative;
+  width: calc(var(--phone-screen-width) + var(--phone-bezel) * 2);
+  height: calc(var(--phone-screen-height) + var(--phone-bezel) * 2);
+  padding: var(--phone-bezel);
+  border-radius: var(--phone-outer-radius);
+  background:
+    linear-gradient(145deg, rgba(255,255,255,.22), transparent 17%),
+    linear-gradient(160deg, #3f4146 0%, #202227 48%, #0b0c0f 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,.13),
+    inset 0 0 0 2px rgba(0,0,0,.85),
+    0 32px 68px -20px rgba(10,12,16,.52),
+    0 10px 24px -10px rgba(10,12,16,.32);
+  isolation: isolate;
+}
+.phone-frame::before, .phone-frame::after {
+  content: ""; position: absolute; z-index: -1; top: 96px; bottom: 96px; width: 2px;
+  background: linear-gradient(to bottom, transparent, rgba(255,255,255,.13) 16%, transparent 30%, transparent 72%, rgba(255,255,255,.07) 88%, transparent);
+}
+.phone-frame::before { left: 0; }
+.phone-frame::after { right: 0; }
+.hardware-button { position: absolute; width: 4px; border-radius: 3px; background: linear-gradient(90deg,#08090b,#2a2d33 60%,#08090b); box-shadow: inset 0 1px rgba(255,255,255,.08); }
+.hardware-button.volume { left: -3px; top: 222px; height: 86px; }
+.hardware-button.power { right: -3px; top: 270px; height: 82px; }
+.phone-screen {
+  position: relative; width: var(--phone-screen-width); height: var(--phone-screen-height);
+  overflow: hidden; border-radius: var(--phone-screen-radius); background: var(--phone-screen-bg);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);
+}
+.phone-content {
+  position: absolute; inset: 0; overflow: hidden;
+  padding-top: var(--phone-safe-top); padding-bottom: var(--phone-safe-bottom);
+  background: var(--phone-screen-bg);
+}
+.camera-dot {
+  position: absolute; z-index: 40; top: 13px; left: 50%; width: 10px; height: 10px; transform: translateX(-50%);
+  border-radius: 50%; background: radial-gradient(circle at 38% 35%, #344154 0 12%, #0a0c10 34%, #000 76%);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.06); pointer-events: none;
+}
+.status-bar {
+  position: absolute; z-index: 35; inset: 0 0 auto; height: var(--phone-safe-top);
+  display: grid; grid-template-columns: minmax(0,1fr) 56px minmax(0,1fr); align-items: start;
+  padding: 14px 20px 0; color: var(--phone-system-fg); opacity: .82; pointer-events: none;
+}
+.status-time { justify-self: start; display: flex; align-items: center; height: 15px; font-size: 14px; font-weight: 600; line-height: 1; letter-spacing: .01em; }
+.status-cutout-zone { width: 56px; }
+.status-icons { justify-self: end; display: inline-flex; align-items: center; height: 15px; gap: 6px; }
+.status-icons svg { display: block; flex: none; fill: none; stroke: currentColor; stroke-width: 1.35; stroke-linecap: round; stroke-linejoin: round; }
+.status-icons .connectivity { width: 15px; height: 12px; }
+.status-icons .wifi { width: 15px; height: 12px; }
+.status-icons .battery { width: 19px; height: 11px; }
+.gesture-indicator {
+  position: absolute; z-index: 40; left: 50%; bottom: 8px; width: 96px; height: 4px; transform: translateX(-50%);
+  border-radius: 99px; background: var(--phone-system-fg); opacity: .86; pointer-events: none;
+}
+
+/* ============================================================
+   Product tokens
+   ============================================================ */
+:root {
+  --paper: #eef2f0;
+  --surface: #ffffff;
+  --surface-2: #f5f8f7;
+  --ink: #10201e;
+  --muted: #55655f;
+  --faint: #7d8d87;
+  --brand: #0c7266;
+  --brand-ink: #07453d;
+  --brand-soft: #d9ede8;
+  --route: #d64a24;
+  --route-soft: #fbe3da;
+  --demo: #6f5bd0;
+  --ok: #1f9d6b;
+  --warn: #a9670f;
+  --danger: #bb3b2b;
+  --line: #dce4e1;
+  --line-strong: #c3d0cc;
+
+  --map-land: #e6ece9;
+  --map-road: #ffffff;
+  --map-road-minor: #f3f7f5;
+  --map-water: #cadfe6;
+  --map-park: #cfe3cf;
+  --map-block: #dde5e1;
+
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s8: 32px;
+  --r-card: 16px; --r-panel: 22px; --r-pill: 999px;
+  --shadow-1: 0 1px 2px rgba(10,30,26,.06), 0 6px 18px -12px rgba(10,30,26,.22);
+  --shadow-2: 0 10px 34px -14px rgba(10,30,26,.28), 0 2px 6px rgba(10,30,26,.06);
+
+  --font-display: 'Space Grotesk', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-body: 'Manrope', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  --dur-fast: 140ms; --dur: 200ms; --dur-slow: 320ms;
+  --ease-out: cubic-bezier(.22,.75,.28,1);
+  --ease-in: cubic-bezier(.5,0,.85,.35);
+}
+html[data-theme="dark"] {
+  --paper: #0c1312;
+  --surface: #15201e;
+  --surface-2: #1b2725;
+  --ink: #e9f2ef;
+  --muted: #9db0aa;
+  --faint: #7a8d87;
+  --brand: #45c3b1;
+  --brand-ink: #bff0e8;
+  --brand-soft: #17332e;
+  --route: #ff7d57;
+  --route-soft: #3a231b;
+  --demo: #a99bf0;
+  --ok: #46c08a;
+  --warn: #e0a441;
+  --danger: #f07f6b;
+  --line: #25332f;
+  --line-strong: #33443f;
+
+  --map-land: #131c1a;
+  --map-road: #2a3633;
+  --map-road-minor: #202b29;
+  --map-water: #16303a;
+  --map-park: #17301f;
+  --map-block: #1b2523;
+
+  --phone-system-fg: #e9f2ef;
+  --phone-screen-bg: #0c1312;
+  --shadow-1: 0 1px 2px rgba(0,0,0,.5), 0 8px 20px -14px rgba(0,0,0,.7);
+  --shadow-2: 0 12px 36px -16px rgba(0,0,0,.8), 0 2px 8px rgba(0,0,0,.5);
+}
+@media (prefers-color-scheme: dark) {
+  html[data-theme="system"] {
+    --paper: #0c1312; --surface: #15201e; --surface-2: #1b2725; --ink: #e9f2ef; --muted: #9db0aa;
+    --faint: #7a8d87; --brand: #45c3b1; --brand-ink: #bff0e8; --brand-soft: #17332e; --route: #ff7d57;
+    --route-soft: #3a231b; --demo: #a99bf0; --ok: #46c08a; --warn: #e0a441; --danger: #f07f6b;
+    --line: #25332f; --line-strong: #33443f;
+    --map-land: #131c1a; --map-road: #2a3633; --map-road-minor: #202b29; --map-water: #16303a;
+    --map-park: #17301f; --map-block: #1b2523;
+    --phone-system-fg: #e9f2ef; --phone-screen-bg: #0c1312;
+  }
+}
+
+/* ============================================================
+   App shell inside the phone
+   ============================================================ */
+body { background: var(--phone-stage-bg); }
+.app {
+  height: 100%;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 16px; line-height: 1.55;
+}
+.app[data-screen="onboarding"] .tabbar { display: none; }
+
+.screen { display: none; min-height: 0; }
+.screen.is-active { display: grid; grid-template-rows: auto minmax(0, 1fr); }
+.screen.is-map.is-active { grid-template-rows: minmax(0, 1fr); }
+
+.screen-body {
+  overflow-y: auto; overscroll-behavior: contain; min-height: 0;
+  padding: 4px 20px 28px;
+  scrollbar-width: none;
+}
+.screen-body::-webkit-scrollbar { display: none; }
+
+/* top bar */
+.topbar {
+  display: flex; align-items: center; gap: var(--s3);
+  padding: 8px 20px 12px; background: var(--paper);
+}
+.topbar .titles { display: grid; gap: 1px; min-width: 0; }
+.topbar h1 { margin: 0; font-family: var(--font-display); font-size: 24px; font-weight: 600; letter-spacing: -.02em; line-height: 1.15; }
+.topbar .sub { font-size: 13px; color: var(--muted); }
+.iconbtn {
+  flex: none; width: 44px; height: 44px; border-radius: var(--r-pill);
+  display: grid; place-items: center; border: 1px solid transparent;
+  background: transparent; color: var(--ink); cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+.iconbtn:hover { background: var(--surface); border-color: var(--line); }
+.iconbtn svg { width: 22px; height: 22px; }
+.iconbtn.ghost { border-color: var(--line); background: var(--surface); }
+
+.eyelet { font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
+
+/* bottom tab bar */
+.tabbar {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  background: var(--surface); border-top: 1px solid var(--line);
+  padding: 6px 10px 4px;
+}
+.tabitem {
+  appearance: none; border: 0; background: transparent; cursor: pointer;
+  display: grid; justify-items: center; gap: 3px; padding: 8px 0 6px;
+  color: var(--muted); font-family: var(--font-body); font-size: 11px; font-weight: 600;
+  border-radius: 12px;
+  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.tabitem svg { width: 24px; height: 24px; }
+.tabitem[aria-selected="true"] { color: var(--brand); background: var(--brand-soft); }
+.tabitem:hover { color: var(--brand); }
+
+/* generic buttons */
+.btn {
+  appearance: none; cursor: pointer; border: 0; font-family: var(--font-body);
+  font-size: 15px; font-weight: 700; border-radius: 14px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 52px; padding: 0 20px;
+  transition: transform var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.btn svg { width: 20px; height: 20px; }
+.btn-primary { background: var(--brand); color: #fff; box-shadow: var(--shadow-1); }
+.btn-primary:hover { background: var(--brand-ink); }
+.btn-primary:active { transform: translateY(1px); }
+.btn-secondary { background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); }
+.btn-secondary:hover { background: var(--surface-2); }
+.btn-quiet { background: transparent; color: var(--brand); min-height: 44px; }
+.btn-block { width: 100%; }
+.btn[disabled] { opacity: .45; cursor: not-allowed; box-shadow: none; }
+.btn-rec.is-recording { background: var(--route); color: #fff; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px;
+  border-radius: var(--r-pill); background: var(--surface); border: 1px solid var(--line);
+  color: var(--ink); font-size: 13px; font-weight: 600; white-space: nowrap;
+}
+.chip svg { width: 15px; height: 15px; }
+.chip.is-on { background: var(--brand-soft); border-color: transparent; color: var(--brand-ink); }
+
+.card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-card); box-shadow: var(--shadow-1);
+}
+
+/* ============================================================
+   Onboarding
+   ============================================================ */
+#screen-onboarding { display: none; }
+#screen-onboarding.is-active { display: block; overflow-y: auto; overscroll-behavior: contain; }
+.onb { min-height: 100%; display: flex; flex-direction: column; gap: var(--s5); padding: 24px 24px 28px; }
+.onb-brand { display: flex; align-items: center; gap: 12px; }
+.onb-mark { width: 46px; height: 46px; border-radius: 14px; background: var(--brand); display: grid; place-items: center; box-shadow: var(--shadow-1); }
+.onb-mark svg { width: 26px; height: 26px; color: #fff; }
+.onb-brand .n { font-family: var(--font-display); font-size: 19px; font-weight: 600; letter-spacing: -.01em; }
+.onb-brand .v { font-size: 12px; color: var(--faint); font-family: var(--font-mono); }
+.onb h2 { margin: 0; font-family: var(--font-display); font-size: 30px; font-weight: 600; letter-spacing: -.025em; line-height: 1.15; }
+.onb .lede { margin: 0; color: var(--muted); font-size: 15px; }
+.onb-points { display: grid; gap: var(--s3); }
+.onb-point { display: flex; gap: 12px; padding: 14px; }
+.onb-point .ico { flex: none; width: 40px; height: 40px; border-radius: 12px; background: var(--brand-soft); color: var(--brand); display: grid; place-items: center; }
+.onb-point .ico svg { width: 21px; height: 21px; }
+.onb-point .ico.warn { background: #f7ecd9; color: var(--warn); }
+html[data-theme="dark"] .onb-point .ico.warn { background: #33280f; }
+.onb-point h3 { margin: 0 0 2px; font-size: 15px; font-weight: 700; }
+.onb-point p { margin: 0; font-size: 13.5px; color: var(--muted); }
+.onb-foot { margin-top: auto; display: grid; gap: 10px; }
+.onb-note { font-size: 12px; color: var(--faint); text-align: center; line-height: 1.5; }
+.onb-note a { color: var(--brand); }
+
+/* ============================================================
+   Map screen
+   ============================================================ */
+.map-wrap { position: relative; min-height: 0; background: var(--map-land); overflow: hidden; }
+.map-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.map-svg text { font-family: var(--font-mono); }
+
+.map-top { position: absolute; z-index: 6; top: 12px; left: 14px; right: 14px; display: flex; align-items: flex-start; gap: 8px; pointer-events: none; }
+.map-top > * { pointer-events: auto; }
+.locpill {
+  display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 13px 0 10px;
+  border-radius: var(--r-pill); background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-1);
+  font-size: 13px; font-weight: 600;
+}
+.locpill .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--faint); }
+.locpill.rec .dot { background: var(--route); animation: pulse 1.8s var(--ease-out) infinite; }
+.locpill.rec { color: var(--route); }
+.locpill.paused .dot { background: var(--warn); }
+.locpill .sep { width: 1px; height: 16px; background: var(--line); }
+.locpill .acc { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(214,74,36,.45); } 70% { box-shadow: 0 0 0 8px rgba(214,74,36,0); } 100% { box-shadow: 0 0 0 0 rgba(214,74,36,0); } }
+
+.map-side { position: absolute; z-index: 6; right: 14px; bottom: 190px; display: grid; gap: 10px; }
+.fab {
+  width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-1); color: var(--ink);
+  transition: background var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.fab:hover { background: var(--surface-2); }
+.fab:active { transform: scale(.96); }
+.fab svg { width: 22px; height: 22px; }
+.fab.is-on { background: var(--brand); border-color: transparent; color: #fff; }
+.fab .badge { position: absolute; }
+
+/* legend */
+.legend {
+  position: absolute; z-index: 6; left: 14px; bottom: 190px;
+  display: grid; gap: 6px; padding: 10px 12px; border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(8px); border: 1px solid var(--line); box-shadow: var(--shadow-1);
+}
+.legend .row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.legend .sw { width: 14px; height: 4px; border-radius: 3px; }
+.legend .sw.route { background: var(--route); }
+.legend .sw.demo { background: var(--demo); }
+.legend .sw.seed { background: var(--brand); width: 10px; height: 10px; border-radius: 50%; }
+
+/* summary sheet */
+.map-sheet {
+  position: absolute; z-index: 8; left: 12px; right: 12px; bottom: 12px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-panel);
+  box-shadow: var(--shadow-2); padding: 16px;
+}
+.sheet-grab { width: 40px; height: 4px; border-radius: 99px; background: var(--line-strong); margin: 0 auto 12px; }
+.sheet-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.sheet-stat { display: grid; gap: 2px; }
+.sheet-stat .v { font-family: var(--font-display); font-size: 26px; font-weight: 600; letter-spacing: -.02em; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.sheet-stat .v small { font-family: var(--font-mono); font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 3px; }
+.sheet-stat .k { font-size: 12px; color: var(--muted); }
+.sheet-stat + .sheet-stat { padding-left: 12px; border-left: 1px solid var(--line); }
+.sheet-note { display: flex; align-items: center; gap: 7px; margin: 12px 0; font-size: 12.5px; color: var(--muted); }
+.sheet-note svg { width: 15px; height: 15px; flex: none; color: var(--ok); }
+.sheet-note.warn svg { color: var(--warn); }
+.sheet-actions { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+
+/* ============================================================
+   Tracks
+   ============================================================ */
+.filter-rail { display: flex; gap: 8px; overflow-x: auto; padding: 4px 20px 14px; scrollbar-width: none; }
+.filter-rail::-webkit-scrollbar { display: none; }
+.list { display: grid; gap: 12px; }
+.trip {
+  display: grid; grid-template-columns: 72px 1fr; gap: 14px; align-items: center;
+  padding: 14px; cursor: pointer; text-align: left; width: 100%;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card);
+  box-shadow: var(--shadow-1); color: inherit; font-family: var(--font-body);
+  transition: transform var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+.trip:hover { border-color: var(--line-strong); }
+.trip:active { transform: scale(.99); }
+.thumb { width: 72px; height: 72px; border-radius: 12px; background: var(--map-land); border: 1px solid var(--line); overflow: hidden; }
+.thumb svg { display: block; width: 100%; height: 100%; }
+.trip .meta { display: grid; gap: 4px; min-width: 0; }
+.trip .name { font-size: 15px; font-weight: 700; }
+.trip .when { font-size: 12px; color: var(--faint); font-family: var(--font-mono); }
+.trip .nums { display: flex; gap: 12px; margin-top: 2px; }
+.trip .nums b { font-family: var(--font-display); font-weight: 600; font-size: 14px; }
+.trip .nums span { font-size: 12px; color: var(--muted); }
+
+.empty { display: grid; justify-items: center; gap: 10px; text-align: center; padding: 56px 24px; color: var(--muted); }
+.empty .ic { width: 60px; height: 60px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); display: grid; place-items: center; color: var(--brand); }
+.empty .ic svg { width: 28px; height: 28px; }
+.empty h3 { margin: 0; font-size: 16px; color: var(--ink); }
+.empty p { margin: 0; font-size: 13.5px; }
+
+/* track detail */
+.detail-map { position: relative; height: 260px; background: var(--map-land); overflow: hidden; border-bottom: 1px solid var(--line); }
+.detail-map .map-canvas { position: absolute; inset: 0; }
+.detail-body { padding: 18px 20px 28px; display: grid; gap: 16px; }
+.detail-head { display: flex; align-items: flex-start; gap: 12px; }
+.detail-head h2 { margin: 0; font-family: var(--font-display); font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
+.detail-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.mini-stat { padding: 14px; }
+.mini-stat .v { font-family: var(--font-display); font-size: 24px; font-weight: 600; letter-spacing: -.02em; }
+.mini-stat .v small { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.mini-stat .k { font-size: 12px; color: var(--muted); }
+
+/* ============================================================
+   Mine
+   ============================================================ */
+.stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 20px; }
+.stat-card { padding: 16px; }
+.stat-card .v { font-family: var(--font-display); font-size: 30px; font-weight: 600; letter-spacing: -.03em; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.stat-card .v small { font-family: var(--font-mono); font-size: 13px; color: var(--muted); margin-left: 3px; }
+.stat-card .k { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.stat-card .trend { display: inline-flex; align-items: center; gap: 4px; margin-top: 8px; font-size: 12px; color: var(--ok); }
+.stat-card .trend svg { width: 13px; height: 13px; }
+
+.section { margin-bottom: 20px; }
+.section > .eyelet { display: block; margin: 0 2px 8px; }
+.group { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); box-shadow: var(--shadow-1); overflow: hidden; }
+.frow { display: flex; align-items: center; gap: 12px; padding: 14px 16px; width: 100%; text-align: left; background: transparent; border: 0; color: inherit; font-family: var(--font-body); cursor: pointer; }
+.frow + .frow { border-top: 1px solid var(--line); }
+.frow .lead { flex: none; width: 38px; height: 38px; border-radius: 11px; background: var(--surface-2); display: grid; place-items: center; color: var(--brand); }
+.frow .lead svg { width: 20px; height: 20px; }
+.frow .text { display: grid; gap: 1px; flex: 1; min-width: 0; }
+.frow .text .t { font-size: 14.5px; font-weight: 600; }
+.frow .text .h { font-size: 12.5px; color: var(--muted); }
+.frow .trail { flex: none; display: flex; align-items: center; gap: 8px; color: var(--faint); }
+.frow .trail svg { width: 18px; height: 18px; }
+.frow .val { font-size: 13px; color: var(--muted); font-family: var(--font-mono); }
+.frow.static { cursor: default; }
+
+.switch { position: relative; width: 48px; height: 28px; flex: none; border-radius: 999px; background: var(--line-strong); border: 0; cursor: pointer; transition: background var(--dur) var(--ease-out); }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform var(--dur) var(--ease-out); }
+.switch[aria-checked="true"] { background: var(--brand); }
+.switch[aria-checked="true"]::after { transform: translateX(20px); }
+
+.seg { display: inline-flex; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 3px; gap: 3px; }
+.seg button { appearance: none; border: 0; background: transparent; cursor: pointer; font-family: var(--font-body); font-size: 12.5px; font-weight: 600; color: var(--muted); padding: 6px 12px; border-radius: 9px; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-1); }
+
+/* ============================================================
+   Overlays: sheets, modal, toast
+   ============================================================ */
+.scrim { position: absolute; inset: 0; z-index: 60; background: rgba(6,18,15,.42); opacity: 0; pointer-events: none; transition: opacity var(--dur) var(--ease-out); }
+.scrim.show { opacity: 1; pointer-events: auto; }
+.sheet {
+  position: absolute; z-index: 70; left: 0; right: 0; bottom: 0;
+  background: var(--surface); border-radius: var(--r-panel) var(--r-panel) 0 0;
+  border-top: 1px solid var(--line); box-shadow: var(--shadow-2);
+  padding: 12px 20px calc(20px + var(--phone-safe-bottom));
+  transform: translateY(102%); transition: transform var(--dur-slow) var(--ease-out);
+  max-height: 82%; overflow-y: auto;
+}
+.sheet.show { transform: translateY(0); }
+.sheet h3 { margin: 6px 0 4px; font-family: var(--font-display); font-size: 20px; font-weight: 600; letter-spacing: -.02em; }
+.sheet .sub { margin: 0 0 16px; font-size: 13.5px; color: var(--muted); }
+.sheet .grab { width: 40px; height: 4px; border-radius: 99px; background: var(--line-strong); margin: 2px auto 10px; }
+
+.dlg {
+  position: absolute; z-index: 80; left: 50%; top: 50%; width: 300px; transform: translate(-50%, -50%) scale(.96);
+  background: var(--surface); border-radius: 20px; box-shadow: var(--shadow-2); padding: 22px;
+  opacity: 0; pointer-events: none; transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-out);
+  text-align: center;
+}
+.dlg.show { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%) scale(1); }
+.dlg .dico { width: 52px; height: 52px; border-radius: 16px; background: var(--brand-soft); color: var(--brand); display: grid; place-items: center; margin: 0 auto 12px; }
+.dlg .dico svg { width: 26px; height: 26px; }
+.dlg h4 { margin: 0 0 6px; font-family: var(--font-display); font-size: 18px; font-weight: 600; }
+.dlg p { margin: 0 0 18px; font-size: 13.5px; color: var(--muted); }
+.dlg .acts { display: grid; gap: 8px; }
+
+.toast {
+  position: absolute; z-index: 90; left: 50%; bottom: calc(84px + var(--phone-safe-bottom)); transform: translate(-50%, 12px);
+  background: var(--ink); color: var(--paper); font-size: 13.5px; font-weight: 600;
+  padding: 11px 16px; border-radius: 12px; box-shadow: var(--shadow-2);
+  opacity: 0; pointer-events: none; transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-out);
+  max-width: 300px; text-align: center;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* diag list */
+.diag { display: grid; gap: 2px; }
+.diag .d-row { display: flex; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.diag .d-row:last-child { border-bottom: 0; }
+.diag .d-row .k { color: var(--muted); }
+.diag .d-row .v { font-family: var(--font-mono); text-align: right; }
+.diag .d-row .v.ok { color: var(--ok); }
+.diag .d-row .v.warn { color: var(--warn); }
+
+/* focus visibility */
+:where(button, a, [tabindex]):focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 12px; }
+.sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+}
+@media (max-height: 927px) { .phone-frame { zoom: 0.9; } }
+@media (max-height: 840px) { .phone-frame { zoom: 0.82; } }
+@media (max-height: 771px) { .phone-frame { zoom: 0.74; } }
+@media (max-height: 702px) { .phone-frame { zoom: 0.66; } }
+@media (max-width: 480px) {
+  body { padding: 0; display: block; }
+  .phone-frame { width: 100%; height: 100dvh; padding: 0; border-radius: 0; background: none; box-shadow: none; zoom: 1; }
+  .phone-frame::before, .phone-frame::after, .hardware-button { display: none; }
+  .phone-screen { width: 100%; height: 100%; border-radius: 0; }
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-map" viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z"/><path d="M9 4v14M15 6v14"/></symbol>
+    <symbol id="i-foot" viewBox="0 0 24 24"><path d="M4 17.5c2.4-1 3.6-3 3.6-5.2 0-2.6 1.4-4.3 3.4-4.3 2.2 0 3.4 1.8 3.4 4.2 0 2.6-1 4.6-1 6.3 0 1-.7 1.5-1.6 1.2-1.5-.5-2.6-1.4-4-1.4-.9 0-1.8.2-2.6.5"/><circle cx="16.5" cy="4.6" r="1.5"/><path d="M19.8 7.6c.9.5 1.4 1.4 1.4 2.4"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20c.6-3.6 3.6-5.6 7.2-5.6S18.6 16.4 19.2 20"/></symbol>
+    <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.6"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.8 19 12 7 19.2V4.8Z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6.5" y="5" width="3.6" height="14" rx="1.4" fill="currentColor" stroke="none"/><rect x="13.9" y="5" width="3.6" height="14" rx="1.4" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 8.4 4.6L12 12.2 3.6 7.6 12 3Z"/><path d="m4.4 12.4 7.6 4.2 7.6-4.2M4.4 16.6l7.6 4.2 7.6-4.2"/></symbol>
+    <symbol id="i-route" viewBox="0 0 24 24"><circle cx="5.4" cy="18.6" r="2.2"/><circle cx="18.6" cy="5.4" r="2.2"/><path d="M7.4 18.6h6.2a3 3 0 0 0 3-3V9.6"/></symbol>
+    <symbol id="i-chev-r" viewBox="0 0 24 24"><path d="m9.5 6 6 6-6 6"/></symbol>
+    <symbol id="i-chev-l" viewBox="0 0 24 24"><path d="m14.5 6-6 6 6 6"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M20 12H5"/><path d="m11 6-6 6 6 6"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><circle cx="6" cy="12" r="2.4"/><circle cx="17.5" cy="6" r="2.4"/><circle cx="17.5" cy="18" r="2.4"/><path d="m8.2 10.9 7-3.6M8.2 13.1l7 3.6"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v11"/><path d="m7.5 10.2 4.5 4.4 4.5-4.4"/><path d="M5 20h14"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V4"/><path d="m7.5 8.3 4.5-4.4 4.5 4.4"/><path d="M5 20h14"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v5.5c0 4.3 2.9 7.7 7 9.5 4.1-1.8 7-5.2 7-9.5V6l-7-3Z"/><path d="m9.2 12 2 2 3.6-3.8"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.4L19 6.8"/></symbol>
+    <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8.2 12.2 2.6 2.6 5-5.2"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.2"/><circle cx="12" cy="7.8" r=".9" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2.4"/><path d="M15 5.4A2.4 2.4 0 0 0 12.6 3H6.4A2.4 2.4 0 0 0 4 5.4v6.2A2.4 2.4 0 0 0 6.4 14"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2.4M12 19.6V22M2 12h2.4M19.6 12H22M5 5l1.7 1.7M17.3 17.3 19 19M19 5l-1.7 1.7M6.7 17.3 5 19"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.4A8 8 0 0 1 9.6 4 8.2 8.2 0 1 0 20 14.4Z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.4V12l3.2 1.9"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s6.4-5.6 6.4-10.4A6.4 6.4 0 0 0 5.6 10.6C5.6 15.4 12 21 12 21Z"/><circle cx="12" cy="10.4" r="2.4"/></symbol>
+    <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 3s5 4.4 5 9a5 5 0 0 1-10 0c0-1.6.7-3 1.6-4.2.3 1.2 1 1.9 1.9 2.1C11.3 8.1 12 5.7 12 3Z"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M9 12h6M9 16h6"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11.5A8 8 0 1 0 18.6 16"/><path d="M20 5.5V11h-5.5"/></symbol>
+    <symbol id="i-sat" viewBox="0 0 24 24"><path d="M5 13a6 6 0 0 1 6 6M5 8a11 11 0 0 1 11 11"/><circle cx="6" cy="18" r="1.6" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3.5 13.7 9l5.5 1.7-5.5 1.7L12 18l-1.7-5.6L4.8 10.7 10.3 9 12 3.5Z"/></symbol>
+  </defs>
+</svg>
+
+<div class="phone-frame" data-phone-shell data-platform="neutral">
+  <span class="hardware-button volume" aria-hidden="true"></span>
+  <span class="hardware-button power" aria-hidden="true"></span>
+
+  <section class="phone-screen" data-phone-screen>
+    <main class="phone-content" data-phone-content>
+      <div class="app" id="app" data-screen="onboarding">
+
+        <!-- ===================== ONBOARDING ===================== -->
+        <section class="screen is-active" id="screen-onboarding" data-screen-name="onboarding" aria-label="首次使用引导">
+          <div class="onb">
+            <div class="onb-brand">
+              <span class="onb-mark"><svg><use href="#i-foot"/></svg></span>
+              <div class="od-stack" style="--od-gap:0">
+                <span class="n">足迹涂色</span>
+                <span class="v">WalkPaint · v0.3.1</span>
+              </div>
+            </div>
+
+            <div class="od-stack" style="--od-gap:10px">
+              <h2>走过的路，<br>在地图上慢慢涂满。</h2>
+              <p class="lede">记录每天自动累积的足迹，把探索过的路线一点点涂上颜色。全部存在本机，不上传。</p>
+            </div>
+
+            <div class="onb-points">
+              <div class="onb-point card">
+                <span class="ico"><svg><use href="#i-route"/></svg></span>
+                <div class="od-stack" style="--od-gap:1px">
+                  <h3>自动累积足迹</h3>
+                  <p>同意并授权精确定位后，前台服务会持续记录你走过的路线。</p>
+                </div>
+              </div>
+              <div class="onb-point card">
+                <span class="ico"><svg><use href="#i-shield"/></svg></span>
+                <div class="od-stack" style="--od-gap:1px">
+                  <h3>只存本机，不联网上传</h3>
+                  <p>足迹保存在本地数据库，可导出 JSON 备份；诊断信息不含经纬度。</p>
+                </div>
+              </div>
+              <div class="onb-point card">
+                <span class="ico warn"><svg><use href="#i-sat"/></svg></span>
+                <div class="od-stack" style="--od-gap:1px">
+                  <h3>需要常驻定位通知</h3>
+                  <p>Android 要求后台记录时显示常驻通知；可在“我的”里随时暂停。</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="onb-foot">
+              <button class="btn btn-primary btn-block" id="btnConsent">
+                <svg><use href="#i-shield"/></svg>同意并开启自动足迹
+              </button>
+              <button class="btn btn-secondary btn-block" id="btnManual">先看看，仅手动记录</button>
+              <p class="onb-note">继续即表示你已阅读并同意<a href="#" id="linkPrivacy1">《自动足迹与隐私说明》</a>。可随时在“我的”中暂停或关闭。</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================== MAP ===================== -->
+        <section class="screen is-map" id="screen-map" data-screen-name="map" aria-label="地图">
+          <div class="map-wrap">
+            <svg class="map-canvas" id="mapCanvas" viewBox="0 0 390 780" preserveAspectRatio="xMidYMid slice" aria-hidden="true"></svg>
+
+            <div class="map-top">
+              <span class="locpill rec" id="statusPill">
+                <span class="dot"></span>
+                <span id="statusText">记录中</span>
+                <span class="sep"></span>
+                <span class="acc" id="statusAcc">GPS ±4m</span>
+              </span>
+              <span class="od-fill"></span>
+              <button class="chip" id="providerChip" aria-label="切换地图服务">
+                <svg><use href="#i-layers"/></svg><span id="providerText">OpenFreeMap</span>
+              </button>
+            </div>
+
+            <div class="legend" aria-hidden="true">
+              <span class="row"><span class="sw route"></span>已涂色足迹</span>
+              <span class="row"><span class="sw seed"></span>今日起点</span>
+              <span class="row" id="legendDemo"><span class="sw demo"></span>演示航点</span>
+            </div>
+
+            <div class="map-side">
+              <button class="fab" id="fabDemo" aria-pressed="false" aria-label="显示演示航点">
+                <svg><use href="#i-spark"/></svg>
+              </button>
+              <button class="fab" id="fabLocate" aria-label="回到当前位置">
+                <svg><use href="#i-target"/></svg>
+              </button>
+            </div>
+
+            <div class="map-sheet">
+              <div class="sheet-grab" aria-hidden="true"></div>
+              <div class="sheet-stats">
+                <div class="sheet-stat"><span class="v" id="statDist">3.42<small>km</small></span><span class="k">今日里程</span></div>
+                <div class="sheet-stat"><span class="v" id="statTime">42:18</span><span class="k">记录时长</span></div>
+                <div class="sheet-stat"><span class="v" id="statPts">286</span><span class="k">足迹点</span></div>
+              </div>
+              <div class="sheet-note" id="sheetNote">
+                <svg><use href="#i-check-circle"/></svg>
+                <span id="sheetNoteText">最近入库 · 今天 08:14 · 已过滤 12 个静止漂移点</span>
+              </div>
+              <div class="sheet-actions">
+                <button class="btn btn-rec is-recording" id="btnRec" aria-pressed="true"><svg><use href="#i-pause"/></svg><span id="recLabel">暂停记录</span></button>
+                <button class="btn btn-secondary" id="btnRecMore" aria-label="更多记录选项"><svg><use href="#i-info"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================== TRACKS ===================== -->
+        <section class="screen" id="screen-tracks" data-screen-name="tracks" aria-label="足迹">
+          <header class="topbar">
+            <div class="titles">
+              <h1>足迹</h1>
+              <span class="sub">共 42.6 公里 · 18 个探索日</span>
+            </div>
+            <span class="od-fill"></span>
+            <button class="iconbtn ghost" id="btnTracksShare" aria-label="导出全部足迹"><svg><use href="#i-download"/></svg></button>
+          </header>
+          <div class="screen-body" style="padding-left:0;padding-right:0">
+            <div class="filter-rail" role="tablist" aria-label="时间筛选">
+              <button class="chip is-on" role="tab" aria-selected="true" data-filter="all">全部</button>
+              <button class="chip" role="tab" aria-selected="false" data-filter="week">本周</button>
+              <button class="chip" role="tab" aria-selected="false" data-filter="month">本月</button>
+              <button class="chip" role="tab" aria-selected="false" data-filter="walk">步行</button>
+              <button class="chip" role="tab" aria-selected="false" data-filter="ride">骑行</button>
+            </div>
+            <div class="screen-body" style="padding-top:0" id="tracksList"></div>
+          </div>
+        </section>
+
+        <!-- ===================== TRACK DETAIL ===================== -->
+        <section class="screen" id="screen-detail" data-screen-name="tracks" aria-label="行程详情">
+          <header class="topbar">
+            <button class="iconbtn ghost" id="btnDetailBack" aria-label="返回足迹列表"><svg><use href="#i-back"/></svg></button>
+            <div class="titles">
+              <h1 id="detailTitle" style="font-size:20px">行程详情</h1>
+              <span class="sub" id="detailWhen">—</span>
+            </div>
+          </header>
+          <div class="screen-body" style="padding:0">
+            <div class="detail-map"><svg class="map-canvas" id="detailMap" viewBox="0 0 390 260" preserveAspectRatio="xMidYMid slice" aria-hidden="true"></svg></div>
+            <div class="detail-body">
+              <div class="detail-grid">
+                <div class="mini-stat card"><div class="v" id="dDist">—</div><div class="k">里程</div></div>
+                <div class="mini-stat card"><div class="v" id="dDur">—</div><div class="k">时长</div></div>
+                <div class="mini-stat card"><div class="v" id="dPts">—</div><div class="k">足迹点</div></div>
+                <div class="mini-stat card"><div class="v" id="dPace">—</div><div class="k">平均配速</div></div>
+              </div>
+              <div class="group">
+                <button class="frow" id="dShare"><span class="lead"><svg><use href="#i-share"/></svg></span><span class="text"><span class="t">分享这张足迹图</span><span class="h">导出为图片</span></span><span class="trail"><svg><use href="#i-chev-r"/></svg></span></button>
+                <button class="frow" id="dExport"><span class="lead"><svg><use href="#i-download"/></svg></span><span class="text"><span class="t">导出此行程 JSON</span><span class="h">单条轨迹备份</span></span><span class="trail"><svg><use href="#i-chev-r"/></svg></span></button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================== MINE ===================== -->
+        <section class="screen" id="screen-mine" data-screen-name="mine" aria-label="我的">
+          <header class="topbar">
+            <div class="titles">
+              <h1>我的</h1>
+              <span class="sub">WalkPaint · 包名 cn.walkpaint</span>
+            </div>
+            <span class="od-fill"></span>
+            <span class="onb-mark" style="width:44px;height:44px;border-radius:13px"><svg><use href="#i-foot"/></svg></span>
+          </header>
+          <div class="screen-body">
+            <div class="stats-grid">
+              <div class="stat-card card"><div class="v">42.6<small>km</small></div><div class="k">累计里程</div><div class="trend"><svg><use href="#i-flame"/></svg>连续 6 天</div></div>
+              <div class="stat-card card"><div class="v">18<small>天</small></div><div class="k">探索天数</div></div>
+              <div class="stat-card card"><div class="v">2,864</div><div class="k">足迹点</div></div>
+              <div class="stat-card card"><div class="v">126<small>格</small></div><div class="k">探索网格</div></div>
+            </div>
+
+            <div class="section">
+              <span class="eyelet">记录</span>
+              <div class="group">
+                <div class="frow static">
+                  <span class="lead"><svg><use href="#i-route"/></svg></span>
+                  <span class="text"><span class="t">自动足迹</span><span class="h" id="autoHelper">授权后自动记录，无需手动开始</span></span>
+                  <button class="switch" id="swAuto" role="switch" aria-checked="true" aria-label="自动足迹"></button>
+                </div>
+                <button class="frow" id="rowPerm">
+                  <span class="lead"><svg><use href="#i-shield"/></svg></span>
+                  <span class="text"><span class="t">定位与后台权限</span><span class="h">精确定位 · 始终允许</span></span>
+                  <span class="trail"><span class="val">已允许</span><svg><use href="#i-chev-r"/></svg></span>
+                </button>
+              </div>
+            </div>
+
+            <div class="section">
+              <span class="eyelet">地图服务</span>
+              <div class="group">
+                <button class="frow" id="rowProvider">
+                  <span class="lead"><svg><use href="#i-layers"/></svg></span>
+                  <span class="text"><span class="t">底图来源</span><span class="h">高德需单独同意第三方隐私授权</span></span>
+                  <span class="trail"><span class="val" id="providerVal">OpenFreeMap</span><svg><use href="#i-chev-r"/></svg></span>
+                </button>
+              </div>
+            </div>
+
+            <div class="section">
+              <span class="eyelet">数据与备份</span>
+              <div class="group">
+                <button class="frow" id="rowExport"><span class="lead"><svg><use href="#i-download"/></svg></span><span class="text"><span class="t">导出足迹 JSON</span><span class="h">合并导入可去重 · 建议备份到设备外</span></span><span class="trail"><svg><use href="#i-chev-r"/></svg></span></button>
+                <button class="frow" id="rowImport"><span class="lead"><svg><use href="#i-upload"/></svg></span><span class="text"><span class="t">导入 JSON 备份</span><span class="h">合并时会保留已有的较新记录</span></span><span class="trail"><svg><use href="#i-chev-r"/></svg></span></button>
+                <button class="frow" id="rowDiag"><span class="lead"><svg><use href="#i-copy"/></svg></span><span class="text"><span class="t">复制诊断信息</span><span class="h">不含经纬度与历史路线</span></span><span class="trail"><svg><use href="#i-chev-r"/></svg></span></button>
+              </div>
+            </div>
+
+            <div class="section">
+              <span class="eyelet">外观与关于</span>
+              <div class="group">
+                <div class="frow static">
+                  <span class="lead"><svg><use href="#i-moon"/></svg></span>
+                  <span class="text"><span class="t">外观</span><span class="h">夜间尤其适合查看地图</span></span>
+                  <span class="seg" id="segTheme" role="group" aria-label="外观">
+                    <button data-theme-val="system" aria-pressed="true">跟随系统</button>
+                    <button data-theme-val="light" aria-pressed="false">浅色</button>
+                    <button data-theme-val="dark" aria-pressed="false">深色</button>
+                  </span>
+                </div>
+                <button class="frow" id="rowPrivacy"><span class="lead"><svg><use href="#i-doc"/></svg></span><span class="text"><span class="t">自动足迹与隐私说明</span><span class="h">数据存储、权限与第三方 SDK</span></span><span class="trail"><svg><use href="#i-chev-r"/></svg></span></button>
+                <button class="frow" id="rowReset"><span class="lead"><svg><use href="#i-refresh"/></svg></span><span class="text"><span class="t">重新查看首次引导</span><span class="h">回到同意与授权说明</span></span><span class="trail"><svg><use href="#i-chev-r"/></svg></span></button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================== TAB BAR ===================== -->
+        <nav class="tabbar" role="tablist" aria-label="主导航">
+          <button class="tabitem" role="tab" data-tab="map" aria-selected="false"><svg><use href="#i-map"/></svg>地图</button>
+          <button class="tabitem" role="tab" data-tab="tracks" aria-selected="false"><svg><use href="#i-foot"/></svg>足迹</button>
+          <button class="tabitem" role="tab" data-tab="mine" aria-selected="false"><svg><use href="#i-user"/></svg>我的</button>
+        </nav>
+      </div>
+    </main>
+
+    <!-- overlays live on the screen so they cover bars -->
+    <div class="scrim" id="scrim"></div>
+
+    <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle" hidden>
+      <div class="grab" id="sheetGrab"></div>
+      <h3 id="sheetTitle">标题</h3>
+      <p class="sub" id="sheetSub">说明</p>
+      <div id="sheetBody"></div>
+    </section>
+
+    <section class="dlg" id="dlg" role="dialog" aria-modal="true" aria-labelledby="dlgTitle" hidden>
+      <div class="dico" id="dlgIco"><svg><use href="#i-shield"/></svg></div>
+      <h4 id="dlgTitle">标题</h4>
+      <p id="dlgText">说明</p>
+      <div class="acts" id="dlgActs"></div>
+    </section>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <div class="status-bar" aria-hidden="true">
+      <span class="status-time">9:41</span>
+      <span class="status-cutout-zone"></span>
+      <span class="status-icons">
+        <svg class="connectivity" viewBox="0 0 15 12"><path d="M1.5 10.5v-2m4 2v-4.5m4 4.5v-7m4 7v-9"/></svg>
+        <svg class="wifi" viewBox="0 0 16 12"><path d="M1.5 4.7a9.2 9.2 0 0 1 13 0M4.2 7.3a5.4 5.4 0 0 1 7.6 0M6.9 10a1.55 1.55 0 0 1 2.2 0"/></svg>
+        <svg class="battery" viewBox="0 0 20 11"><rect x=".75" y="1.25" width="16.5" height="8.5" rx="2"/><path d="M18.5 4v3M3.2 3.4h10.4v4.2H3.2z" fill="currentColor" stroke="none"/></svg>
+      </span>
+    </div>
+    <div class="camera-dot" aria-hidden="true"></div>
+    <div class="gesture-indicator" aria-hidden="true"></div>
+  </section>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+
+  var app = $("#app");
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------------- Map SVG builder ---------------- */
+  var MAP_NS = "http://www.w3.org/2000/svg";
+  function el(name, attrs, parent) {
+    var n = document.createElementNS(MAP_NS, name);
+    for (var k in attrs) { if (attrs.hasOwnProperty(k)) n.setAttribute(k, attrs[k]); }
+    if (parent) parent.appendChild(n);
+    return n;
+  }
+  var ROUTE_POINTS = [[120,300],[120,470],[196,470],[196,588],[300,588]];
+  var DEMO_POINTS = [[92,560],[268,352],[330,470]];
+  var SEED = [120,300];
+  var HERE = [300,588];
+
+  function buildMap(svg, viewBoxH, opts) {
+    opts = opts || {};
+    svg.setAttribute("viewBox", "0 0 390 " + viewBoxH);
+    svg.innerHTML = "";
+    var land = el("rect", { x: -20, y: -20, width: 430, height: viewBoxH + 40, fill: "var(--map-land)" }, svg);
+
+    // parks + blocks
+    el("path", { d: "M22 70h96a14 14 0 0 1 14 14v70a14 14 0 0 1-14 14H22a14 14 0 0 1-14-14V84a14 14 0 0 1 14-14Z", fill: "var(--map-park)", opacity: "0.9" }, svg);
+    el("path", { d: "M250 250h120v96H250z", fill: "var(--map-park)", opacity: "0.75" }, svg);
+    for (var i = 0; i < 14; i++) {
+      var bx = 30 + (i * 53) % 320, by = 40 + ((i * 97) % (viewBoxH - 90));
+      el("rect", { x: bx, y: by, width: 34, height: 22, rx: 3, fill: "var(--map-block)", opacity: "0.6" }, svg);
+    }
+
+    // river
+    el("path", { d: "M-30 120 C 90 170, 120 250, 210 320 S 300 500, 430 560", fill: "none", stroke: "var(--map-water)", "stroke-width": 40, "stroke-linecap": "round", "vector-effect": "non-scaling-stroke" }, svg);
+
+    // minor roads
+    var vx = [58, 138, 232, 322, 372];
+    vx.forEach(function (x) { el("line", { x1: x, y1: -20, x2: x, y2: viewBoxH + 20, stroke: "var(--map-road-minor)", "stroke-width": 4, "vector-effect": "non-scaling-stroke" }, svg); });
+    var hy = [64, 176, 300, 424, 548, 664];
+    hy.forEach(function (y) { if (y < viewBoxH - 10) el("line", { x1: -20, y1: y, x2: 410, y2: y, stroke: "var(--map-road-minor)", "stroke-width": 4, "vector-effect": "non-scaling-stroke" }, svg); });
+
+    // major roads
+    el("line", { x1: 196, y1: -20, x2: 196, y2: viewBoxH + 20, stroke: "var(--map-road)", "stroke-width": 11, "vector-effect": "non-scaling-stroke" }, svg);
+    el("line", { x1: -20, y1: 470, x2: 410, y2: 470, stroke: "var(--map-road)", "stroke-width": 10, "vector-effect": "non-scaling-stroke" }, svg);
+    el("path", { d: "M-20 600 L 410 250", stroke: "var(--map-road)", "stroke-width": 8, fill: "none", "vector-effect": "non-scaling-stroke" }, svg);
+
+    // route paint with casing
+    var routeD = "M" + ROUTE_POINTS.map(function (p) { return p[0] + " " + p[1]; }).join(" L ");
+    el("path", { d: routeD, fill: "none", stroke: "var(--map-road)", "stroke-width": 9, "stroke-linecap": "round", "stroke-linejoin": "round", "vector-effect": "non-scaling-stroke", opacity: "0.85" }, svg);
+    el("path", { d: routeD, fill: "none", stroke: "var(--route)", "stroke-width": 5, "stroke-linecap": "round", "stroke-linejoin": "round", "vector-effect": "non-scaling-stroke" }, svg);
+    // live (unpainted) segment
+    var live = el("path", { d: "M300 588 L 336 560 L 366 586", fill: "none", stroke: "var(--route)", "stroke-width": 5, "stroke-linecap": "round", "stroke-linejoin": "round", "vector-effect": "non-scaling-stroke", opacity: "0.35", "stroke-dasharray": "2 8" }, svg);
+
+    // demo layer
+    var demo = el("g", { id: (opts.demoId || "demoLayer"), style: "display:none" }, svg);
+    DEMO_POINTS.forEach(function (p) {
+      el("circle", { cx: p[0], cy: p[1], r: 6, fill: "var(--demo)", opacity: "0.25" }, demo);
+      el("circle", { cx: p[0], cy: p[1], r: 3, fill: "var(--demo)" }, demo);
+    });
+
+    // seed marker
+    if (!opts.hideSeed) {
+      el("circle", { cx: SEED[0], cy: SEED[1], r: 7, fill: "#fff" }, svg);
+      el("circle", { cx: SEED[0], cy: SEED[1], r: 4.2, fill: "var(--brand)" }, svg);
+    }
+
+    // here marker
+    var wrap = el("g", null, svg);
+    el("circle", { cx: HERE[0], cy: HERE[1], r: 13, fill: "var(--route)", opacity: "0.16" }, wrap);
+    el("circle", { cx: HERE[0], cy: HERE[1], r: 7.5, fill: "#fff" }, wrap);
+    el("circle", { cx: HERE[0], cy: HERE[1], r: 5, fill: "var(--route)" }, wrap);
+
+    if (!opts.noLabels) {
+      el("text", { x: 30, y: 104, fill: "var(--muted)", "font-size": 9, opacity: "0.7" }, svg).textContent = "城市公园";
+      el("text", { x: 250, y: 300, fill: "var(--muted)", "font-size": 9, opacity: "0.7" }, svg).textContent = "滨江绿地";
+    }
+    return { live: live, demo: demo };
+  }
+
+  var mapRefs = buildMap($("#mapCanvas"), 780, {});
+  buildMap($("#detailMap"), 260, { noLabels: true, hideSeed: true, demoId: "demoLayerD" });
+
+  /* ---------------- Toast ---------------- */
+  var toastEl = $("#toast"), toastTimer = null;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove("show"); }, 2200);
+  }
+
+  /* ---------------- Sheet / Dialog ---------------- */
+  var scrim = $("#scrim"), sheet = $("#sheet"), dlg = $("#dlg");
+  function closeOverlays() {
+    scrim.classList.remove("show");
+    sheet.classList.remove("show");
+    dlg.classList.remove("show");
+    setTimeout(function () { sheet.hidden = true; dlg.hidden = true; }, reduce ? 0 : 260);
+  }
+  function openSheet(title, sub, bodyNode) {
+    $("#sheetTitle").textContent = title;
+    $("#sheetSub").textContent = sub || "";
+    var body = $("#sheetBody"); body.innerHTML = ""; if (bodyNode) body.appendChild(bodyNode);
+    sheet.hidden = false; scrim.classList.add("show");
+    requestAnimationFrame(function () { sheet.classList.add("show"); });
+  }
+  function openDialog(title, text, icoId, actions) {
+    $("#dlgTitle").textContent = title;
+    $("#dlgText").textContent = text;
+    $("#dlgIco").innerHTML = '<svg><use href="#' + (icoId || "i-shield") + '"/></svg>';
+    var acts = $("#dlgActs"); acts.innerHTML = "";
+    actions.forEach(function (a, idx) {
+      var b = document.createElement("button");
+      b.className = "btn btn-block " + (a.kind === "primary" ? "btn-primary" : "btn-secondary");
+      b.textContent = a.label;
+      b.addEventListener("click", function () { a.onClick && a.onClick(); });
+      acts.appendChild(b);
+    });
+    dlg.hidden = false; scrim.classList.add("show");
+    requestAnimationFrame(function () { dlg.classList.add("show"); });
+  }
+  scrim.addEventListener("click", closeOverlays);
+  $("#sheetGrab").addEventListener("click", closeOverlays);
+
+  /* ---------------- Router ---------------- */
+  var SCREENS = { onboarding: "#screen-onboarding", map: "#screen-map", tracks: "#screen-tracks", detail: "#screen-detail", mine: "#screen-mine" };
+  var current = "onboarding";
+  function go(name) {
+    current = name;
+    $$(".screen").forEach(function (s) { s.classList.remove("is-active"); });
+    var target = $(SCREENS[name]);
+    target.classList.add("is-active");
+    if (name === "onboarding") { app.setAttribute("data-screen", "onboarding"); }
+    else {
+      app.setAttribute("data-screen", "app");
+      var tab = name === "detail" ? "tracks" : name;
+      $$(".tabitem").forEach(function (t) {
+        t.setAttribute("aria-selected", t.getAttribute("data-tab") === tab ? "true" : "false");
+      });
+    }
+    closeOverlays();
+  }
+  $$(".tabitem").forEach(function (t) {
+    t.addEventListener("click", function () {
+      var tab = t.getAttribute("data-tab");
+      if (tab === "tracks" && current === "detail") { go("tracks"); return; }
+      go(tab);
+    });
+  });
+
+  /* ---------------- Onboarding ---------------- */
+  $("#btnManual").addEventListener("click", function () {
+    go("map"); setRecording(false);
+    toast("已进入手动模式，点“开始记录”再出发");
+  });
+  $("#btnConsent").addEventListener("click", function () {
+    openDialog("允许“足迹涂色”使用你的位置？", "选择“始终允许”以便在锁屏与后台持续记录足迹。App 需要精确定位权限。", "i-sat", [
+      { label: "始终允许", kind: "primary", onClick: function () { closeOverlays(); go("map"); setRecording(true); toast("自动足迹已开启 · 前台服务运行中"); } },
+      { label: "仅在使用时允许", onClick: function () { closeOverlays(); go("map"); setRecording(true); toast("已开启；锁屏后可能暂停，建议改为始终允许"); } }
+    ]);
+  });
+  $("#linkPrivacy1").addEventListener("click", function (e) { e.preventDefault(); showPrivacy(); });
+
+  /* ---------------- Map: recording ---------------- */
+  var rec = { on: true, started: 42 * 60 + 18, meters: 3420, points: 286, timer: null };
+  var pill = $("#statusPill"), statusText = $("#statusText"), recLabel = $("#recLabel"), btnRec = $("#btnRec");
+
+  function fmtTime(total) {
+    var m = Math.floor(total / 60), s = total % 60;
+    return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+  }
+  function render() {
+    $("#statTime").textContent = fmtTime(rec.started);
+    $("#statDist").innerHTML = (rec.meters / 1000).toFixed(2) + "<small>km</small>";
+    $("#statPts").textContent = rec.points;
+  }
+  function setRecording(on) {
+    rec.on = on;
+    clearInterval(rec.timer); rec.timer = null;
+    if (on) {
+      pill.className = "locpill rec"; statusText.textContent = "记录中"; $("#statusAcc").textContent = "GPS ±4m";
+      btnRec.classList.add("is-recording"); btnRec.setAttribute("aria-pressed", "true");
+      recLabel.textContent = "暂停记录";
+      document.querySelector("#btnRec use").setAttribute("href", "#i-pause");
+      if (mapRefs.live) mapRefs.live.setAttribute("opacity", "0.85");
+      if (!reduce) {
+        rec.timer = setInterval(function () {
+          rec.started += 1; rec.meters += 4; if (rec.started % 3 === 0) rec.points += 1;
+          render();
+          if (rec.points % 40 === 0 && mapRefs.live) mapRefs.live.setAttribute("opacity", (0.5 + Math.random() * 0.5).toFixed(2));
+        }, 1000);
+      }
+      $("#sheetNote").className = "sheet-note";
+      $("#sheetNoteText").textContent = "最近入库 · 刚刚 · 已过滤 12 个静止漂移点";
+    } else {
+      pill.className = "locpill paused"; statusText.textContent = "已暂停"; $("#statusAcc").textContent = "服务已停止";
+      btnRec.classList.remove("is-recording"); btnRec.setAttribute("aria-pressed", "false");
+      recLabel.textContent = "继续记录";
+      document.querySelector("#btnRec use").setAttribute("href", "#i-play");
+      if (mapRefs.live) mapRefs.live.setAttribute("opacity", "0.35");
+      $("#sheetNote").className = "sheet-note warn";
+      $("#sheetNoteText").textContent = "定位服务已暂停 · 不会继续累积足迹";
+    }
+  }
+  btnRec.addEventListener("click", function () {
+    setRecording(!rec.on);
+    toast(rec.on ? "已开始记录" : "已暂停记录");
+  });
+  $("#btnRecMore").addEventListener("click", function () {
+    var body = document.createElement("div");
+    body.className = "diag";
+    body.innerHTML =
+      '<div class="d-row"><span class="k">定位服务</span><span class="v ok">运行中</span></div>' +
+      '<div class="d-row"><span class="k">GPS 精度</span><span class="v">±4 m</span></div>' +
+      '<div class="d-row"><span class="k">今日入库点</span><span class="v">286</span></div>' +
+      '<div class="d-row"><span class="k">过滤原因</span><span class="v">静止漂移 ×12</span></div>' +
+      '<div class="d-row"><span class="k">电池策略</span><span class="v ok">无限制</span></div>';
+    openSheet("记录状态", "实时说明当前采集情况，不含经纬度。", body);
+  });
+
+  /* demo + locate */
+  var fabDemo = $("#fabDemo");
+  fabDemo.addEventListener("click", function () {
+    var on = fabDemo.getAttribute("aria-pressed") !== "true";
+    fabDemo.setAttribute("aria-pressed", on ? "true" : "false");
+    fabDemo.classList.toggle("is-on", on);
+    mapRefs.demo.style.display = on ? "" : "none";
+    $("#legendDemo").style.opacity = on ? "1" : ".45";
+    toast(on ? "已显示演示航点（紫色，仅演示）" : "已隐藏演示航点");
+  });
+  $("#fabLocate").addEventListener("click", function () { toast("已回到当前位置"); });
+  $("#legendDemo").style.opacity = ".45";
+
+  /* provider switch */
+  function providerSheet() {
+    var wrap = document.createElement("div");
+    wrap.className = "od-stack"; wrap.style.setProperty("--od-gap", "10px");
+    [["OpenFreeMap", "开源底图 · © OpenStreetMap", "open"], ["高德地图", "需同意第三方隐私授权后启用", "amap"]].forEach(function (p) {
+      var b = document.createElement("button");
+      b.className = "frow"; b.style.border = "1px solid var(--line)"; b.style.borderRadius = "14px"; b.style.background = "var(--surface)";
+      b.innerHTML = '<span class="lead"><svg><use href="#i-layers"/></svg></span><span class="text"><span class="t">' + p[0] + '</span><span class="h">' + p[1] + '</span></span><span class="trail" id="pv-' + p[2] + '"></span>';
+      b.addEventListener("click", function () { chooseProvider(p[0], p[2]); });
+      wrap.appendChild(b);
+    });
+    openSheet("底图来源", "足迹始终以 WGS84 存在本机，切换底图只影响显示。", wrap);
+    markProviders();
+  }
+  var provider = "OpenFreeMap";
+  function markProviders() {
+    [["open", "OpenFreeMap"], ["amap", "高德地图"]].forEach(function (p) {
+      var slot = $("#pv-" + p[0]); if (!slot) return;
+      slot.innerHTML = provider === p[1] ? '<svg style="color:var(--brand)"><use href="#i-check-circle"/></svg>' : "";
+    });
+  }
+  function chooseProvider(name, key) {
+    if (key === "amap" && provider !== "高德地图") {
+      closeOverlays();
+      openDialog("启用高德地图？", "高德 SDK 会访问网络、定位与设备信息。同意后才会初始化第三方地图与隐私授权。", "i-shield", [
+        { label: "同意并启用", kind: "primary", onClick: function () {
+          provider = "高德地图"; $("#providerText").textContent = "高德"; $("#providerVal").textContent = "高德地图";
+          closeOverlays(); toast("已启用高德底图 · 署名 © 高德");
+        } },
+        { label: "暂不启用", onClick: closeOverlays }
+      ]);
+      return;
+    }
+    provider = name; $("#providerText").textContent = name === "高德地图" ? "高德" : name;
+    $("#providerVal").textContent = name; closeOverlays(); markProviders(); toast("已切换底图：" + name);
+  }
+  $("#providerChip").addEventListener("click", providerSheet);
+  $("#rowProvider").addEventListener("click", providerSheet);
+
+  /* ---------------- Tracks data + list ---------------- */
+  var TRIPS = [
+    { id: "t1", name: "早间散步", when: "今天 07:32", date: "2026-10-12", km: 3.42, dur: "42 分 18 秒", pts: 286, kind: "walk", pace: "12'22\"/km", d: "M8 40 C 16 24, 30 26, 40 40 S 52 58, 56 44" },
+    { id: "t2", name: "沿江骑行", when: "昨天 18:05", date: "2026-10-11", km: 12.06, dur: "51 分 02 秒", pts: 742, kind: "ride", pace: "4'14\"/km", d: "M6 46 C 18 20, 26 52, 40 28 S 54 20, 58 38" },
+    { id: "t3", name: "公园绕圈", when: "10 月 9 日 06:50", date: "2026-10-09", km: 2.18, dur: "28 分 07 秒", pts: 174, kind: "walk", pace: "12'54\"/km", d: "M10 20 C 28 12, 50 16, 54 30 S 40 52, 20 48 S 6 36, 10 20" },
+    { id: "t4", name: "通勤步行", when: "10 月 7 日 08:10", date: "2026-10-07", km: 1.65, dur: "22 分 03 秒", pts: 128, kind: "walk", pace: "13'22\"/km", d: "M8 44 L 24 30 L 40 34 L 56 16" },
+    { id: "t5", name: "周末探索", when: "10 月 5 日 15:20", date: "2026-10-05", km: 8.73, dur: "1 小时 36 分", pts: 903, kind: "walk", pace: "11'00\"/km", d: "M6 38 C 20 16, 30 44, 44 24 S 56 40, 58 24" },
+    { id: "t6", name: "夜跑", when: "10 月 2 日 21:40", date: "2026-10-02", km: 5.20, dur: "34 分 11 秒", pts: 411, kind: "ride", pace: "6'34\"/km", d: "M8 24 C 22 44, 34 18, 46 40 S 56 26, 58 42" }
+  ];
+  var filter = "all";
+  function visibleTrips() {
+    if (filter === "all") return TRIPS;
+    if (filter === "week") return TRIPS.slice(0, 4);
+    if (filter === "month") return TRIPS;
+    return TRIPS.filter(function (t) { return t.kind === filter; });
+  }
+  function thumbSVG(d) {
+    return '<svg viewBox="0 0 64 64" aria-hidden="true" preserveAspectRatio="xMidYMid meet">' +
+      '<rect width="64" height="64" fill="var(--map-land)"/>' +
+      '<line x1="0" y1="20" x2="64" y2="20" stroke="var(--map-road-minor)" stroke-width="3"/>' +
+      '<line x1="0" y1="44" x2="64" y2="44" stroke="var(--map-road-minor)" stroke-width="3"/>' +
+      '<line x1="22" y1="0" x2="22" y2="64" stroke="var(--map-road-minor)" stroke-width="3"/>' +
+      '<path d="' + d + '" fill="none" stroke="var(--route)" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '</svg>';
+  }
+  function renderTracks() {
+    var list = $("#tracksList");
+    var data = visibleTrips();
+    if (!data.length) {
+      list.innerHTML = '<div class="empty"><span class="ic"><svg><use href="#i-foot"/></svg></span>' +
+        '<h3>这里还没有足迹</h3><p>开启自动足迹或点“开始记录”，走过的路会出现在这里。</p></div>';
+      return;
+    }
+    list.innerHTML = "";
+    var frag = document.createDocumentFragment();
+    data.forEach(function (t, i) {
+      var b = document.createElement("button");
+      b.className = "trip"; b.type = "button";
+      b.setAttribute("aria-label", t.name + "，" + t.km + " 公里，" + t.dur);
+      b.innerHTML = '<span class="thumb">' + thumbSVG(t.d) + '</span>' +
+        '<span class="meta"><span class="name">' + t.name + '</span><span class="when">' + t.when + '</span>' +
+        '<span class="nums"><b>' + t.km.toFixed(2) + '</b><span>km</span><b>' + t.dur + '</b></span></span>';
+      if (!reduce) { b.style.opacity = "0"; b.style.transform = "translateY(6px)"; b.style.transition = "opacity .28s var(--ease-out) " + (i * 40) + "ms, transform .28s var(--ease-out) " + (i * 40) + "ms"; requestAnimationFrame(function () { b.style.opacity = "1"; b.style.transform = "none"; }); }
+      b.addEventListener("click", function () { openDetail(t); });
+      frag.appendChild(b);
+    });
+    list.appendChild(frag);
+  }
+  $$(".filter-rail .chip").forEach(function (c) {
+    c.addEventListener("click", function () {
+      filter = c.getAttribute("data-filter");
+      $$(".filter-rail .chip").forEach(function (o) { o.classList.toggle("is-on", o === c); o.setAttribute("aria-selected", o === c ? "true" : "false"); });
+      renderTracks();
+    });
+  });
+
+  function openDetail(t) {
+    $("#detailTitle").textContent = t.name;
+    $("#detailWhen").textContent = t.date + " · " + t.when;
+    $("#dDist").innerHTML = t.km.toFixed(2) + '<small> km</small>';
+    $("#dDur").textContent = t.dur;
+    $("#dPts").textContent = t.pts;
+    $("#dPace").innerHTML = t.pace;
+    buildMap($("#detailMap"), 260, { noLabels: true, hideSeed: false, demoId: "demoLayerD" });
+    go("detail");
+  }
+  $("#btnDetailBack").addEventListener("click", function () { go("tracks"); });
+  $("#dShare").addEventListener("click", function () { toast("已生成足迹图，可分享"); });
+  $("#dExport").addEventListener("click", function () { toast("已导出单条行程 JSON"); });
+  $("#btnTracksShare").addEventListener("click", function () { toast("已导出全部足迹 JSON"); });
+
+  /* ---------------- Mine actions ---------------- */
+  var auto = true, swAuto = $("#swAuto");
+  swAuto.addEventListener("click", function () {
+    auto = !auto;
+    swAuto.setAttribute("aria-checked", auto ? "true" : "false");
+    $("#autoHelper").textContent = auto ? "授权后自动记录，无需手动开始" : "仅手动记录；不会在后台采集";
+    setRecording(auto && current === "map" ? true : rec.on);
+    toast(auto ? "自动足迹已开启" : "自动足迹已关闭");
+  });
+  $("#rowPerm").addEventListener("click", function () {
+    var body = document.createElement("div");
+    body.className = "diag";
+    body.innerHTML =
+      '<div class="d-row"><span class="k">精确位置</span><span class="v ok">已允许</span></div>' +
+      '<div class="d-row"><span class="k">后台位置</span><span class="v ok">始终允许</span></div>' +
+      '<div class="d-row"><span class="k">通知</span><span class="v ok">已开启</span></div>' +
+      '<div class="d-row"><span class="k">电池优化</span><span class="v warn">建议设为无限制</span></div>';
+    openSheet("定位与后台权限", "在系统设置中可调整；锁屏后是否持续记录取决于厂商省电策略。", body);
+  });
+  $("#rowExport").addEventListener("click", function () { toast("已导出 footprints.json"); });
+  $("#rowImport").addEventListener("click", function () { toast("已导入并合并，重复路线已去重"); });
+  $("#rowDiag").addEventListener("click", function () {
+    var body = document.createElement("div");
+    body.className = "diag";
+    body.innerHTML =
+      '<div class="d-row"><span class="k">权限</span><span class="v ok">精确定位 · 始终</span></div>' +
+      '<div class="d-row"><span class="k">前台服务</span><span class="v ok">运行中</span></div>' +
+      '<div class="d-row"><span class="k">GPS 精度</span><span class="v">±4 m</span></div>' +
+      '<div class="d-row"><span class="k">最新入库</span><span class="v">今天 08:14</span></div>' +
+      '<div class="d-row"><span class="k">电池策略</span><span class="v warn">未限制</span></div>' +
+      '<div class="d-row"><span class="k">经纬度</span><span class="v">不包含</span></div>';
+    openSheet("定位诊断信息", "可直接复制发给开发者排障，不含经纬度与历史路线。", body);
+    var copy = document.createElement("button");
+    copy.className = "btn btn-primary btn-block"; copy.style.marginTop = "16px";
+    copy.innerHTML = '<svg><use href="#i-copy"/></svg>复制诊断信息';
+    copy.addEventListener("click", function () {
+      var txt = "WalkPaint 诊断\n权限：精确定位·始终\n前台服务：运行中\nGPS 精度：±4m\n最新入库：今天08:14\n电池策略：未限制\n（不含经纬度）";
+      if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(txt).catch(function () {}); }
+      toast("诊断信息已复制");
+    });
+    $("#sheetBody").appendChild(copy);
+  });
+  $("#rowPrivacy").addEventListener("click", showPrivacy);
+  function showPrivacy() {
+    var body = document.createElement("div");
+    body.className = "od-stack"; body.style.setProperty("--od-gap", "12px");
+    body.innerHTML =
+      '<p style="margin:0;font-size:13.5px;color:var(--muted);line-height:1.6">• 足迹以 WGS84 保存在本机 SQLite / JSON，不自动上传到我方服务器。<br>• 诊断信息不含经纬度与历史路线。<br>• 启用高德底图时，高德 SDK 会访问网络、定位与设备信息，需你单独同意。<br>• OpenFreeMap 底图署名 © OpenStreetMap contributors。<br>• 卸载 App 会移除本地快照，请主动导出备份到设备外。</p>';
+    openSheet("自动足迹与隐私说明", "本说明随 v0.3.1 界面重设计更新。", body);
+  }
+  $("#rowReset").addEventListener("click", function () { go("onboarding"); });
+
+  /* theme */
+  $$("#segTheme button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var val = b.getAttribute("data-theme-val");
+      document.documentElement.setAttribute("data-theme", val);
+      $$("#segTheme button").forEach(function (o) { o.setAttribute("aria-pressed", o === b ? "true" : "false"); });
+      toast(val === "system" ? "外观：跟随系统" : val === "light" ? "外观：浅色" : "外观：深色");
+    });
+  });
+
+  /* ---------------- init ---------------- */
+  render();
+  renderTracks();
+  go("onboarding");
+})();
+</script>
+</body>
+</html>

@@ -17,7 +17,7 @@ import java.util.UUID
  * Future schema upgrades belong in onUpgrade; old v0.1 tracks.json is migrated once.
  */
 class FootprintDatabase(private val context: Context) :
-    SQLiteOpenHelper(context, "footprints.db", null, 2) {
+    SQLiteOpenHelper(context, "footprints.db", null, 3) {
 
     /** Most recent user-visible data problem. Display only; the write gate is [fatalError]. */
     @Volatile var lastError: String? = null
@@ -37,8 +37,20 @@ class FootprintDatabase(private val context: Context) :
     @Volatile var revision: Long = 0
         private set
     private var cached: TrackState? = null
+    @Volatile internal var backupCountCached=0
+        private set
+    @Synchronized internal fun refreshBackupCount():Int {
+        backupCountCached=backupFiles().size
+        return backupCountCached
+    }
     private var roadCatalog: RoadCatalog? = null
     private val preferences = context.getSharedPreferences("footprint_settings", Context.MODE_PRIVATE)
+    @Volatile internal var backupStatus:String?=preferences.getString("auto_backup_status",null)
+        private set
+    private val backupSchedule=BackupSchedule()
+    private val backupExecutor=java.util.concurrent.Executors.newSingleThreadExecutor {r ->
+        Thread(r,"WalkPaintBackup").apply {isDaemon=true}
+    }
 
     override fun onConfigure(db: SQLiteDatabase) {
         super.onConfigure(db)
@@ -51,12 +63,30 @@ class FootprintDatabase(private val context: Context) :
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_trip_time ON points(trip_id,time,id)")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_points_time ON points(time)")
         createRoadTables(db)
+        createRecordingCursor(db,false)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         // Explicit migrations here; never drop user track tables.
-        if (oldVersion == 1 && newVersion == 2) createRoadTables(db)
-        else throw IllegalStateException("需要显式数据库迁移：$oldVersion → $newVersion")
+        check(oldVersion in 1..2 && newVersion==3) {"需要显式数据库迁移：$oldVersion → $newVersion"}
+        if(oldVersion==1) createRoadTables(db)
+        createRecordingCursor(db,true)
+    }
+
+    /** Only successful live commits advance this cursor; imported history cannot take it over. */
+    private fun createRecordingCursor(db:SQLiteDatabase,seed:Boolean) {
+        db.execSQL("CREATE TABLE recording_cursor (singleton INTEGER PRIMARY KEY CHECK(singleton=1), point_id INTEGER REFERENCES points(id) ON DELETE SET NULL)")
+        db.execSQL("INSERT INTO recording_cursor(singleton,point_id) VALUES(1,NULL)")
+        if(seed) db.execSQL("UPDATE recording_cursor SET point_id=(SELECT p.id FROM points p JOIN trips t ON t.id=p.trip_id WHERE t.demo=0 AND p.time<=? ORDER BY p.time DESC,p.id DESC LIMIT 1) WHERE singleton=1",
+            arrayOf(System.currentTimeMillis()))
+    }
+    private data class RecordingAnchor(val trip:String,val point:TrackPoint)
+    private fun recordingAnchor(db:SQLiteDatabase):RecordingAnchor? = db.rawQuery(
+        "SELECT p.trip_id,p.lat,p.lon,p.time,p.accuracy,p.segment FROM recording_cursor r JOIN points p ON p.id=r.point_id JOIN trips t ON t.id=p.trip_id WHERE r.singleton=1 AND t.demo=0",null).use {c ->
+        if(c.moveToFirst()) RecordingAnchor(c.getString(0),TrackPoint(c.getDouble(1),c.getDouble(2),c.getLong(3),c.getFloat(4),c.getInt(5))) else null
+    }
+    private fun saveRecordingCursor(db:SQLiteDatabase,pointId:Long) {
+        db.execSQL("UPDATE recording_cursor SET point_id=? WHERE singleton=1",arrayOf(pointId))
     }
 
     private fun createRoadTables(db: SQLiteDatabase) {
@@ -285,12 +315,7 @@ class FootprintDatabase(private val context: Context) :
         val now = TrackPoint(location.latitude, location.longitude, location.time, location.accuracy)
         // One indexed last-point query, rather than loading all history for every GPS fix.
         var currentId: String? = null
-        val previous = readableDatabase.rawQuery(
-            "SELECT p.lat,p.lon,p.time,p.accuracy,p.segment,p.trip_id FROM points p JOIN trips t ON t.id=p.trip_id WHERE t.demo=0 ORDER BY p.time DESC,p.id DESC LIMIT 1", null
-        ).use { c -> if (c.moveToFirst()) {
-            currentId = c.getString(5)
-            TrackPoint(c.getDouble(0), c.getDouble(1), c.getLong(2), c.getFloat(3), c.getInt(4))
-        } else null }
+        val previous = recordingAnchor(readableDatabase)?.also {currentId=it.trip}?.point
         val gap = if (previous == null) Long.MAX_VALUE else now.time - previous.time
         val newTrip = currentId == null || previous == null || gap > 25 * 60_000L ||
             localDay(now.time) != localDay(previous.time)
@@ -316,6 +341,7 @@ class FootprintDatabase(private val context: Context) :
                 put("segment", stored.segment)
             })
             if (!newTrip && previous != null) paintPairIsolated(db,pointId,previous,stored)
+            saveRecordingCursor(db,pointId)
             db.setTransactionSuccessful()
         } catch (e: Exception) {
             writeFailureLatched = true
@@ -332,6 +358,61 @@ class FootprintDatabase(private val context: Context) :
         revision++
         maybeDailyBackup(now.time)
         return true
+    }
+
+    /** One bounded observation batch and live-cursor advance in the same transaction. */
+    @Synchronized internal fun addPositions(batch: TrailIngress.Batch): Int {
+        if (fatalError != null) return 0
+        val input = batch.points
+        val wall = System.currentTimeMillis()
+        if (input.size !in 2..TrailIngress.MAX_POINTS || !RecordedTrail.visible(input) ||
+            input.any { !Geo.plausibleTimestamp(it.time,wall) || Geo.rejectionReason(null,it)!=null } ||
+            input.zipWithNext().any { (a,b) -> !RecordedTrail.connected(a,b) }) {
+            lastFilterReason="INVALID_BATCH"; return 0
+        }
+        val db=writableDatabase
+        var tripId: String?=null
+        val previous=recordingAnchor(db)?.also {tripId=it.trip}?.point
+        // The carried anchor may already be committed. Never duplicate it or accept overlap.
+        val carriedAnchor=previous!=null && input.first().time==previous.time &&
+            input.first().lat==previous.lat && input.first().lon==previous.lon
+        val incoming=if(carriedAnchor) input.drop(1) else input
+        if(incoming.isEmpty()) return 0
+        if(previous!=null && incoming.first().time<=previous.time) {
+            lastFilterReason="NON_INCREASING_TIME";return 0
+        }
+        var prior=previous
+        var id=tripId
+        val stored=ArrayList<Pair<String,TrackPoint>>()
+        var savedPointId=0L
+        db.beginTransaction()
+        try {
+            incoming.forEachIndexed { index,p ->
+                val old=prior
+                val newTrip=id==null || old==null || p.time-old.time>25*60_000L || localDay(p.time)!=localDay(old.time)
+                if(newTrip) {
+                    id=UUID.randomUUID().toString()
+                    db.insertOrThrow("trips",null,ContentValues().apply { put("id",id);put("started",p.time);put("demo",0) })
+                }
+                val separated = index==0 && (batch.newSegment || !carriedAnchor || old==null || p.time-old.time>RecordedTrail.MAX_GAP_MS)
+                val next=p.copy(segment=if(newTrip) 0 else old!!.segment + if(separated) 1 else 0)
+                val pointId=db.insertOrThrow("points",null,ContentValues().apply {
+                    put("trip_id",id);put("lat",next.lat);put("lon",next.lon);put("time",next.time)
+                    put("accuracy",next.accuracy);put("segment",next.segment)
+                })
+                savedPointId=pointId
+                if(!newTrip && !separated && old!=null) paintPairIsolated(db,pointId,old,next)
+                stored.add(id!! to next); prior=next
+            }
+            saveRecordingCursor(db,savedPointId)
+            db.setTransactionSuccessful()
+        } catch (_:Exception) {
+            writeFailureLatched=true;lastError="足迹写入失败。请检查存储空间并尽快备份";return 0
+        } finally { db.endTransaction() }
+        if(writeFailureLatched) { writeFailureLatched=false;lastError=null }
+        cached=null;revision++
+        maybeDailyBackup(stored.last().second.time)
+        return stored.size
     }
 
     @Synchronized fun setDemo(enabled: Boolean) {
@@ -357,26 +438,25 @@ class FootprintDatabase(private val context: Context) :
         revision++
     }
 
-    @Synchronized fun exportBackup(): String = org.json.JSONObject(TrackCodec.encode(snapshot())).apply {
-        put("roadBackupVersion",1)
-        val packs = org.json.JSONArray()
-        readableDatabase.rawQuery("SELECT DISTINCT name,source FROM roads",null).use { c ->
-            while(c.moveToNext()) {
-                val name = c.getString(0); val source = c.getString(1)
-                val ids = readableDatabase.rawQuery("SELECT id FROM roads WHERE name=? AND source=?",arrayOf(name,source)).use { q ->
-                    buildSet { while(q.moveToNext()) add(q.getString(0)) }
-                }
-                catalog().roads.filter { it.stableId in ids }.chunked(2000).forEach { chunk ->
-                    packs.put(org.json.JSONObject(RoadPackCodec.encode(RoadPack(name,source,chunk))))
-                }
+    @Synchronized private fun backupSnapshot():BackupSnapshot {
+        val state=snapshot()
+        val roads=catalog().roads.associateBy {it.stableId}
+        val groups=linkedMapOf<Pair<String,String>,MutableList<RoadSegment>>()
+        readableDatabase.rawQuery("SELECT id,name,source FROM roads ORDER BY id",null).use {c ->
+            while(c.moveToNext()) roads[c.getString(0)]?.let {road ->
+                groups.getOrPut(c.getString(1) to c.getString(2)) {mutableListOf()}.add(road)
             }
         }
-        put("roadPacks",packs)
-        // Coverage is reproducibly derived from the preserved tracks and full geometries.
-    }.toString()
+        val packs=groups.flatMap {(name,items) -> items.chunked(2000).map {RoadPack(name.first,name.second,it)}}
+        return BackupSnapshot(state,packs)
+    }
+    fun exportBackup():String {
+        return java.io.StringWriter().also {exportBackup(it)}.toString()
+    }
+    fun exportBackup(output:java.io.Writer) {backupSnapshot().writeTo(output)}
 
     /** Merge, never overwrite existing trips or a running auto-tracking session. */
-    @Synchronized fun importBackup(text: String): Int {
+    @Synchronized internal fun importBackup(text: String): RestoreResult {
         ensureWritable()
         require(text.length <= 80 * 1024 * 1024) { "备份文件过大" }
         val imported = TrackCodec.decode(text)
@@ -387,20 +467,11 @@ class FootprintDatabase(private val context: Context) :
         }.orEmpty()
         require(imported.tracks.size <= 50000) { "足迹数量异常" }
         require(imported.tracks.sumOf { it.points.size.toLong() } <= 3_000_000) { "定位点数量过大" }
-        val originalIds = snapshot().tracks.map { it.id }.toHashSet()
-        var added = 0
+        val plan=BackupMerge.plan(snapshot(),imported,System.currentTimeMillis())
         val db = writableDatabase
         db.beginTransaction()
         try {
-            for (t in imported.tracks) {
-                if (t.demo || !originalIds.add(t.id)) continue
-                require(t.points.all { p ->
-                    p.lat in -90.0..90.0 && p.lon in -180.0..180.0 &&
-                        p.lat.isFinite() && p.lon.isFinite() && p.accuracy.isFinite()
-                }) { "备份中的经纬度无效" }
-                insertTrip(db, t)
-                added++
-            }
+            plan.additions.forEach {insertTrip(db,it)}
             packs.forEach { putPack(db,it) }
             roadCatalog = null
             require(catalog().roads.size <= 5000) { "累计道路超过5000条" }
@@ -409,7 +480,7 @@ class FootprintDatabase(private val context: Context) :
         } finally { db.endTransaction(); roadCatalog = null }
         cached = null
         revision++
-        return added
+        return plan.result
     }
 
     @Synchronized fun backupFiles(): List<File> =
@@ -419,27 +490,61 @@ class FootprintDatabase(private val context: Context) :
     private fun localDay(timestamp: Long): String =
         SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date(timestamp))
 
-    /** A local rolling daily snapshot; separate off-device backups remain user initiated. */
+    /** Enqueue only: a committed GPS batch never waits for JSON serialization or file I/O. */
     private fun maybeDailyBackup(timestamp: Long) {
-        // Resume automatic backups once storage recovers; only an unusable database stays blocked.
         if (fatalError != null) return
-        val date = localDay(timestamp)
-        val previousBackup = preferences.getLong("last_auto_backup_time", 0L)
-        if (previousBackup > 0 && timestamp - previousBackup < 30 * 60_000L) return
+        if(!backupSchedule.start(timestamp,android.os.SystemClock.elapsedRealtime(),
+                preferences.getLong("last_auto_backup_time",0L))) return
         try {
-            val directory = File(context.filesDir, "auto-backups")
-            if (!directory.exists()) directory.mkdirs()
-            val atomic = AtomicFile(File(directory, "footprints-$date.json"))
-            val stream = atomic.startWrite()
-            try {
-                stream.write(exportBackup().toByteArray(Charsets.UTF_8))
-                atomic.finishWrite(stream)
-            } catch (e: Exception) {
-                atomic.failWrite(stream)
-                throw e
+            backupExecutor.execute {
+                try {writeAutomaticBackup(timestamp)}
+                catch(_:BackupLimitException) {rememberBackupStatus("自动备份达到容量预算，请导出备份；原快照保留")}
+                catch(_:Exception) {rememberBackupStatus("自动备份未完成，原快照保留；足迹仍在本机")}
+                finally {backupSchedule.finished()}
             }
-            preferences.edit().putLong("last_auto_backup_time", timestamp).apply()
-        } catch (_: Exception) { /* Primary SQLite remains authoritative. */ }
+        } catch(_:java.util.concurrent.RejectedExecutionException) {backupSchedule.finished()}
+    }
+    private class BackupLimitException:java.io.IOException()
+    private fun writeAutomaticBackup(timestamp:Long) {
+        backupStatus="正在更新本机自动备份"
+        val directory=File(context.filesDir,"auto-backups")
+        check(directory.isDirectory || directory.mkdirs())
+        val file=File(directory,"footprints-${localDay(timestamp)}.json")
+        val files=directory.listFiles()?.filter {it.isFile && it.name.endsWith(".json")}
+            ?: error("Backup directory unavailable")
+        val budget=BackupBudget.decide(files.size,files.sumOf {it.length()},file.length(),file.exists(),directory.usableSpace)
+        budget.problem?.let {rememberBackupStatus(it);return}
+        // All SQLite reads and immutable references are captured together; encoding is outside
+        // this monitor, so the recording executor can commit while the backup streams to disk.
+        val snapshot=backupSnapshot()
+        val atomic=AtomicFile(file)
+        val stream=atomic.startWrite()
+        try {
+            val bounded=object:java.io.FilterOutputStream(stream) {
+                private var written=0L
+                override fun write(b:Int) {if(written>=budget.maxBytes) throw BackupLimitException();out.write(b);written++}
+                override fun write(b:ByteArray,offset:Int,length:Int) {
+                    if(length>budget.maxBytes-written) throw BackupLimitException()
+                    out.write(b,offset,length);written+=length
+                }
+            }
+            snapshot.writeTo(java.io.OutputStreamWriter(bounded,Charsets.UTF_8))
+            atomic.finishWrite(stream)
+        } catch(e:Exception) {atomic.failWrite(stream);throw e}
+        val completed=System.currentTimeMillis()
+        preferences.edit().putLong("last_auto_backup_time",completed).apply()
+        backupCountCached=files.size+if(file in files) 0 else 1
+        rememberBackupStatus("自动备份已更新 · "+SimpleDateFormat("MM-dd HH:mm",Locale.ROOT).format(Date(completed)))
+    }
+    private fun rememberBackupStatus(text:String) {
+        backupStatus=text
+        preferences.edit().putString("auto_backup_status",text).apply()
+    }
+    override fun close() {
+        backupSchedule.close()
+        backupExecutor.shutdown()
+        check(backupExecutor.awaitTermination(30,java.util.concurrent.TimeUnit.SECONDS)) {"Backup is still finishing"}
+        super.close()
     }
 
     private fun ensureWritable() { check(fatalError == null) { fatalError!! } }

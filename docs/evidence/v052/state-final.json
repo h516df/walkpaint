@@ -1,0 +1,13 @@
+{
+  "days": {
+    "2026-10-13": 3505,
+    "2026-10-11": 1360,
+    "2026-10-14": 10
+  },
+  "today": "2026-10-14",
+  "automatic_enabled": false,
+  "appearance_mode": 0,
+  "skin": "city",
+  "road_color": -12747777,
+  "installed_apk_sha256": "513dff652ec7482e975e409a29f0f8bb8af2076f32ce6472b860b5d405e73e58"
+}

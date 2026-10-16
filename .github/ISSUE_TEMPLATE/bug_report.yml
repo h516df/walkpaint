@@ -1,0 +1,22 @@
+name: 问题反馈
+description: 提供可复现的脱敏问题信息
+title: "[问题] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "不要上传个人路线、精确坐标、联系方式、账号、密钥、授权码或数据库。截图请检查地名和系统通知。"
+  - type: input
+    id: version
+    attributes:
+      label: 应用版本与Android版本
+      placeholder: "例如 0.54 / Android 16"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤、预期与实际结果
+      description: 使用合成示例，不填写私人位置。
+    validations:
+      required: true

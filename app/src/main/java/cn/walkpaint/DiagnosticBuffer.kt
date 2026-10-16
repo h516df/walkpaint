@@ -6,9 +6,10 @@ internal class DiagnosticBuffer(initial: Map<String, Any?> = emptyMap()) {
     var dirty = false
         private set
 
-    fun record(kind: String, reason: String, at: Long, gap: Long? = null): Boolean {
+    fun record(kind: String, reason: String, at: Long, gap: Long? = null, amount: Int = 1): Boolean {
         val safeReason = if (kind == "filtered") GpsFilterCategory.safeReason(reason) else reason
-        fun count(key: String) { values[key] = long(key) + 1 }
+        require(amount in 1..TrailIngress.MAX_POINTS)
+        fun count(key: String) { values[key] = long(key) + if(kind=="saved") amount else 1 }
         values["last_event_at"] = at
         values["last_event"] = safeReason
         when (kind) {
@@ -18,7 +19,7 @@ internal class DiagnosticBuffer(initial: Map<String, Any?> = emptyMap()) {
                 // "moving" counts fixes where the receiver looked like it was genuinely travelling.
                 // Without it a diagnosis cannot tell "nothing to record because the phone is on a
                 // desk" from "recording is broken while the person walks".
-                listOf("gps", "valid_gps", "saved", "filtered", "moving").forEach {
+                listOf("gps", "valid_gps", "saved", "filtered", "pending", "moving", "probe_start", "probe_fix").forEach {
                     values["session_${it}_count"] = 0L
                 }
                 GpsFilterCategory.entries.forEach { values[it.sessionKey] = 0L }
@@ -31,9 +32,14 @@ internal class DiagnosticBuffer(initial: Map<String, Any?> = emptyMap()) {
             "valid_gps" -> { values["valid_gps_at"] = at; count("valid_gps_count") }
             "power" -> { values["power_at"] = at; values["power_state"] = reason }
             "exit" -> { values["process_exit_at"] = at; values["process_exit_reason"] = reason }
+            "exit_verified" -> values["process_exit_verified_at"]=at
             "recovery" -> { values["recovery_at"] = at; values["recovery_reason"] = reason; count("recovery_count") }
             "saved" -> { values["saved_at"] = at; count("saved_count") }
             "moving" -> { values["moving_at"] = at; count("moving_count") }
+            "pending" -> { values["pending_at"]=at;count("pending_count") }
+            "probe_start" -> { values["probe_start_at"]=at;count("session_probe_start_count") }
+            "probe_fix" -> { values["probe_fix_at"]=at;count("session_probe_fix_count") }
+            "probe_result" -> { values["probe_result_at"]=at;values["probe_result"]=reason }
             "filtered" -> {
                 values["filtered_at"] = at; values["filter_reason"] = safeReason; count("filtered_count")
                 count(GpsFilterCategory.fromReason(safeReason).sessionKey)
@@ -42,7 +48,7 @@ internal class DiagnosticBuffer(initial: Map<String, Any?> = emptyMap()) {
             "register" -> { values["registration_at"] = at; values["registration"] = reason }
             "stop" -> { values["service_stop_at"] = at; values["stop_reason"] = reason }
         }
-        if (kind in setOf("gps", "valid_gps", "saved", "filtered")) count("session_${kind}_count")
+        if (kind in setOf("gps", "valid_gps", "saved", "filtered", "pending", "moving")) count("session_${kind}_count")
         if (kind == "gnss") { values["gnss_state_at"] = at; values["gnss_state"] = reason }
         if (kind == "gnss_first") { values["gnss_first_fix_at"] = at; values["gnss_ttff_ms"] = gap ?: 0L }
         if (kind == "provider") { values["provider_at"] = at; values["provider_state"] = reason }

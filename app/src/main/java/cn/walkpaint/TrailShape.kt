@@ -83,15 +83,51 @@ internal object TrailShape {
         if (frame == null || frame.latSpan <= 0.0 || frame.lonSpan <= 0.0) return runs
         val perMetre = frame.heightPx / (frame.latSpan * 111194.9)
         val tolerance = if (perMetre > 0.0) (0.75 / perMetre).coerceIn(0.0, 60.0) else 0.0
-        val latPad = frame.latSpan * 0.05
-        val lonPad = frame.lonSpan * 0.05
-        return runs.mapNotNull { run ->
-            val visible = run.filter {
-                it.lat in (frame.latMin - latPad)..(frame.latMax + latPad) &&
-                    it.lon in (frame.lonMin - lonPad)..(frame.lonMax + lonPad)
+        return runs.flatMap { clipToFrame(it,frame) }.map { simplify(it,tolerance) }
+    }
+
+    /** Clip original segments, not a filtered list of vertices. A path may leave the view and
+     * return at another edge; those two pieces must never be joined into unwalked ground.
+     * Intersections are display-only. Stored coordinates, times and segment boundaries remain. */
+    private fun clipToFrame(points:List<TrackPoint>,frame:PaintFrame):List<List<TrackPoint>> {
+        val south=frame.latMin-frame.latSpan*.05;val north=frame.latMax+frame.latSpan*.05
+        val west=frame.lonMin-frame.lonSpan*.05;val east=frame.lonMax+frame.lonSpan*.05
+        fun clip(a:TrackPoint,b:TrackPoint):Pair<TrackPoint,TrackPoint>? {
+            var enter=0.0;var exit=1.0
+            fun edge(direction:Double,distance:Double):Boolean {
+                if(kotlin.math.abs(direction)<1e-15) return distance>=0
+                val fraction=distance/direction
+                if(direction<0) { if(fraction>exit) return false;enter=maxOf(enter,fraction) }
+                else { if(fraction<enter) return false;exit=minOf(exit,fraction) }
+                return true
             }
-            if (visible.size < 2) null else simplify(visible, tolerance)
+            val dx=b.lon-a.lon;val dy=b.lat-a.lat
+            if(!edge(-dx,a.lon-west) || !edge(dx,east-a.lon) ||
+                !edge(-dy,a.lat-south) || !edge(dy,north-a.lat)) return null
+            fun at(f:Double)=when {
+                f<=0 -> a
+                f>=1 -> b
+                else -> a.copy(lat=a.lat+dy*f,lon=a.lon+dx*f,time=a.time+((b.time-a.time)*f).toLong(),
+                    accuracy=maxOf(a.accuracy,b.accuracy))
+            }
+            return at(enter) to at(exit)
         }
+        val output=mutableListOf<List<TrackPoint>>()
+        var run=mutableListOf<TrackPoint>()
+        fun finish() { if(run.size>=2) output.add(run.toList());run=mutableListOf() }
+        for(index in 1 until points.size) {
+            val a=points[index-1];val b=points[index]
+            val piece=clip(a,b)
+            if(piece==null) {finish();continue}
+            if(run.isNotEmpty() && Geo.meters(run.last(),piece.first)>.001) finish()
+            if(run.isEmpty()) run.add(piece.first)
+            if(piece.second!=run.last()) run.add(piece.second)
+            // The next recorded vertex is outside: end this visible piece now. Keeping it open
+            // would join a later re-entry after the omitted portion of the original route.
+            if(b.lat !in south..north || b.lon !in west..east) finish()
+        }
+        finish()
+        return output
     }
 
     fun simplify(points: List<TrackPoint>, toleranceM: Double = TOLERANCE_M): List<TrackPoint> {

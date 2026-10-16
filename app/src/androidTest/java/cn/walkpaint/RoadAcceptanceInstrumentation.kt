@@ -11,8 +11,24 @@ import java.util.UUID
 
 /** Isolated databases only. Never clears or replaces the installed footprint database. */
 class RoadAcceptanceInstrumentation : Instrumentation() {
+    private var publicUpdateMode:String?=null
+    private var installerSha:String?=null
+    private var mapReturnProbe=false
+    private var mapSceneProbe=false
+    private var historyCameraProbe=false
+    private var rapidZoomProbe=false
+    private var placeNameProbe=false
+    private var amapAlignmentProbe=false
+    private var uiStateProbe=false
     private var dataProbe=false
+    private var baselineCounts:String?=null
     private var recoveryProbe=false
+    private var noticeProbe=false
+    private var hiddenNotificationProbe=false
+    private var backupRestoreProbe=false
+    private var backupWorkerProbe=false
+    private var mapFrameProbe=false
+    private var mapFrameScale=1
     private var networkProbe=false
     private var catalogProbe=false
     private var fixtureProbe=false
@@ -22,14 +38,97 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
     private var directTrailProbe=false
     private var fogTrailProbe=false
     private var fogTrailReset=false
+    private var fogFixtureRegion="paris"
+    private var amapRuntimeProbe=false
+    private var amapGesture:String?=null
     private var fogPixelProbe=false
     private var updateLogoutProbe=false
     private var candidateSha:String?=null
     override fun onStart() {
         val result = Bundle()
+        publicUpdateMode?.let {mode ->
+            try {result.putString("stream",PublicUpdateProbe.run(this,mode));finish(Activity.RESULT_OK,result)}
+            catch(e:Throwable) {result.putString("stream","PUBLIC_UPDATE_FAIL: ${e.javaClass.simpleName}: ${if(e is UpdateFailure)e.userMessage else e.message}");finish(Activity.RESULT_CANCELED,result)}
+            return
+        }
+        if(mapFrameProbe) {
+            try {result.putString("stream",MapFrameProbe.run(this,mapFrameScale));finish(Activity.RESULT_OK,result)}
+            catch(e:Throwable) {result.putString("stream","MAP_WINDOW_FRAMES_FAIL: ${e.message}");finish(Activity.RESULT_CANCELED,result)}
+            return
+        }
+        if(backupWorkerProbe) {
+            try {result.putString("stream",BackupWorkerProbe.run(this));finish(Activity.RESULT_OK,result)}
+            catch(e:Throwable) {result.putString("stream","BACKUP_WORKER_FAIL: ${e.message}");finish(Activity.RESULT_CANCELED,result)}
+            return
+        }
+        if(backupRestoreProbe) {
+            try {result.putString("stream",BackupRestoreProbe.run(this));finish(Activity.RESULT_OK,result)}
+            catch(e:Throwable) {result.putString("stream","BACKUP_RESTORE_FAIL: ${e.message}");finish(Activity.RESULT_CANCELED,result)}
+            return
+        }
+        if(hiddenNotificationProbe) {
+            try {result.putString("stream",HiddenNotificationProbe.run(this));finish(Activity.RESULT_OK,result)}
+            catch(e:Throwable) {result.putString("stream","HIDDEN_NOTIFICATION_FAIL: ${e.message}");finish(Activity.RESULT_CANCELED,result)}
+            return
+        }
+        installerSha?.let { sha ->
+            try {result.putString("stream",InstallUiProbe.run(this,sha));finish(Activity.RESULT_OK,result)}
+            catch(e:Throwable) {result.putString("stream","INSTALL_UI_STAGE_FAIL: ${e.javaClass.simpleName}: ${if(e is UpdateFailure) e.userMessage else e.message}");finish(Activity.RESULT_CANCELED,result)}
+            return
+        }
+        if(mapSceneProbe) {
+            try {result.putString("stream",MapSceneProbe.run(this));finish(Activity.RESULT_OK,result)}
+            catch(e:Throwable) {result.putString("stream","MAP_SCENE_FAIL: ${e.message}");finish(Activity.RESULT_CANCELED,result)}
+            return
+        }
+        if(mapReturnProbe) {
+            try { result.putString("stream",MapReturnProbe.run(this));finish(Activity.RESULT_OK,result) }
+            catch(e:Throwable) {result.putString("stream","MAP_RETURN_FAIL: ${e.message}");finish(Activity.RESULT_CANCELED,result)}
+            return
+        }
+        if(historyCameraProbe) {
+            try { result.putString("stream",HistoryCameraProbe.run(this));finish(Activity.RESULT_OK,result) }
+            catch(e:Throwable) { result.putString("stream","HISTORY_CAMERA_FAIL: ${e.message}");finish(Activity.RESULT_CANCELED,result) }
+            return
+        }
+        if(rapidZoomProbe) {
+            try { result.putString("stream",AmapRapidZoomProbe.run(this));finish(Activity.RESULT_OK,result) }
+            catch(e:Throwable) { result.putString("stream","AMAP_RAPID_ZOOM_FAIL: ${e.message}");finish(Activity.RESULT_CANCELED,result) }
+            return
+        }
+        if(amapAlignmentProbe) {
+            try { result.putString("stream",AmapAlignmentProbe.run(this));finish(Activity.RESULT_OK,result) }
+            catch(e:Throwable) { result.putString("stream","AMAP_ALIGNMENT_FAIL: ${e.javaClass.simpleName}: ${e.message}");finish(Activity.RESULT_CANCELED,result) }
+            return
+        }
+        if(placeNameProbe) {
+            try { result.putString("stream",PlaceNameProbe.run(this));finish(Activity.RESULT_OK,result) }
+            catch(e:Throwable) { result.putString("stream","PLACE_NAME_FAIL: ${e.javaClass.simpleName}: ${e.message}");finish(Activity.RESULT_CANCELED,result) }
+            return
+        }
+        if(uiStateProbe) {
+            try { result.putString("stream",UiStateProbe.run(this));finish(Activity.RESULT_OK,result) }
+            catch(e:Throwable) { result.putString("stream","UI_STATE_FAIL: ${e.javaClass.simpleName}");finish(Activity.RESULT_CANCELED,result) }
+            return
+        }
+        amapGesture?.let { direction ->
+            try { result.putString("stream",AmapGestureProbe.run(this,direction));finish(Activity.RESULT_OK,result) }
+            catch(e:Throwable) { result.putString("stream","AMAP_GESTURE_FAIL: ${e.message}");finish(Activity.RESULT_CANCELED,result) }
+            return
+        }
+        if(amapRuntimeProbe) {
+            try { result.putString("stream",AmapRuntimeProbe.run(this));finish(Activity.RESULT_OK,result) }
+            catch(e:Throwable) { result.putString("stream","AMAP_RUNTIME_FAIL: ${e.javaClass.simpleName}: ${e.message}");finish(Activity.RESULT_CANCELED,result) }
+            return
+        }
         if(dataProbe) {
-            try { result.putString("stream",DataPreservationProbe.run(this));finish(Activity.RESULT_OK,result) }
+            try { result.putString("stream",DataPreservationProbe.run(this,baselineCounts));finish(Activity.RESULT_OK,result) }
             catch(e:Throwable) { result.putString("stream","DATA_PRESERVATION_FAIL: ${e.message}");finish(Activity.RESULT_CANCELED,result) }
+            return
+        }
+        if(noticeProbe) {
+            try { result.putString("stream",RecordingNoticeProbe.run(this));finish(Activity.RESULT_OK,result) }
+            catch(e:Throwable) { result.putString("stream","RECORDING_NOTICE_FAIL: ${e.javaClass.simpleName}: ${e.message}");finish(Activity.RESULT_CANCELED,result) }
             return
         }
         if(recoveryProbe) {
@@ -43,13 +142,13 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
             return
         }
         if(fogTrailProbe) {
-            try { result.putString("stream",FogTrailProbe.run(this,fogTrailReset));finish(Activity.RESULT_OK,result) }
+            try { result.putString("stream",FogTrailProbe.run(this,fogTrailReset,fogFixtureRegion));finish(Activity.RESULT_OK,result) }
             catch(e:Throwable) { result.putString("stream","FOG_TRAIL_PROBE_FAIL: ${e.javaClass.simpleName}: ${e.message}");finish(Activity.RESULT_CANCELED,result) }
             return
         }
         if(directTrailProbe) {
             try { result.putString("stream",DirectTrailProbe.run(this));finish(Activity.RESULT_OK,result) }
-            catch(e:Throwable) { result.putString("stream","DIRECT_TRAIL_DB_FAIL: ${e.javaClass.simpleName}: ${e.message}");finish(Activity.RESULT_CANCELED,result) }
+            catch(e:Throwable) { result.putString("stream","DIRECT_TRAIL_DB_FAIL: ${e.stackTraceToString()}");finish(Activity.RESULT_CANCELED,result) }
             return
         }
         if(updateLogoutProbe) {
@@ -209,7 +308,7 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
             }
             val repo=FootprintDatabase(ctx).also { databases+=it }
             check(repo.lastError==null)
-            check(repo.readableDatabase.version==2)
+            check(repo.readableDatabase.version==3)
             check(repo.snapshot().realPointCount==2)
             check(repo.readableDatabase.rawQuery("SELECT id FROM points ORDER BY id",null).use {
                 it.moveToFirst() && it.getInt(0)==17 && it.moveToNext() && it.getInt(0)==18 })
@@ -232,17 +331,17 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
             check(emptyDay.meters==0.0)
             val backup=repo.exportBackup()
             val restored=FootprintDatabase(testContext("restore")).also { databases+=it }
-            check(restored.importBackup(backup)==1)
+            check(restored.importBackup(backup).addedTrips==1)
             check(restored.snapshot()==repo.snapshot())
             check(restored.roadSnapshot().roads.map { it.stableId }==before.roads.map { it.stableId })
             check(kotlin.math.abs(restored.roadSnapshot().meters-before.meters)<0.01)
-            check(restored.importBackup(backup)==0)
+            check(restored.importBackup(backup).addedPoints==0)
             check(restored.snapshot().realPointCount==2)
             val duplicated=org.json.JSONObject(backup)
             val trips=duplicated.getJSONArray("tracks")
             trips.put(trips.getJSONObject(0))
             val duplicateRestore=FootprintDatabase(testContext("duplicate-restore")).also { databases+=it }
-            check(duplicateRestore.importBackup(duplicated.toString())==1)
+            check(duplicateRestore.importBackup(duplicated.toString()).addedTrips==1)
             check(duplicateRestore.snapshot().realPointCount==2)
             // Regression: corrupt ONLY a dedicated test road database, never installed history.
             val roadContext=testContext("road-reliability")
@@ -325,5 +424,5 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
         // finish() can terminate the instrumented process immediately; cleanup must precede it.
         finish(resultCode,result)
     }
-    override fun onCreate(arguments:Bundle?) { dataProbe=arguments?.getString("dataProbe")=="true"; recoveryProbe=arguments?.getString("recoveryProbe")=="true"; fogPixelProbe=arguments?.getString("fogPixelProbe")=="true";fogTrailReset=arguments?.getString("fogTrailReset")=="true";fogTrailProbe=arguments?.getString("fogTrailProbe")=="true";directTrailProbe=arguments?.getString("directTrailProbe")=="true"; updateLogoutProbe=arguments?.getString("updateLogoutProbe")=="true";candidateSha=arguments?.getString("candidateSha");privateUpdateProbe=arguments?.getString("privateUpdateProbe")=="true";roadColorProbe=arguments?.getString("roadColorProbe")=="true"; cameraProbe=arguments?.getString("cameraProbe")=="true"; fixtureProbe=arguments?.getString("fixtureProbe")=="true"; catalogProbe=arguments?.getString("catalogProbe")=="true"; networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments); start() }
+    override fun onCreate(arguments:Bundle?) { publicUpdateMode=arguments?.getString("publicUpdateMode"); mapFrameScale=arguments?.getString("mapFrameScale")?.toIntOrNull() ?: 1; mapFrameProbe=arguments?.getString("mapFrameProbe")=="true"; backupWorkerProbe=arguments?.getString("backupWorkerProbe")=="true"; backupRestoreProbe=arguments?.getString("backupRestoreProbe")=="true"; hiddenNotificationProbe=arguments?.getString("hiddenNotificationProbe")=="true"; installerSha=arguments?.getString("installerSha"); mapSceneProbe=arguments?.getString("mapSceneProbe")=="true"; mapReturnProbe=arguments?.getString("mapReturnProbe")=="true"; historyCameraProbe=arguments?.getString("historyCameraProbe")=="true";rapidZoomProbe=arguments?.getString("rapidZoomProbe")=="true"; placeNameProbe=arguments?.getString("placeNameProbe")=="true"; amapAlignmentProbe=arguments?.getString("amapAlignmentProbe")=="true"; uiStateProbe=arguments?.getString("uiStateProbe")=="true"; amapGesture=arguments?.getString("amapGesture"); amapRuntimeProbe=arguments?.getString("amapRuntimeProbe")=="true"; fogFixtureRegion=arguments?.getString("fogFixtureRegion") ?: "paris"; baselineCounts=arguments?.getString("baselineCounts");dataProbe=arguments?.getString("dataProbe")=="true"; recoveryProbe=arguments?.getString("recoveryProbe")=="true"; noticeProbe=arguments?.getString("noticeProbe")=="true"; fogPixelProbe=arguments?.getString("fogPixelProbe")=="true";fogTrailReset=arguments?.getString("fogTrailReset")=="true";fogTrailProbe=arguments?.getString("fogTrailProbe")=="true";directTrailProbe=arguments?.getString("directTrailProbe")=="true"; updateLogoutProbe=arguments?.getString("updateLogoutProbe")=="true";candidateSha=arguments?.getString("candidateSha");privateUpdateProbe=arguments?.getString("privateUpdateProbe")=="true";roadColorProbe=arguments?.getString("roadColorProbe")=="true"; cameraProbe=arguments?.getString("cameraProbe")=="true"; fixtureProbe=arguments?.getString("fixtureProbe")=="true"; catalogProbe=arguments?.getString("catalogProbe")=="true"; networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments); start() }
 }

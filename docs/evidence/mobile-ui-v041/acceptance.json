@@ -1,0 +1,24 @@
+{
+  "apk_sha256": "64841c507972117250b60c7cb9742fc8d0be2ac5796278227cb90c282f1d4402",
+  "device": "emulator-5556",
+  "avd": "WalkPaint_Google_API36",
+  "engine": "OpenFreeMap/MapLibre",
+  "checks": {
+    "all_v040_rows_preserved": true,
+    "map_summary_and_pause": true,
+    "time_filters": true,
+    "detail_to_real_history_map": true,
+    "dark_mode": true,
+    "theme_selection": true,
+    "offline_current_version_and_update_entry": true,
+    "onboarding_without_forced_permission": true,
+    "system_backup_picker": true,
+    "diagnostics_page": true,
+    "320dp_real_render": true,
+    "all_original_rows_after_ui": true,
+    "no_runtime_crash": true
+  },
+  "target_phone": "not_verified",
+  "status": "passed",
+  "cleanup_restored_viewport_theme_recording": true
+}
