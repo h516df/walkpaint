@@ -754,7 +754,8 @@ class MainActivity : ComponentActivity() {
                     val revision = repository.revision
                     val next = repository.snapshot()
                     // Compute expensive history/geometry work away from the UI thread.
-                    next.totalMeters; FootprintInsights.traveledDays(next); FootprintInsights.exploredCells(next)
+                    next.totalMeters
+                    DailyFootprints.days(next).forEach { it.points; it.meters; it.segments; it.focusTrack() }
                     val road = repository.roadSnapshot()
                     val roadBase = geoJson(emptyList())
                     val today = DailyFootprints.key(System.currentTimeMillis())

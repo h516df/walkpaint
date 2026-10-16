@@ -11,8 +11,7 @@ import org.json.JSONObject
  */
 internal object AmapRapidZoomProbe {
     fun run(i: Instrumentation): String {
-        val activity=i.startActivitySync(Intent(i.targetContext,MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
+        val activity=UiEntry.main(i)
         fun field(obj:Any,name:String)=obj.javaClass.getDeclaredField(name).apply { isAccessible=true }.get(obj)
         fun <T> main(block:()->T):T {
             var result:Result<T>?=null

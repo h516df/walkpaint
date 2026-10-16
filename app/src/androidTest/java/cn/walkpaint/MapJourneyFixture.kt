@@ -5,8 +5,7 @@ import android.app.Instrumentation
 /** Anonymous display-only history. SQLite and recording settings are never written. */
 internal object MapJourneyFixture {
     fun <T> withFixture(i:Instrumentation,block:(MainActivity)->T):T {
-        val activity=i.startActivitySync(android.content.Intent(i.targetContext,MainActivity::class.java)
-            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
+        val activity=UiEntry.main(i)
         val repo=(i.targetContext.applicationContext as WalkPaintApp).repository
         check(!AmbientTracking.running) {"Stop: fixture cannot share an active recorder"}
         val cache=repo.javaClass.getDeclaredField("cached").apply {isAccessible=true}
