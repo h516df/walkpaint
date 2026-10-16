@@ -1,6 +1,7 @@
 package cn.walkpaint
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.*
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -115,6 +116,7 @@ class RecordingService : Service(), LocationListener {
     private fun gnssEvent(reason: String) {
         if (!isClosing.get()) RecordingDiagnostics.event(this, "gnss", reason)
     }
+    @SuppressLint("MissingPermission") // Fine permission is checked below; revocation is caught and diagnosed.
     private fun ensureGnss() {
         if (gnssRegistered || isClosing.get() || !AmbientTracking.hasFineLocation(this)) return
         try {
@@ -293,6 +295,7 @@ class RecordingService : Service(), LocationListener {
         updateNotification()
     }
 
+    @SuppressLint("MissingPermission") // Fine permission is checked below; registration failure is handled.
     private fun ensureGps(replace: Boolean = false) {
         if (isClosing.get() || !AmbientTracking.hasFineLocation(this)) return
         try {

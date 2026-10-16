@@ -113,6 +113,7 @@ def main():
     parser.add_argument("--prepared-dir", type=Path, help="已验收的两个正式包所在目录")
     parser.add_argument("--phone-only", action="store_true", help="仅分发 ARM64 手机包；通用包仍可用于本机验收")
     parser.add_argument("--no-legacy-alias", action="store_true", help="仅在已结束旧更新器兼容时省略重复 APK 别名")
+    parser.add_argument("--public-release", action="store_true", help="显式允许向已核对的公开仓库发布；默认仍只允许私有仓库")
     args = parser.parse_args()
     if args.verify_only and (not args.no_build or args.prepared_dir is None):
         raise SystemExit("只读核对必须提供 --no-build --prepared-dir")
@@ -176,7 +177,7 @@ def main():
         raise SystemExit('发布只允许当前已提交且干净的工作区')
     receipt = publish_verified(repo, f'v{version}', args.target,
         f"v{version}｜足迹涂色更新", markdown(notes, sha), assets, out, run,
-        verify_only=args.verify_only)
+        verify_only=args.verify_only, public_release=args.public_release)
     print(json.dumps(receipt, ensure_ascii=False), flush=True)
     return 0
 

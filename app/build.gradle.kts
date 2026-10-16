@@ -11,6 +11,8 @@ val amapKey = (mapProperties.getProperty("walkpaintAmapKey")
     ?: providers.gradleProperty("walkpaintAmapKey").orNull).orEmpty().trim()
 require(amapKey.matches(Regex("[A-Za-z0-9]*"))) { "Invalid AMap Android Key" }
 val arm64Only = providers.gradleProperty("walkpaintArm64Only").orNull == "true"
+// A clean public checkout can build an isolated debug app without the official private key.
+val developerBuild = providers.gradleProperty("walkpaintDeveloperBuild").orNull == "true"
 // Public GitHub App client id only. Never put a client secret or a PC token here.
 val updateClientId = (providers.gradleProperty("walkpaintUpdateClientId").orNull ?: "Iv23liQM3N2avCTc0QAd").trim()
 require(updateClientId.matches(Regex("[A-Za-z0-9.]*"))) { "Invalid public update client id" }
@@ -22,8 +24,8 @@ android {
         applicationId = "cn.walkpaint"
         minSdk = 26
         targetSdk = 36
-        versionCode = 59
-        versionName = "0.53"
+        versionCode = 60
+        versionName = "0.54"
         testInstrumentationRunner = "cn.walkpaint.RoadAcceptanceInstrumentation"
         // Optional phone-sized APK; the default universal debug APK remains emulator-compatible.
         if (arm64Only) {
@@ -41,9 +43,9 @@ android {
     // Reuse the existing local debug certificate so v0.2 upgrades v0.1 without uninstalling.
     signingConfigs {
         getByName("debug") {
-            val existing = rootProject.file("${System.getProperty("user.home")}/.android/debug.keystore")
-            require(existing.isFile) { "Original WalkPaint signing certificate is missing; refusing an incompatible update" }
-            run {
+            if (!developerBuild) {
+                val existing = rootProject.file("${System.getProperty("user.home")}/.android/debug.keystore")
+                require(existing.isFile) { "Original WalkPaint signing certificate is missing; refusing an incompatible update" }
                 storeFile = existing
                 storePassword = "android"
                 keyAlias = "androiddebugkey"
@@ -56,9 +58,12 @@ android {
         }
     }
     buildTypes {
+        getByName("debug") {
+            if (developerBuild) applicationIdSuffix = ".dev"
+        }
         getByName("release") {
             // Preserve the identity of every distributed version, without a debuggable release.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (developerBuild) null else signingConfigs.getByName("debug")
         }
     }
     buildFeatures { compose = true; buildConfig = true }

@@ -13,14 +13,14 @@ class UpdateInfoTest {
         listOf("GPS_PROVIDER","schema","commit","SDK").forEach { assertFalse(words.contains(it)) }
         assertTrue(words.contains("户外"));assertTrue(words.contains("浏览器"))
     }
-    @Test fun destinationIsFixedPrivateRepositoryWithNoCredentialOrDownloadParameters() {
+    @Test fun destinationIsFixedRepositoryWithNoCredentialOrDownloadParameters() {
         val uri=java.net.URI(UpdateDestination.URL)
         assertEquals("https",uri.scheme);assertEquals("github.com",uri.host)
         assertEquals("/h516df/walkpaint/releases",uri.path);assertNull(uri.userInfo);assertNull(uri.query)
     }
     @Test fun offlineAndBrowserFallbackNeverInventALatestVersion() {
         assertTrue(UpdateDestination.notice(false).contains("暂时无法检查"))
-        assertTrue(UpdateDestination.notice(true).contains("登录"))
+        assertTrue(UpdateDestination.notice(true).contains("无需登录"))
         listOf(UpdateDestination.UNKNOWN,UpdateDestination.BROWSER,UpdateDestination.OFFLINE,UpdateDestination.NO_BROWSER).forEach {
             assertFalse(it.contains("已是最新"));assertFalse(it.contains("发现新版本"))
         }
