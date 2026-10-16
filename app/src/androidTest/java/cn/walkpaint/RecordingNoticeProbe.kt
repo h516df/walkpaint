@@ -105,6 +105,8 @@ internal object RecordingNoticeProbe {
             SystemClock.sleep(500)
             if(mockAdded) lm.removeTestProvider(LocationManager.GPS_PROVIDER)
             AmbientTracking.setEnabled(c,enabled)
+            check(c.getSharedPreferences("footprint_preferences",android.content.Context.MODE_PRIVATE)
+                .edit().putBoolean("automatic_enabled",enabled).commit())
         }
     }
 }

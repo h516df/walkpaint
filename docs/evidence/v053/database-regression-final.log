@@ -1,0 +1,2 @@
+V05_ISOLATED_DATABASE_PASS: v1 rows and IDs preserved; road reimport atomic; backup roundtrip deduplicated; accepted GPS survives catalog and partial coverage failures; valid reimport recovers; raw GPS write failure stays honest and recovers without a restart
+

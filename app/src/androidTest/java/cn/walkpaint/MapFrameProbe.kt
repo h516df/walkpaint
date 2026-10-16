@@ -13,7 +13,7 @@ import org.json.JSONObject
 
 /** App-window frame timings, not a claim about every native GL frame or a physical phone. */
 internal object MapFrameProbe {
-    fun run(i:Instrumentation):String=MapJourneyFixture.withFixture(i) {activity ->
+    fun run(i:Instrumentation,scale:Int=1):String=MapJourneyFixture.withFixture(i,scale) {activity ->
         fun field(obj:Any,name:String)=obj.javaClass.getDeclaredField(name).apply {isAccessible=true}.get(obj)
         fun <T> main(body:()->T):T {var result:Result<T>?=null;i.runOnMainSync {result=runCatching(body)};return result!!.getOrThrow()}
         val controller=main {(field(activity,"amapController\$delegate") as Lazy<*>).value as AmapMapController}
@@ -81,7 +81,7 @@ internal object MapFrameProbe {
                 check(main {(field(activity,"selectedDay\$delegate") as State<*>).value==null})
             }
             "MAP_WINDOW_FRAMES: "+JSONObject().put("scope","Google AVD app window; native GL and phone FPS not certified")
-                .put("fixture_points",9000).put("same_map_instance",true).put("phases",phases)
+                .put("fixture_points",9000*scale).put("same_map_instance",true).put("phases",phases)
         } finally {
             main {activity.window.removeOnFrameMetricsAvailableListener(listener)}
             thread.quitSafely();thread.join(3000)
