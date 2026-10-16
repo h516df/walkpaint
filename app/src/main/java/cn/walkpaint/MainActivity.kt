@@ -182,7 +182,6 @@ class MainActivity : ComponentActivity() {
     private var showBackgroundPrompt by mutableStateOf(false)
     private var showFineSettings by mutableStateOf(false)
     private var backgroundDeferred = false
-    private var notificationAttempted = false
     private var profileNotice by mutableStateOf<String?>(null)
     private var pendingSettingsEnable = false
     private var pendingBackgroundSettings = false
@@ -322,13 +321,6 @@ class MainActivity : ComponentActivity() {
             if(pendingEnable) continueEnable()
         }
 
-    private val notificationPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) {
-            if(!notificationsGranted()) RecordingDiagnostics.problem(this,ProblemCode.PERMISSION_DENIED)
-            if(pendingEnable) continueEnable()
-            updateUi()
-        }
-
     private val permissionSettingsLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
             val waiting=pendingSettingsEnable
@@ -417,7 +409,6 @@ class MainActivity : ComponentActivity() {
         pendingSettingsEnable = savedInstanceState?.getBoolean("pendingSettingsEnable") ?: false
         pendingBackgroundSettings = savedInstanceState?.getBoolean("pendingBackgroundSettings") ?: false
         backgroundDeferred = savedInstanceState?.getBoolean("backgroundDeferred") ?: false
-        notificationAttempted = savedInstanceState?.getBoolean("notificationAttempted") ?: false
         confirmEnable = savedInstanceState?.getBoolean("confirmEnable") ?: false
         showBackgroundPrompt = savedInstanceState?.getBoolean("showBackgroundPrompt") ?: false
         showFineSettings = savedInstanceState?.getBoolean("showFineSettings") ?: false
@@ -545,6 +536,7 @@ class MainActivity : ComponentActivity() {
                         { privateUpdater.logout() },{ openUpdateBrowser(UpdateDestination.URL) }) },
                     mapContent = { if (amapActive) AmapNativeView() else NativeMapView() },
                     onSkin={showSkinPicker=true},
+                    onNotifications=::openRecordingNotificationSettings,
                     onBackupEntry={ refreshExecutor.execute {
                         val count=repository.refreshBackupCount()
                         runOnUiThread { backupCount=count }
@@ -733,7 +725,7 @@ class MainActivity : ComponentActivity() {
         val status = RecordingStatus.assess(RecordingDiagnostics.signals(this, repository.lastError))
         recordingTitle=status.title; recordingHealthy=status.healthy
         recordingCode=status.code
-        profileNotice=TrackingSetup.notice(status.code,backgroundGranted,notificationsGranted())
+        profileNotice=TrackingSetup.notice(status.code,backgroundGranted)
         mapNotice=MapNotice.from(status,recordedAt("gps_callback_at") > 0 && recordedAt("gps_callback_at") >= recordedAt("service_start_at"))
         val diagnosis = status.title + " · " + status.hint
         val gpsLabel = when {
@@ -840,7 +832,7 @@ class MainActivity : ComponentActivity() {
 
     private fun beginEnable() {
         if(pendingEnable) return
-        pendingEnable=true;backgroundDeferred=false;notificationAttempted=false
+        pendingEnable=true;backgroundDeferred=false
         if(!AmbientTracking.hasFineLocation(this) &&
             !getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE).getBoolean("auto_notice_v3_seen",false)) {
             confirmEnable=true
@@ -850,7 +842,7 @@ class MainActivity : ComponentActivity() {
     private fun continueEnable() {
         if(!pendingEnable) return
         when(TrackingSetup.next(Build.VERSION.SDK_INT,AmbientTracking.hasFineLocation(this),
-            AmbientTracking.hasBackgroundLocation(this),notificationsGranted(),backgroundDeferred,notificationAttempted)) {
+            AmbientTracking.hasBackgroundLocation(this),backgroundDeferred)) {
             TrackingSetup.Step.LOCATION -> {
                 val prefs=getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE)
                 if(prefs.getBoolean("fine_request_seen",false) &&
@@ -862,10 +854,6 @@ class MainActivity : ComponentActivity() {
                 }
             }
             TrackingSetup.Step.BACKGROUND -> showBackgroundPrompt=true
-            TrackingSetup.Step.NOTIFICATIONS -> {
-                notificationAttempted=true
-                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
             TrackingSetup.Step.START -> {
                 pendingEnable=false;pendingSettingsEnable=false
                 AmbientTracking.setEnabled(this,true)
@@ -881,8 +869,18 @@ class MainActivity : ComponentActivity() {
             startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
         else if(recordingCode in setOf("SAVE_FAILED","REGISTER_FAILED","SERVICE_STOPPED")) openRecordingDiagnostics()
         else if(!AmbientTracking.hasBackgroundLocation(this)) beginEnable()
-        else if(!notificationsGranted()) openAppSettings()
         else openRecordingDiagnostics()
+    }
+
+    private fun openRecordingNotificationSettings() {
+        val settings=Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE,packageName)
+            .putExtra(Settings.EXTRA_CHANNEL_ID,"ambient-footprints")
+        runCatching { startActivity(settings) }.onFailure {
+            runCatching { startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE,packageName)) }
+                .onFailure { toast("无法打开通知设置，请在手机设置中管理足迹涂色的通知") }
+        }
     }
 
     private fun askLocation() {
@@ -1848,7 +1846,6 @@ class MainActivity : ComponentActivity() {
         outState.putBoolean("pendingSettingsEnable", pendingSettingsEnable)
         outState.putBoolean("pendingBackgroundSettings",pendingBackgroundSettings)
         outState.putBoolean("backgroundDeferred",backgroundDeferred)
-        outState.putBoolean("notificationAttempted",notificationAttempted)
         outState.putBoolean("confirmEnable",confirmEnable)
         outState.putBoolean("showBackgroundPrompt",showBackgroundPrompt)
         outState.putBoolean("showFineSettings",showFineSettings)

@@ -45,7 +45,7 @@ internal fun AppShell(
     appearanceMode:Int, onAppearanceMode:(Int)->Unit, onShowIntro:()->Unit,
     feedbackContent: @Composable (onBack:()->Unit)->Unit,
     updatesContent: @Composable (onBack:()->Unit)->Unit, mapContent: @Composable () -> Unit,
-    onBackupEntry:()->Unit={},onSkin:()->Unit={}
+    onBackupEntry:()->Unit={},onSkin:()->Unit={},onNotifications:()->Unit={}
 ) {
     Box(Modifier.fillMaxSize().background(PageBackground)) {
         // Keep the SDK and GL surface alive across bottom-tab journeys. Only the controls/pages
@@ -70,7 +70,7 @@ internal fun AppShell(
                     ProfilePage(state,appearanceMode,onAppearanceMode,onShowIntro,automatic,profileNotice,onResolveTracking,
                     onToggleTracking,onRevoke,onBackgroundSettings,onPowerSettings,onCopyDiagnostics,
                     roadState,roadAreaHint,onRoadPack,onExport,onImport,internalBackupCount,
-                    mapProviderLabel,onChooseAmap,onOnlineMap,roadColor,onRoadAppearance,feedbackContent,updatesContent,onBackupEntry,onSkin)
+                    mapProviderLabel,onChooseAmap,onOnlineMap,roadColor,onRoadAppearance,feedbackContent,updatesContent,onBackupEntry,onSkin,onNotifications)
                 }
             }
         }
@@ -528,7 +528,7 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
     roads:RoadState,areaHint:String,onRoadPack:()->Unit,onExport:()->Unit,onImport:()->Unit,backupCount:Int,
     provider:String,onAmap:()->Unit,onOnline:()->Unit,roadColor:Int,onAppearance:()->Unit,
     feedbackContent: @Composable (onBack:()->Unit)->Unit,
-    updatesContent: @Composable (onBack:()->Unit)->Unit,onBackupEntry:()->Unit,onSkin:()->Unit) {
+    updatesContent: @Composable (onBack:()->Unit)->Unit,onBackupEntry:()->Unit,onSkin:()->Unit,onNotifications:()->Unit) {
     var page by rememberSaveable { mutableStateOf("我的") }
     var revokeConfirm by rememberSaveable { mutableStateOf(false) }
     if(page=="问题反馈") { feedbackContent { page="我的" };return }
@@ -570,6 +570,8 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
                     }
                     HorizontalDivider(color=Line)
                     SettingRow("定位与记录状态",notice ?: if(automatic) "查看当前定位、记录与恢复情况" else "已暂停记录",onDiagnostics)
+                    HorizontalDivider(color=Line)
+                    SettingRow("隐藏记录通知","前往系统设置关闭显示，自动记录保持开启",onNotifications)
                     HorizontalDivider(color=Line)
                     AppearanceSelector(appearanceMode,onAppearanceMode)
                     HorizontalDivider(color=Line)
