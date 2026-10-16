@@ -24,6 +24,7 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
     private var recoveryProbe=false
     private var noticeProbe=false
     private var hiddenNotificationProbe=false
+    private var backupRestoreProbe=false
     private var networkProbe=false
     private var catalogProbe=false
     private var fixtureProbe=false
@@ -41,6 +42,11 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
     private var candidateSha:String?=null
     override fun onStart() {
         val result = Bundle()
+        if(backupRestoreProbe) {
+            try {result.putString("stream",BackupRestoreProbe.run(this));finish(Activity.RESULT_OK,result)}
+            catch(e:Throwable) {result.putString("stream","BACKUP_RESTORE_FAIL: ${e.message}");finish(Activity.RESULT_CANCELED,result)}
+            return
+        }
         if(hiddenNotificationProbe) {
             try {result.putString("stream",HiddenNotificationProbe.run(this));finish(Activity.RESULT_OK,result)}
             catch(e:Throwable) {result.putString("stream","HIDDEN_NOTIFICATION_FAIL: ${e.message}");finish(Activity.RESULT_CANCELED,result)}
@@ -283,7 +289,7 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
             }
             val repo=FootprintDatabase(ctx).also { databases+=it }
             check(repo.lastError==null)
-            check(repo.readableDatabase.version==2)
+            check(repo.readableDatabase.version==3)
             check(repo.snapshot().realPointCount==2)
             check(repo.readableDatabase.rawQuery("SELECT id FROM points ORDER BY id",null).use {
                 it.moveToFirst() && it.getInt(0)==17 && it.moveToNext() && it.getInt(0)==18 })
@@ -306,17 +312,17 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
             check(emptyDay.meters==0.0)
             val backup=repo.exportBackup()
             val restored=FootprintDatabase(testContext("restore")).also { databases+=it }
-            check(restored.importBackup(backup)==1)
+            check(restored.importBackup(backup).addedTrips==1)
             check(restored.snapshot()==repo.snapshot())
             check(restored.roadSnapshot().roads.map { it.stableId }==before.roads.map { it.stableId })
             check(kotlin.math.abs(restored.roadSnapshot().meters-before.meters)<0.01)
-            check(restored.importBackup(backup)==0)
+            check(restored.importBackup(backup).addedPoints==0)
             check(restored.snapshot().realPointCount==2)
             val duplicated=org.json.JSONObject(backup)
             val trips=duplicated.getJSONArray("tracks")
             trips.put(trips.getJSONObject(0))
             val duplicateRestore=FootprintDatabase(testContext("duplicate-restore")).also { databases+=it }
-            check(duplicateRestore.importBackup(duplicated.toString())==1)
+            check(duplicateRestore.importBackup(duplicated.toString()).addedTrips==1)
             check(duplicateRestore.snapshot().realPointCount==2)
             // Regression: corrupt ONLY a dedicated test road database, never installed history.
             val roadContext=testContext("road-reliability")
@@ -399,5 +405,5 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
         // finish() can terminate the instrumented process immediately; cleanup must precede it.
         finish(resultCode,result)
     }
-    override fun onCreate(arguments:Bundle?) { hiddenNotificationProbe=arguments?.getString("hiddenNotificationProbe")=="true"; installerSha=arguments?.getString("installerSha"); mapSceneProbe=arguments?.getString("mapSceneProbe")=="true"; mapReturnProbe=arguments?.getString("mapReturnProbe")=="true"; historyCameraProbe=arguments?.getString("historyCameraProbe")=="true";rapidZoomProbe=arguments?.getString("rapidZoomProbe")=="true"; placeNameProbe=arguments?.getString("placeNameProbe")=="true"; amapAlignmentProbe=arguments?.getString("amapAlignmentProbe")=="true"; uiStateProbe=arguments?.getString("uiStateProbe")=="true"; amapGesture=arguments?.getString("amapGesture"); amapRuntimeProbe=arguments?.getString("amapRuntimeProbe")=="true"; fogFixtureRegion=arguments?.getString("fogFixtureRegion") ?: "paris"; baselineCounts=arguments?.getString("baselineCounts");dataProbe=arguments?.getString("dataProbe")=="true"; recoveryProbe=arguments?.getString("recoveryProbe")=="true"; noticeProbe=arguments?.getString("noticeProbe")=="true"; fogPixelProbe=arguments?.getString("fogPixelProbe")=="true";fogTrailReset=arguments?.getString("fogTrailReset")=="true";fogTrailProbe=arguments?.getString("fogTrailProbe")=="true";directTrailProbe=arguments?.getString("directTrailProbe")=="true"; updateLogoutProbe=arguments?.getString("updateLogoutProbe")=="true";candidateSha=arguments?.getString("candidateSha");privateUpdateProbe=arguments?.getString("privateUpdateProbe")=="true";roadColorProbe=arguments?.getString("roadColorProbe")=="true"; cameraProbe=arguments?.getString("cameraProbe")=="true"; fixtureProbe=arguments?.getString("fixtureProbe")=="true"; catalogProbe=arguments?.getString("catalogProbe")=="true"; networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments); start() }
+    override fun onCreate(arguments:Bundle?) { backupRestoreProbe=arguments?.getString("backupRestoreProbe")=="true"; hiddenNotificationProbe=arguments?.getString("hiddenNotificationProbe")=="true"; installerSha=arguments?.getString("installerSha"); mapSceneProbe=arguments?.getString("mapSceneProbe")=="true"; mapReturnProbe=arguments?.getString("mapReturnProbe")=="true"; historyCameraProbe=arguments?.getString("historyCameraProbe")=="true";rapidZoomProbe=arguments?.getString("rapidZoomProbe")=="true"; placeNameProbe=arguments?.getString("placeNameProbe")=="true"; amapAlignmentProbe=arguments?.getString("amapAlignmentProbe")=="true"; uiStateProbe=arguments?.getString("uiStateProbe")=="true"; amapGesture=arguments?.getString("amapGesture"); amapRuntimeProbe=arguments?.getString("amapRuntimeProbe")=="true"; fogFixtureRegion=arguments?.getString("fogFixtureRegion") ?: "paris"; baselineCounts=arguments?.getString("baselineCounts");dataProbe=arguments?.getString("dataProbe")=="true"; recoveryProbe=arguments?.getString("recoveryProbe")=="true"; noticeProbe=arguments?.getString("noticeProbe")=="true"; fogPixelProbe=arguments?.getString("fogPixelProbe")=="true";fogTrailReset=arguments?.getString("fogTrailReset")=="true";fogTrailProbe=arguments?.getString("fogTrailProbe")=="true";directTrailProbe=arguments?.getString("directTrailProbe")=="true"; updateLogoutProbe=arguments?.getString("updateLogoutProbe")=="true";candidateSha=arguments?.getString("candidateSha");privateUpdateProbe=arguments?.getString("privateUpdateProbe")=="true";roadColorProbe=arguments?.getString("roadColorProbe")=="true"; cameraProbe=arguments?.getString("cameraProbe")=="true"; fixtureProbe=arguments?.getString("fixtureProbe")=="true"; catalogProbe=arguments?.getString("catalogProbe")=="true"; networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments); start() }
 }

@@ -17,7 +17,7 @@ import java.util.UUID
  * Future schema upgrades belong in onUpgrade; old v0.1 tracks.json is migrated once.
  */
 class FootprintDatabase(private val context: Context) :
-    SQLiteOpenHelper(context, "footprints.db", null, 2) {
+    SQLiteOpenHelper(context, "footprints.db", null, 3) {
 
     /** Most recent user-visible data problem. Display only; the write gate is [fatalError]. */
     @Volatile var lastError: String? = null
@@ -57,12 +57,30 @@ class FootprintDatabase(private val context: Context) :
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_trip_time ON points(trip_id,time,id)")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_points_time ON points(time)")
         createRoadTables(db)
+        createRecordingCursor(db,false)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         // Explicit migrations here; never drop user track tables.
-        if (oldVersion == 1 && newVersion == 2) createRoadTables(db)
-        else throw IllegalStateException("需要显式数据库迁移：$oldVersion → $newVersion")
+        check(oldVersion in 1..2 && newVersion==3) {"需要显式数据库迁移：$oldVersion → $newVersion"}
+        if(oldVersion==1) createRoadTables(db)
+        createRecordingCursor(db,true)
+    }
+
+    /** Only successful live commits advance this cursor; imported history cannot take it over. */
+    private fun createRecordingCursor(db:SQLiteDatabase,seed:Boolean) {
+        db.execSQL("CREATE TABLE recording_cursor (singleton INTEGER PRIMARY KEY CHECK(singleton=1), point_id INTEGER REFERENCES points(id) ON DELETE SET NULL)")
+        db.execSQL("INSERT INTO recording_cursor(singleton,point_id) VALUES(1,NULL)")
+        if(seed) db.execSQL("UPDATE recording_cursor SET point_id=(SELECT p.id FROM points p JOIN trips t ON t.id=p.trip_id WHERE t.demo=0 AND p.time<=? ORDER BY p.time DESC,p.id DESC LIMIT 1) WHERE singleton=1",
+            arrayOf(System.currentTimeMillis()))
+    }
+    private data class RecordingAnchor(val trip:String,val point:TrackPoint)
+    private fun recordingAnchor(db:SQLiteDatabase):RecordingAnchor? = db.rawQuery(
+        "SELECT p.trip_id,p.lat,p.lon,p.time,p.accuracy,p.segment FROM recording_cursor r JOIN points p ON p.id=r.point_id JOIN trips t ON t.id=p.trip_id WHERE r.singleton=1 AND t.demo=0",null).use {c ->
+        if(c.moveToFirst()) RecordingAnchor(c.getString(0),TrackPoint(c.getDouble(1),c.getDouble(2),c.getLong(3),c.getFloat(4),c.getInt(5))) else null
+    }
+    private fun saveRecordingCursor(db:SQLiteDatabase,pointId:Long) {
+        db.execSQL("UPDATE recording_cursor SET point_id=? WHERE singleton=1",arrayOf(pointId))
     }
 
     private fun createRoadTables(db: SQLiteDatabase) {
@@ -291,12 +309,7 @@ class FootprintDatabase(private val context: Context) :
         val now = TrackPoint(location.latitude, location.longitude, location.time, location.accuracy)
         // One indexed last-point query, rather than loading all history for every GPS fix.
         var currentId: String? = null
-        val previous = readableDatabase.rawQuery(
-            "SELECT p.lat,p.lon,p.time,p.accuracy,p.segment,p.trip_id FROM points p JOIN trips t ON t.id=p.trip_id WHERE t.demo=0 ORDER BY p.time DESC,p.id DESC LIMIT 1", null
-        ).use { c -> if (c.moveToFirst()) {
-            currentId = c.getString(5)
-            TrackPoint(c.getDouble(0), c.getDouble(1), c.getLong(2), c.getFloat(3), c.getInt(4))
-        } else null }
+        val previous = recordingAnchor(readableDatabase)?.also {currentId=it.trip}?.point
         val gap = if (previous == null) Long.MAX_VALUE else now.time - previous.time
         val newTrip = currentId == null || previous == null || gap > 25 * 60_000L ||
             localDay(now.time) != localDay(previous.time)
@@ -322,6 +335,7 @@ class FootprintDatabase(private val context: Context) :
                 put("segment", stored.segment)
             })
             if (!newTrip && previous != null) paintPairIsolated(db,pointId,previous,stored)
+            saveRecordingCursor(db,pointId)
             db.setTransactionSuccessful()
         } catch (e: Exception) {
             writeFailureLatched = true
@@ -340,7 +354,7 @@ class FootprintDatabase(private val context: Context) :
         return true
     }
 
-    /** One bounded observation batch, one transaction and one backup trigger. Schema stays v2. */
+    /** One bounded observation batch and live-cursor advance in the same transaction. */
     @Synchronized internal fun addPositions(batch: TrailIngress.Batch): Int {
         if (fatalError != null) return 0
         val input = batch.points
@@ -352,9 +366,7 @@ class FootprintDatabase(private val context: Context) :
         }
         val db=writableDatabase
         var tripId: String?=null
-        val previous=db.rawQuery("SELECT p.lat,p.lon,p.time,p.accuracy,p.segment,p.trip_id FROM points p JOIN trips t ON t.id=p.trip_id WHERE t.demo=0 ORDER BY p.time DESC,p.id DESC LIMIT 1",null).use { c ->
-            if(c.moveToFirst()) { tripId=c.getString(5); TrackPoint(c.getDouble(0),c.getDouble(1),c.getLong(2),c.getFloat(3),c.getInt(4)) } else null
-        }
+        val previous=recordingAnchor(db)?.also {tripId=it.trip}?.point
         // The carried anchor may already be committed. Never duplicate it or accept overlap.
         val carriedAnchor=previous!=null && input.first().time==previous.time &&
             input.first().lat==previous.lat && input.first().lon==previous.lon
@@ -366,6 +378,7 @@ class FootprintDatabase(private val context: Context) :
         var prior=previous
         var id=tripId
         val stored=ArrayList<Pair<String,TrackPoint>>()
+        var savedPointId=0L
         db.beginTransaction()
         try {
             incoming.forEachIndexed { index,p ->
@@ -381,9 +394,11 @@ class FootprintDatabase(private val context: Context) :
                     put("trip_id",id);put("lat",next.lat);put("lon",next.lon);put("time",next.time)
                     put("accuracy",next.accuracy);put("segment",next.segment)
                 })
+                savedPointId=pointId
                 if(!newTrip && !separated && old!=null) paintPairIsolated(db,pointId,old,next)
                 stored.add(id!! to next); prior=next
             }
+            saveRecordingCursor(db,savedPointId)
             db.setTransactionSuccessful()
         } catch (_:Exception) {
             writeFailureLatched=true;lastError="足迹写入失败。请检查存储空间并尽快备份";return 0
@@ -436,7 +451,7 @@ class FootprintDatabase(private val context: Context) :
     }.toString()
 
     /** Merge, never overwrite existing trips or a running auto-tracking session. */
-    @Synchronized fun importBackup(text: String): Int {
+    @Synchronized internal fun importBackup(text: String): RestoreResult {
         ensureWritable()
         require(text.length <= 80 * 1024 * 1024) { "备份文件过大" }
         val imported = TrackCodec.decode(text)
@@ -447,20 +462,11 @@ class FootprintDatabase(private val context: Context) :
         }.orEmpty()
         require(imported.tracks.size <= 50000) { "足迹数量异常" }
         require(imported.tracks.sumOf { it.points.size.toLong() } <= 3_000_000) { "定位点数量过大" }
-        val originalIds = snapshot().tracks.map { it.id }.toHashSet()
-        var added = 0
+        val plan=BackupMerge.plan(snapshot(),imported,System.currentTimeMillis())
         val db = writableDatabase
         db.beginTransaction()
         try {
-            for (t in imported.tracks) {
-                if (t.demo || !originalIds.add(t.id)) continue
-                require(t.points.all { p ->
-                    p.lat in -90.0..90.0 && p.lon in -180.0..180.0 &&
-                        p.lat.isFinite() && p.lon.isFinite() && p.accuracy.isFinite()
-                }) { "备份中的经纬度无效" }
-                insertTrip(db, t)
-                added++
-            }
+            plan.additions.forEach {insertTrip(db,it)}
             packs.forEach { putPack(db,it) }
             roadCatalog = null
             require(catalog().roads.size <= 5000) { "累计道路超过5000条" }
@@ -469,7 +475,7 @@ class FootprintDatabase(private val context: Context) :
         } finally { db.endTransaction(); roadCatalog = null }
         cached = null
         revision++
-        return added
+        return plan.result
     }
 
     @Synchronized fun backupFiles(): List<File> =

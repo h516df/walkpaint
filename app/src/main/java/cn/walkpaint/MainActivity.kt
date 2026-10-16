@@ -393,10 +393,10 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     repository.importBackup(memory.toString("UTF-8"))
-                }.onSuccess { count ->
+                }.onSuccess { result ->
                     runOnUiThread {
                         updateUi()
-                        toast("已合并 $count 条历史足迹，原数据未删除")
+                        toast(result.message())
                     }
                 }.onFailure { runOnUiThread { RecordingDiagnostics.problem(this,ProblemCode.BACKUP_FAILED);toast("无法导入，请确认是有效的足迹备份") } }
             }.start()
