@@ -24,14 +24,15 @@ android {
         applicationId = "cn.walkpaint"
         minSdk = 26
         targetSdk = 36
-        versionCode = 62
-        versionName = "0.54"
+        versionCode = 63
+        versionName = "0.55"
         testInstrumentationRunner = "cn.walkpaint.RoadAcceptanceInstrumentation"
         // Optional phone-sized APK; the default universal debug APK remains emulator-compatible.
         if (arm64Only) {
             ndk { abiFilters.add("arm64-v8a") }
         }
         buildConfigField("boolean", "ARM64_ONLY", arm64Only.toString())
+        buildConfigField("boolean", "DEVELOPER_BUILD", developerBuild.toString())
         buildConfigField("String", "AMAP_KEY", "\"$amapKey\"")
         buildConfigField("String", "UPDATE_CLIENT_ID", "\"$updateClientId\"")
         manifestPlaceholders["AMAP_API_KEY"] = amapKey

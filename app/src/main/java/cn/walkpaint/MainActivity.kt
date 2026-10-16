@@ -168,12 +168,7 @@ class MainActivity : ComponentActivity() {
     private var feedbackHistory by mutableStateOf(RecordingDiagnostics.HistoryView(emptyList(),true,false))
     private var feedbackReport by mutableStateOf<String?>(null)
     private var feedbackBusy by mutableStateOf(false)
-    /**
-     * Sending this extra asks the app to write its field export to its own external directory.
-     *
-     * Only an explicit command triggers it — nothing in the app sends it — because the export
-     * contains the person's coordinates and must never leave the phone on its own.
-     */
+    /** Recognized only by the separate developer debug build. */
     private val EXTRA_EXPORT_FIELD_REPORT = "cn.walkpaint.extra.EXPORT_FIELD_REPORT"
     private var privateUpdateState by mutableStateOf(PrivateUpdateState())
     private val privateUpdater by lazy { PrivateUpdater(this) { privateUpdateState=it } }
@@ -700,9 +695,7 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
-        // Command-driven export: the app is launched with the extra and writes its own field report
-        // where the reading side can fetch it. Nothing else in the app ever sends this.
-        if (intent?.getBooleanExtra(EXTRA_EXPORT_FIELD_REPORT, false) == true) dumpFieldReport()
+        handleAutomaticFieldReport(intent)
     }
 
     private fun updateUi() {
@@ -1266,32 +1259,21 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * Writes the field export to the app's own external directory when the app is launched with
-     * [EXTRA_EXPORT_FIELD_REPORT].
-     *
-     * The export lets the phone and the dedicated AVD report their actual engine and overlays.
-     * ARM64 native-bridge testing covers rendering, while the person's phone still supplies OEM,
-     * permissions and real location evidence. Nothing is uploaded unless shared, and the file
-     * is written only when this extra is explicitly sent; the
-     * file lives beside the app's own data and is the same text the person can already share.
-     */
-    private fun dumpFieldReport() {
-        prepareFieldReport { text ->
-            runCatching {
-                val file = java.io.File(getExternalFilesDir(null) ?: filesDir, "field-report.txt")
-                file.writeText(text)
-                // The path is logged so the reading side never has to guess between /sdcard and
-                // /storage/emulated/0, or a device with more than one user.
-                android.util.Log.i("WalkPaintField", "field report written: ${file.absolutePath}")
-            }.onFailure { android.util.Log.w("WalkPaintField", "field report write failed", it) }
-        }
+    private fun handleAutomaticFieldReport(request: Intent?) {
+        val file = java.io.File(getExternalFilesDir(null) ?: filesDir, "field-report.txt")
+        AutomaticFieldExport(BuildConfig.DEBUG, BuildConfig.DEVELOPER_BUILD, file).handle(
+            request?.getBooleanExtra(EXTRA_EXPORT_FIELD_REPORT, false) == true,
+        ) { ready -> prepareFieldReport { text ->
+            runCatching { ready(text) }.onFailure {
+                android.util.Log.w("WalkPaintField", "developer field report write failed")
+            }
+        } }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (intent.getBooleanExtra(EXTRA_EXPORT_FIELD_REPORT, false)) dumpFieldReport()
+        handleAutomaticFieldReport(intent)
     }
 
     private fun copyFeedback() {

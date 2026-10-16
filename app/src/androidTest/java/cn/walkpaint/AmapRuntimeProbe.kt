@@ -14,20 +14,11 @@ internal object AmapRuntimeProbe {
     fun run(instrumentation: Instrumentation): String {
         val context = instrumentation.targetContext
         UiEntry.main(instrumentation)
-        val report = File(context.getExternalFilesDir(null), "field-report.txt")
         var text = ""
         for (attempt in 0 until 8) {
-            val requestedAt = System.currentTimeMillis()
-            instrumentation.runOnMainSync {
-                context.startActivity(Intent(context, MainActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    .putExtra("cn.walkpaint.extra.EXPORT_FIELD_REPORT", true))
-            }
+            text = FieldReportProbe.capture(instrumentation)
+            if (text.contains("引擎判定=正在用高德") && text.contains("地图加载完成=true")) break
             Thread.sleep(1500)
-            if (report.isFile && report.lastModified() >= requestedAt - 100) {
-                text = report.readText()
-                if (text.contains("引擎判定=正在用高德") && text.contains("地图加载完成=true")) break
-            }
         }
         check(text.contains("引擎判定=正在用高德")) { "Runtime is not AMap" }
         check(text.contains("地图加载完成=true")) { "AMap has not completed loading" }

@@ -20,3 +20,5 @@ Windows使用gradlew.bat。开发模式使用本机开发签名、独立包名cn
 公开发布沿scripts/publish_release.py，显式--public-release并绑定已推送完整SHA。核对非调试属性、版本、ABI、原签名V1/V2/V3、说明和摘要后，先上传草稿并检查资产再发布。不得覆盖既有版本。
 
 发布输入固定已验收APK，发布后重新下载核对实际字节。升级不卸载清库，必须同签名、versionCode递增；回退也须兼容schema3，不能直接装旧包。
+
+自动化 Intent 诊断导出仅在 `walkpaintDeveloperBuild=true` 的 debug 包中可用，官方包不响应；旧诊断文件会在启动时清理。正式包的原生验收使用同签名 androidTest 内的 FieldReportProbe，不在生产包重新开放测试入口。

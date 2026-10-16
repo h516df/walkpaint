@@ -1,6 +1,6 @@
 # WalkPaint 项目维护约束
 
-本文件只写项目约束。正式包名 cn.walkpaint，开发包名 cn.walkpaint.dev；0.54/code62，schema3不变。代码采用GPL-3.0及高德SDK链接附加许可，许可证、第三方声明随正式包提供。
+本文件只写项目约束。正式包名 cn.walkpaint，开发包名 cn.walkpaint.dev；0.55/code63，schema3不变。代码采用GPL-3.0及高德SDK链接附加许可，许可证、第三方声明随正式包提供。
 
 - 只维护一个源码与发布仓库。私钥、令牌、地图Key、本机配置、真实轨迹和个人诊断原件不进入Git；公开资料只用公开或合成夹具。
 - 保留原签名、已有足迹、分段和皮肤。不得卸载、清库或降低versionCode；修复回退也须兼容schema3。
@@ -12,5 +12,6 @@
 - 发布须绑定完整提交SHA；公开模式显式使用--public-release。先核对草稿资产，不覆盖已发布资产或移动既有标签。
 - 先跑针对性回归，再跑完整JVM/Python和相关构建检查。UI必须实际渲染并走路径，不能用静态截图或构建成功代替行为验收。
 - 只操作本任务专用模拟器，不碰私人真机，不全局杀模拟器或adb；模拟器通过不能宣称实体手机通过。
+- 自动诊断导出仅允许独立开发调试包。正式包验收使用同签名 androidTest 的 FieldReportProbe，不为测试重新开放生产 Intent 出口；诊断原文不能进入公开证据。
 
 参见 README.md、docs/BUILD.md、PRIVACY.md、NOTICE.md、SECURITY.md、HANDOFF.md。
