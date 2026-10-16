@@ -1,0 +1,62 @@
+name: Verified v0.55 release recovery
+on:
+  push:
+    branches: [agent/codex/release-upload-recovery-v055]
+permissions:
+  contents: read
+concurrency:
+  group: verified-v055-release
+  cancel-in-progress: false
+jobs:
+  finish-verified-release:
+    name: Finish verified v0.55
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write # Complete only the existing, hash-verified release draft through the Releases API.
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: 1a250bfc7d5a9d76257c62150e714f406862d624
+          persist-credentials: false
+      - name: Verify uploaded APK and finish the existing draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, shutil, subprocess, sys
+          assert os.environ['GITHUB_REPOSITORY'] == 'h516df/walkpaint'
+          target = '1a250bfc7d5a9d76257c62150e714f406862d624'
+          expected = 'f7f24a1312d1dc0d7bcb1cbd78c52ceabcc49a44612ea7821d0bc014edc43d92'
+          def run(args):
+              result = subprocess.run([str(a) for a in args], capture_output=True, timeout=180)
+              if result.returncode:
+                  raise RuntimeError(result.stderr.decode('utf-8', 'replace')[-300:])
+              return result.stdout.decode('utf-8', 'replace')
+          assert run(['git', 'rev-parse', 'HEAD']).strip() == target
+          release = json.loads(run(['gh', 'api', 'repos/h516df/walkpaint/releases/415185723']))
+          assert release['tag_name'] == 'v0.55' and release['target_commitish'] == target
+          asset = next(a for a in release['assets'] if a['name'] == 'WalkPaint-v0.55-arm64.apk')
+          assert asset['state'] == 'uploaded' and asset['size'] == 66431001 and asset['digest'] == 'sha256:' + expected
+          output = pathlib.Path(os.environ['RUNNER_TEMP']) / 'verified-v055'
+          output.mkdir()
+          apk = output / asset['name']
+          with apk.open('wb') as sink:
+              subprocess.run(['gh', 'api', 'repos/h516df/walkpaint/releases/assets/' + str(asset['id']),
+                              '-H', 'Accept: application/octet-stream'], stdout=sink, check=True, timeout=180)
+          assert apk.stat().st_size == 66431001 and hashlib.sha256(apk.read_bytes()).hexdigest() == expected
+          notes = output / 'WalkPaint-v0.55-release-notes.json'
+          shutil.copyfile('app/src/main/assets/release-notes.json', notes)
+          data = json.loads(notes.read_text(encoding='utf-8'))
+          assert data['versionName'] == '0.55' and data['versionCode'] == 63
+          checksum = output / 'WalkPaint-v0.55-SHA256.txt'
+          checksum.write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + p.name + '\n'
+                                      for p in [apk, notes]), encoding='utf-8')
+          sys.path.insert(0, 'scripts')
+          from release_remote import publish_verified
+          receipt = publish_verified('h516df/walkpaint', 'v0.55', target, release['name'], release['body'],
+                                     [apk, notes, checksum], output, run, public_release=True)
+          assert receipt['status'] == 'published'
+          print(json.dumps(receipt, ensure_ascii=False))
+          PY
