@@ -1,0 +1,26 @@
+{
+  "tag": "v0.54",
+  "target": "d0a94af9d2e9a0b8390f2e7f7b91a326ca38b739",
+  "url": "https://github.com/h516df/walkpaint/releases/tag/v0.54",
+  "published_at": "2026-10-16T13:07:06Z",
+  "status": "published",
+  "read_only": false,
+  "latest_verified": true,
+  "assets": [
+    {
+      "name": "WalkPaint-v0.54-arm64.apk",
+      "size": 66431034,
+      "digest": "sha256:f7d6e99d5599fd8e5853c07459cf3431a24cb702c2aea914c948eca83a361b6d"
+    },
+    {
+      "name": "WalkPaint-v0.54-release-notes.json",
+      "size": 900,
+      "digest": "sha256:70d11e2594a7561a08509f94f7dbf120152542a025603f30521fb3fc494f893a"
+    },
+    {
+      "name": "WalkPaint-v0.54-SHA256.txt",
+      "size": 195,
+      "digest": "sha256:04400cba6aeb194515a2ccbd6a7cf05ce8cf9e88edcab54afd0e46c05579a78a"
+    }
+  ]
+}
