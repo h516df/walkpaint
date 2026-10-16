@@ -25,6 +25,7 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
     private var noticeProbe=false
     private var hiddenNotificationProbe=false
     private var backupRestoreProbe=false
+    private var backupWorkerProbe=false
     private var networkProbe=false
     private var catalogProbe=false
     private var fixtureProbe=false
@@ -42,6 +43,11 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
     private var candidateSha:String?=null
     override fun onStart() {
         val result = Bundle()
+        if(backupWorkerProbe) {
+            try {result.putString("stream",BackupWorkerProbe.run(this));finish(Activity.RESULT_OK,result)}
+            catch(e:Throwable) {result.putString("stream","BACKUP_WORKER_FAIL: ${e.message}");finish(Activity.RESULT_CANCELED,result)}
+            return
+        }
         if(backupRestoreProbe) {
             try {result.putString("stream",BackupRestoreProbe.run(this));finish(Activity.RESULT_OK,result)}
             catch(e:Throwable) {result.putString("stream","BACKUP_RESTORE_FAIL: ${e.message}");finish(Activity.RESULT_CANCELED,result)}
@@ -405,5 +411,5 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
         // finish() can terminate the instrumented process immediately; cleanup must precede it.
         finish(resultCode,result)
     }
-    override fun onCreate(arguments:Bundle?) { backupRestoreProbe=arguments?.getString("backupRestoreProbe")=="true"; hiddenNotificationProbe=arguments?.getString("hiddenNotificationProbe")=="true"; installerSha=arguments?.getString("installerSha"); mapSceneProbe=arguments?.getString("mapSceneProbe")=="true"; mapReturnProbe=arguments?.getString("mapReturnProbe")=="true"; historyCameraProbe=arguments?.getString("historyCameraProbe")=="true";rapidZoomProbe=arguments?.getString("rapidZoomProbe")=="true"; placeNameProbe=arguments?.getString("placeNameProbe")=="true"; amapAlignmentProbe=arguments?.getString("amapAlignmentProbe")=="true"; uiStateProbe=arguments?.getString("uiStateProbe")=="true"; amapGesture=arguments?.getString("amapGesture"); amapRuntimeProbe=arguments?.getString("amapRuntimeProbe")=="true"; fogFixtureRegion=arguments?.getString("fogFixtureRegion") ?: "paris"; baselineCounts=arguments?.getString("baselineCounts");dataProbe=arguments?.getString("dataProbe")=="true"; recoveryProbe=arguments?.getString("recoveryProbe")=="true"; noticeProbe=arguments?.getString("noticeProbe")=="true"; fogPixelProbe=arguments?.getString("fogPixelProbe")=="true";fogTrailReset=arguments?.getString("fogTrailReset")=="true";fogTrailProbe=arguments?.getString("fogTrailProbe")=="true";directTrailProbe=arguments?.getString("directTrailProbe")=="true"; updateLogoutProbe=arguments?.getString("updateLogoutProbe")=="true";candidateSha=arguments?.getString("candidateSha");privateUpdateProbe=arguments?.getString("privateUpdateProbe")=="true";roadColorProbe=arguments?.getString("roadColorProbe")=="true"; cameraProbe=arguments?.getString("cameraProbe")=="true"; fixtureProbe=arguments?.getString("fixtureProbe")=="true"; catalogProbe=arguments?.getString("catalogProbe")=="true"; networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments); start() }
+    override fun onCreate(arguments:Bundle?) { backupWorkerProbe=arguments?.getString("backupWorkerProbe")=="true"; backupRestoreProbe=arguments?.getString("backupRestoreProbe")=="true"; hiddenNotificationProbe=arguments?.getString("hiddenNotificationProbe")=="true"; installerSha=arguments?.getString("installerSha"); mapSceneProbe=arguments?.getString("mapSceneProbe")=="true"; mapReturnProbe=arguments?.getString("mapReturnProbe")=="true"; historyCameraProbe=arguments?.getString("historyCameraProbe")=="true";rapidZoomProbe=arguments?.getString("rapidZoomProbe")=="true"; placeNameProbe=arguments?.getString("placeNameProbe")=="true"; amapAlignmentProbe=arguments?.getString("amapAlignmentProbe")=="true"; uiStateProbe=arguments?.getString("uiStateProbe")=="true"; amapGesture=arguments?.getString("amapGesture"); amapRuntimeProbe=arguments?.getString("amapRuntimeProbe")=="true"; fogFixtureRegion=arguments?.getString("fogFixtureRegion") ?: "paris"; baselineCounts=arguments?.getString("baselineCounts");dataProbe=arguments?.getString("dataProbe")=="true"; recoveryProbe=arguments?.getString("recoveryProbe")=="true"; noticeProbe=arguments?.getString("noticeProbe")=="true"; fogPixelProbe=arguments?.getString("fogPixelProbe")=="true";fogTrailReset=arguments?.getString("fogTrailReset")=="true";fogTrailProbe=arguments?.getString("fogTrailProbe")=="true";directTrailProbe=arguments?.getString("directTrailProbe")=="true"; updateLogoutProbe=arguments?.getString("updateLogoutProbe")=="true";candidateSha=arguments?.getString("candidateSha");privateUpdateProbe=arguments?.getString("privateUpdateProbe")=="true";roadColorProbe=arguments?.getString("roadColorProbe")=="true"; cameraProbe=arguments?.getString("cameraProbe")=="true"; fixtureProbe=arguments?.getString("fixtureProbe")=="true"; catalogProbe=arguments?.getString("catalogProbe")=="true"; networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments); start() }
 }

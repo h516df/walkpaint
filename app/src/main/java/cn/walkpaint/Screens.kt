@@ -45,7 +45,7 @@ internal fun AppShell(
     appearanceMode:Int, onAppearanceMode:(Int)->Unit, onShowIntro:()->Unit,
     feedbackContent: @Composable (onBack:()->Unit)->Unit,
     updatesContent: @Composable (onBack:()->Unit)->Unit, mapContent: @Composable () -> Unit,
-    onBackupEntry:()->Unit={},onSkin:()->Unit={},onNotifications:()->Unit={}
+    onBackupEntry:()->Unit={},onSkin:()->Unit={},onNotifications:()->Unit={},backupStatus:String?=null
 ) {
     Box(Modifier.fillMaxSize().background(PageBackground)) {
         // Keep the SDK and GL surface alive across bottom-tab journeys. Only the controls/pages
@@ -70,7 +70,7 @@ internal fun AppShell(
                     ProfilePage(state,appearanceMode,onAppearanceMode,onShowIntro,automatic,profileNotice,onResolveTracking,
                     onToggleTracking,onRevoke,onBackgroundSettings,onPowerSettings,onCopyDiagnostics,
                     roadState,roadAreaHint,onRoadPack,onExport,onImport,internalBackupCount,
-                    mapProviderLabel,onChooseAmap,onOnlineMap,roadColor,onRoadAppearance,feedbackContent,updatesContent,onBackupEntry,onSkin,onNotifications)
+                    mapProviderLabel,onChooseAmap,onOnlineMap,roadColor,onRoadAppearance,feedbackContent,updatesContent,onBackupEntry,onSkin,onNotifications,backupStatus)
                 }
             }
         }
@@ -528,7 +528,7 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
     roads:RoadState,areaHint:String,onRoadPack:()->Unit,onExport:()->Unit,onImport:()->Unit,backupCount:Int,
     provider:String,onAmap:()->Unit,onOnline:()->Unit,roadColor:Int,onAppearance:()->Unit,
     feedbackContent: @Composable (onBack:()->Unit)->Unit,
-    updatesContent: @Composable (onBack:()->Unit)->Unit,onBackupEntry:()->Unit,onSkin:()->Unit,onNotifications:()->Unit) {
+    updatesContent: @Composable (onBack:()->Unit)->Unit,onBackupEntry:()->Unit,onSkin:()->Unit,onNotifications:()->Unit,backupStatus:String?) {
     var page by rememberSaveable { mutableStateOf("我的") }
     var revokeConfirm by rememberSaveable { mutableStateOf(false) }
     if(page=="问题反馈") { feedbackContent { page="我的" };return }
@@ -604,6 +604,7 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
                 SettingRow("导出备份","保存到你选择的位置",onExport)
                 SettingRow("恢复备份","合并已有数据，不清空历史足迹",onImport)
                 Text("本机自动快照 $backupCount 份，建议定期导出备份。",color=Muted,fontSize=13.sp,lineHeight=20.sp)
+                backupStatus?.let {Text(it,color=Muted,fontSize=13.sp,lineHeight=20.sp)}
             } }
             "隐私与权限" -> {
                 item { Section("记录授权") {

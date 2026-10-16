@@ -129,6 +129,7 @@ class MainActivity : ComponentActivity() {
     private var retainedMapCamera:org.maplibre.android.camera.CameraPosition?=null
     private var snapshot by mutableStateOf(TrackState())
     private var backupCount by mutableStateOf(0)
+    private var backupStatus by mutableStateOf<String?>(null)
     private var userFix by mutableStateOf<Location?>(null)
     private var trackingStatus by mutableStateOf("正在检查位置状态")
     private var recordingTitle by mutableStateOf("正在检查记录状态")
@@ -294,6 +295,7 @@ class MainActivity : ComponentActivity() {
             if(!activityResumed) return
             updateUi()
             backupCount=repository.backupCountCached
+            backupStatus=repository.backupStatus
             shortGpsText=ShortGpsSurvey.report();shortGpsActive=ShortGpsSurvey.active()
             mainHandler.postDelayed(this, 2000L)
         }
@@ -369,9 +371,8 @@ class MainActivity : ComponentActivity() {
         registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
             if (uri != null) Thread {
                 runCatching {
-                    val payload = repository.exportBackup().toByteArray(Charsets.UTF_8)
-                    contentResolver.openOutputStream(uri)?.use { it.write(payload) }
-                        ?: error("无法写入目标文件")
+                    val output=contentResolver.openOutputStream(uri) ?: error("无法写入目标文件")
+                    output.bufferedWriter(Charsets.UTF_8).use {repository.exportBackup(it)}
                 }.onSuccess { runOnUiThread { toast("足迹备份已保存，可放入云盘") } }
                     .onFailure { runOnUiThread { RecordingDiagnostics.problem(this,ProblemCode.BACKUP_FAILED);toast("导出失败：请检查目标位置或空间") } }
             }.start()
@@ -507,6 +508,7 @@ class MainActivity : ComponentActivity() {
                     onRevoke = { AmbientTracking.stop(this); updateUi() },
                     onCopyDiagnostics = { openRecordingDiagnostics() },
                     internalBackupCount = backupCount,
+                    backupStatus=backupStatus,
                     mapProviderLabel = if (amapActive) "高德联网地图" else if(onlineMap) "OpenFreeMap 联网备用地图" else "离线足迹视图",
                     appearanceMode=appearanceMode,
                     onAppearanceMode={ mode ->
