@@ -45,6 +45,12 @@ class FootprintDatabase(private val context: Context) :
     }
     private var roadCatalog: RoadCatalog? = null
     private val preferences = context.getSharedPreferences("footprint_settings", Context.MODE_PRIVATE)
+    @Volatile internal var backupStatus:String?=preferences.getString("auto_backup_status",null)
+        private set
+    private val backupSchedule=BackupSchedule()
+    private val backupExecutor=java.util.concurrent.Executors.newSingleThreadExecutor {r ->
+        Thread(r,"WalkPaintBackup").apply {isDaemon=true}
+    }
 
     override fun onConfigure(db: SQLiteDatabase) {
         super.onConfigure(db)
@@ -432,23 +438,22 @@ class FootprintDatabase(private val context: Context) :
         revision++
     }
 
-    @Synchronized fun exportBackup(): String = org.json.JSONObject(TrackCodec.encode(snapshot())).apply {
-        put("roadBackupVersion",1)
-        val packs = org.json.JSONArray()
-        readableDatabase.rawQuery("SELECT DISTINCT name,source FROM roads",null).use { c ->
-            while(c.moveToNext()) {
-                val name = c.getString(0); val source = c.getString(1)
-                val ids = readableDatabase.rawQuery("SELECT id FROM roads WHERE name=? AND source=?",arrayOf(name,source)).use { q ->
-                    buildSet { while(q.moveToNext()) add(q.getString(0)) }
-                }
-                catalog().roads.filter { it.stableId in ids }.chunked(2000).forEach { chunk ->
-                    packs.put(org.json.JSONObject(RoadPackCodec.encode(RoadPack(name,source,chunk))))
-                }
+    @Synchronized private fun backupSnapshot():BackupSnapshot {
+        val state=snapshot()
+        val roads=catalog().roads.associateBy {it.stableId}
+        val groups=linkedMapOf<Pair<String,String>,MutableList<RoadSegment>>()
+        readableDatabase.rawQuery("SELECT id,name,source FROM roads ORDER BY id",null).use {c ->
+            while(c.moveToNext()) roads[c.getString(0)]?.let {road ->
+                groups.getOrPut(c.getString(1) to c.getString(2)) {mutableListOf()}.add(road)
             }
         }
-        put("roadPacks",packs)
-        // Coverage is reproducibly derived from the preserved tracks and full geometries.
-    }.toString()
+        val packs=groups.flatMap {(name,items) -> items.chunked(2000).map {RoadPack(name.first,name.second,it)}}
+        return BackupSnapshot(state,packs)
+    }
+    fun exportBackup():String {
+        return java.io.StringWriter().also {exportBackup(it)}.toString()
+    }
+    fun exportBackup(output:java.io.Writer) {backupSnapshot().writeTo(output)}
 
     /** Merge, never overwrite existing trips or a running auto-tracking session. */
     @Synchronized internal fun importBackup(text: String): RestoreResult {
@@ -485,30 +490,61 @@ class FootprintDatabase(private val context: Context) :
     private fun localDay(timestamp: Long): String =
         SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date(timestamp))
 
-    /** A local rolling daily snapshot; separate off-device backups remain user initiated. */
+    /** Enqueue only: a committed GPS batch never waits for JSON serialization or file I/O. */
     private fun maybeDailyBackup(timestamp: Long) {
-        // Resume automatic backups once storage recovers; only an unusable database stays blocked.
         if (fatalError != null) return
-        val date = localDay(timestamp)
-        val previousBackup = preferences.getLong("last_auto_backup_time", 0L)
-        if (previousBackup > 0 && timestamp - previousBackup < 30 * 60_000L) return
+        if(!backupSchedule.start(timestamp,android.os.SystemClock.elapsedRealtime(),
+                preferences.getLong("last_auto_backup_time",0L))) return
         try {
-            val directory = File(context.filesDir, "auto-backups")
-            if (!directory.exists()) directory.mkdirs()
-            val file=File(directory,"footprints-$date.json")
-            val isNew=!file.exists()
-            val atomic = AtomicFile(file)
-            val stream = atomic.startWrite()
-            try {
-                stream.write(exportBackup().toByteArray(Charsets.UTF_8))
-                atomic.finishWrite(stream)
-            } catch (e: Exception) {
-                atomic.failWrite(stream)
-                throw e
+            backupExecutor.execute {
+                try {writeAutomaticBackup(timestamp)}
+                catch(_:BackupLimitException) {rememberBackupStatus("自动备份达到容量预算，请导出备份；原快照保留")}
+                catch(_:Exception) {rememberBackupStatus("自动备份未完成，原快照保留；足迹仍在本机")}
+                finally {backupSchedule.finished()}
             }
-            preferences.edit().putLong("last_auto_backup_time", timestamp).apply()
-            if(isNew) backupCountCached++
-        } catch (_: Exception) { /* Primary SQLite remains authoritative. */ }
+        } catch(_:java.util.concurrent.RejectedExecutionException) {backupSchedule.finished()}
+    }
+    private class BackupLimitException:java.io.IOException()
+    private fun writeAutomaticBackup(timestamp:Long) {
+        backupStatus="正在更新本机自动备份"
+        val directory=File(context.filesDir,"auto-backups")
+        check(directory.isDirectory || directory.mkdirs())
+        val file=File(directory,"footprints-${localDay(timestamp)}.json")
+        val files=directory.listFiles()?.filter {it.isFile && it.name.endsWith(".json")}
+            ?: error("Backup directory unavailable")
+        val budget=BackupBudget.decide(files.size,files.sumOf {it.length()},file.length(),file.exists(),directory.usableSpace)
+        budget.problem?.let {rememberBackupStatus(it);return}
+        // All SQLite reads and immutable references are captured together; encoding is outside
+        // this monitor, so the recording executor can commit while the backup streams to disk.
+        val snapshot=backupSnapshot()
+        val atomic=AtomicFile(file)
+        val stream=atomic.startWrite()
+        try {
+            val bounded=object:java.io.FilterOutputStream(stream) {
+                private var written=0L
+                override fun write(b:Int) {if(written>=budget.maxBytes) throw BackupLimitException();out.write(b);written++}
+                override fun write(b:ByteArray,offset:Int,length:Int) {
+                    if(length>budget.maxBytes-written) throw BackupLimitException()
+                    out.write(b,offset,length);written+=length
+                }
+            }
+            snapshot.writeTo(java.io.OutputStreamWriter(bounded,Charsets.UTF_8))
+            atomic.finishWrite(stream)
+        } catch(e:Exception) {atomic.failWrite(stream);throw e}
+        val completed=System.currentTimeMillis()
+        preferences.edit().putLong("last_auto_backup_time",completed).apply()
+        backupCountCached=files.size+if(file in files) 0 else 1
+        rememberBackupStatus("自动备份已更新 · "+SimpleDateFormat("MM-dd HH:mm",Locale.ROOT).format(Date(completed)))
+    }
+    private fun rememberBackupStatus(text:String) {
+        backupStatus=text
+        preferences.edit().putString("auto_backup_status",text).apply()
+    }
+    override fun close() {
+        backupSchedule.close()
+        backupExecutor.shutdown()
+        check(backupExecutor.awaitTermination(30,java.util.concurrent.TimeUnit.SECONDS)) {"Backup is still finishing"}
+        super.close()
     }
 
     private fun ensureWritable() { check(fatalError == null) { fatalError!! } }
