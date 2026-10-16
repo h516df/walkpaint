@@ -47,7 +47,7 @@ internal object RecordingNoticeProbe {
         }
         var mockAdded=false
         try {
-            val activity=i.startActivitySync(Intent(c,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            val activity=UiEntry.main(i)
             lm.addTestProvider(LocationManager.GPS_PROVIDER,false,true,false,false,true,true,true,
                 Criteria.POWER_HIGH,Criteria.ACCURACY_FINE);mockAdded=true
             lm.setTestProviderEnabled(LocationManager.GPS_PROVIDER,false)

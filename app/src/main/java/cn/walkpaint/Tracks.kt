@@ -14,7 +14,17 @@ data class TrackState(val tracks: List<Track> = emptyList(), val activeId: Strin
     val realTracks by lazy { tracks.filter { !it.demo && it.points.isNotEmpty() } }
     val totalMeters by lazy { realTracks.sumOf { Geo.distance(it.points) } }
     val realPointCount by lazy { realTracks.sumOf { it.points.size } }
-    val dayCount by lazy { realTracks.flatMap { it.points }.map { java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ROOT).format(java.util.Date(it.time)) }.toSet().size }
+    // A snapshot is immutable; only the user's current calendar timezone can invalidate this view.
+    @Volatile private var dailyCache: Pair<java.util.TimeZone,List<DailyFootprint>>? = null
+    internal fun dailyFootprints(zone: java.util.TimeZone): List<DailyFootprint> {
+        dailyCache?.takeIf { it.first == zone }?.let { return it.second }
+        return synchronized(this) {
+            dailyCache?.takeIf { it.first == zone }?.second ?: DailyFootprints.build(this,zone).also {
+                dailyCache = (zone.clone() as java.util.TimeZone) to it
+            }
+        }
+    }
+    val dayCount get() = DailyFootprints.days(this).size
     val cellCount by lazy { realTracks.flatMap { it.points }.map { floor(it.lat / 0.005).toInt() to floor(it.lon / 0.005).toInt() }.toSet().size }
 }
 
