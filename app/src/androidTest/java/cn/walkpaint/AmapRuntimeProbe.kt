@@ -13,8 +13,7 @@ import com.amap.api.maps.model.LatLng
 internal object AmapRuntimeProbe {
     fun run(instrumentation: Instrumentation): String {
         val context = instrumentation.targetContext
-        instrumentation.startActivitySync(Intent(context, MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        UiEntry.main(instrumentation)
         val report = File(context.getExternalFilesDir(null), "field-report.txt")
         var text = ""
         for (attempt in 0 until 8) {

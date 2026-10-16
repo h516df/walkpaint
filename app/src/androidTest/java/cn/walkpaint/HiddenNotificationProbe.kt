@@ -53,6 +53,9 @@ internal object HiddenNotificationProbe {
             val end=SystemClock.elapsedRealtime()+5000
             while(AmbientTracking.running && SystemClock.elapsedRealtime()<end) SystemClock.sleep(50)
             check(!AmbientTracking.running)
+            // finish() immediately kills this test process. Flush cleanup before that boundary.
+            check(c.getSharedPreferences("footprint_preferences",android.content.Context.MODE_PRIVATE)
+                .edit().putBoolean("automatic_enabled",false).commit())
         }
     }
 }

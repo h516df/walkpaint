@@ -19,7 +19,7 @@ internal object InstallUiProbe {
         candidate.parentFile!!.mkdirs();source.copyTo(candidate,overwrite=true)
         PrivateUpdatePolicy.verifyHash(candidate,UpdateAsset(1,candidate.length(),sha,"candidate.apk"))
         var nativeBridgeOnly=false
-        try { UpdateApkVerifier.verify(ctx,candidate,58,"0.52") }
+        try { UpdateApkVerifier.verify(ctx,candidate,BuildConfig.VERSION_CODE,BuildConfig.VERSION_NAME) }
         catch(e:UpdateFailure) {
             // The guarded Google AVD runs this exact phone APK through ARM translation.
             // Production correctly selects universal for x86_64; do not weaken its ABI policy.
@@ -27,7 +27,7 @@ internal object InstallUiProbe {
                 && "arm64-v8a" in android.os.Build.SUPPORTED_ABIS && android.os.Build.PRODUCT=="sdk_gphone64_x86_64")
             nativeBridgeOnly=true
         }
-        val activity=i.startActivitySync(Intent(ctx,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val activity=UiEntry.main(i)
         val uri=FileProvider.getUriForFile(ctx,"${ctx.packageName}.updates",candidate)
         i.runOnMainSync { activity.startActivity(Intent(Intent.ACTION_VIEW)
             .setDataAndType(uri,"application/vnd.android.package-archive")
