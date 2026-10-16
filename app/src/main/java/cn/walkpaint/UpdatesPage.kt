@@ -11,7 +11,7 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 internal fun UpdatesPage(release:CurrentRelease,state:PrivateUpdateState,onBack:()->Unit,onCheck:()->Unit,
-    onDownload:()->Unit,onInstall:()->Unit,onCancel:()->Unit,onLogout:()->Unit,onBrowser:()->Unit) {
+    onDownload:()->Unit,onInstall:()->Unit,onCancel:()->Unit,onLogout:()->Unit,onBrowser:()->Unit,onSource:()->Unit) {
     var confirmLogout by remember { mutableStateOf(false) }
     BackHandler(onBack=onBack)
     if(confirmLogout) AlertDialog(onDismissRequest={confirmLogout=false},title={Text("清除旧更新授权？")},
@@ -34,6 +34,8 @@ internal fun UpdatesPage(release:CurrentRelease,state:PrivateUpdateState,onBack:
             }
             Text("从公开发布页检查和下载安装包，无需 GitHub 登录，不会上传足迹或位置。下载后核对版本和签名，再由系统确认安装，原足迹保留。",color=Muted,fontSize=13.sp,lineHeight=20.sp)
             TextButton(onClick=onBrowser) { Text("打开发布页") }
+            Text("Copyright © 2026 h516df 和贡献者。GPL-3.0，含高德SDK链接例外；允许按许可再分发，程序不提供担保。",color=Muted,fontSize=12.sp,lineHeight=18.sp)
+            TextButton(onClick=onSource) { Text("查看源码与开源许可") }
             if(state.authorized && !state.busy) TextButton(onClick={confirmLogout=true}) { Text("清除旧更新授权") }
         } }
         if(state.candidate!=null) {

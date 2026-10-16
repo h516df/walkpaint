@@ -1,6 +1,6 @@
 # WalkPaint 项目维护约束
 
-本文件只写项目约束。正式包名 cn.walkpaint，开发包名 cn.walkpaint.dev；公开准备从已发布0.53/code59开始，候选0.54/code60，schema3不变。
+本文件只写项目约束。正式包名 cn.walkpaint，开发包名 cn.walkpaint.dev；0.54/code61，schema3不变。代码采用GPL-3.0及高德SDK链接附加许可，许可证、第三方声明随正式包提供。
 
 - 只维护一个源码与发布仓库。私钥、令牌、地图Key、本机配置、真实轨迹和个人诊断原件不进入Git；公开资料只用公开或合成夹具。
 - 保留原签名、已有足迹、分段和皮肤。不得卸载、清库或降低versionCode；修复回退也须兼容schema3。
