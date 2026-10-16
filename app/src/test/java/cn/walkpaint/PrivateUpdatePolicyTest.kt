@@ -71,7 +71,7 @@ class PrivateUpdatePolicyTest {
     }
     @Test fun cancelledTransportFailsBeforeOpeningAnyNetworkConnection() {
         val http=UpdateTransport();http.cancel()
-        assertThrows(InterruptedException::class.java) { http.json("/releases","fixture-not-a-token") }
+        assertThrows(InterruptedException::class.java) { http.json("/releases") }
     }
     @Test fun pendingAuthNeverPretendsToBeLatest() {
         listOf("access_denied","expired_token","device_flow_disabled","incorrect_client_credentials","unknown").forEach {

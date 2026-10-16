@@ -1,4 +1,4 @@
-"""Resume one verified private release. Never clobber an asset or published version."""
+"""Resume a verified release in an explicitly selected visibility mode. Never clobber."""
 import hashlib
 import json
 import re
@@ -18,7 +18,7 @@ def require(condition, message):
         raise RuntimeError(message)
 
 
-def publish_verified(repo, tag, target, title, body, assets, output, run, verify_only=False):
+def publish_verified(repo, tag, target, title, body, assets, output, run, verify_only=False, public_release=False):
     require(bool(re.fullmatch(r'[\w.-]+/[\w.-]+', repo)), '仓库名不合法')
     require(bool(re.fullmatch(r'v[0-9]+(?:\.[0-9]+)*', tag)), '版本标签不合法')
     require(bool(re.fullmatch(r'[a-f0-9]{40}', target)), '必须指定完整提交 SHA')
@@ -47,7 +47,8 @@ def publish_verified(repo, tag, target, title, body, assets, output, run, verify
         raise RuntimeError('标签嵌套过深，停止')
 
     metadata = json.loads(run(['gh', 'api', api]))
-    require(metadata.get('private') is True, '仅允许原私有仓库')
+    require(metadata.get('private') is (not public_release),
+            '仅允许已确认的公开仓库' if public_release else '仅允许原私有仓库；公开发布需显式指定模式')
     require(get(f'commits/{target}').get('sha') == target, '远端提交不匹配')
     pages = get('releases?per_page=100', '--paginate', '--slurp')
     require(isinstance(pages, list) and all(isinstance(p, list) for p in pages), '发布列表格式异常')

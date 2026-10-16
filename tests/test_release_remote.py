@@ -84,9 +84,9 @@ class ReleaseRecoveryTest(unittest.TestCase):
                 'prerelease': False, 'published_at': None if draft else '2026-10-12',
                 'html_url': 'https://github.com/owner/app/releases/tag/v1.0', 'assets': []}
 
-    def publish(self, fake, verify_only=False):
+    def publish(self, fake, verify_only=False, public_release=False):
         return remote.publish_verified('owner/app', 'v1.0', TARGET, '更新', '说明', self.assets,
-                                       self.root / 'receipt', fake, verify_only=verify_only)
+                                       self.root / 'receipt', fake, verify_only=verify_only, public_release=public_release)
 
     def test_new_release_is_draft_until_all_assets_are_verified(self):
         fake = FakeGitHub(self.assets)
@@ -155,6 +155,19 @@ class ReleaseRecoveryTest(unittest.TestCase):
         fake.private = False
         with self.assertRaisesRegex(RuntimeError, '私有仓库'):
             self.publish(fake)
+        self.assertEqual([], fake.writes)
+
+    def test_public_release_requires_explicit_mode_and_preserves_asset_checks(self):
+        fake = FakeGitHub(self.assets)
+        fake.private = False
+        result = self.publish(fake, public_release=True)
+        self.assertEqual('published', result['status'])
+        self.assertTrue(result['latest_verified'])
+
+    def test_public_mode_does_not_accidentally_publish_a_private_repository(self):
+        fake = FakeGitHub(self.assets)
+        with self.assertRaisesRegex(RuntimeError, '公开仓库'):
+            self.publish(fake, public_release=True)
         self.assertEqual([], fake.writes)
 
     def test_different_release_commit_is_never_modified(self):

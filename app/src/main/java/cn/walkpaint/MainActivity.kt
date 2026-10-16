@@ -1,6 +1,7 @@
 package cn.walkpaint
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -405,6 +406,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Local-only snapshot: legacy authorization cleanup must be reachable before any network request.
+        privateUpdateState=privateUpdater.snapshot()
         roadColor=roadAppearance.color
         pendingEnable = savedInstanceState?.getBoolean("pendingEnable") ?: false
         pendingSettingsEnable = savedInstanceState?.getBoolean("pendingSettingsEnable") ?: false
@@ -533,9 +536,9 @@ class MainActivity : ComponentActivity() {
                         gpsSurveyActive=shortGpsActive,onGpsSurvey=::startShortGps) },
                     updatesContent = { onBack -> UpdatesPage(currentRelease,privateUpdateState,
                         { if(privateUpdateState.busy) privateUpdater.cancel();onBack() },::checkUpdates,
-                        { privateUpdater.authorize() },{ openUpdateBrowser(PrivateUpdatePolicy.VERIFY) },
                         { privateUpdater.download() },::installUpdate,{ privateUpdater.cancel() },
-                        { privateUpdater.logout() },{ openUpdateBrowser(UpdateDestination.URL) }) },
+                        { privateUpdater.logout() },{ openUpdateBrowser(UpdateDestination.URL) },
+                        { openUpdateBrowser("https://github.com/h516df/walkpaint#隐私与许可") }) },
                     mapContent = { if (amapActive) AmapNativeView() else NativeMapView() },
                     onSkin={showSkinPicker=true},
                     onNotifications=::openRecordingNotificationSettings,
@@ -924,6 +927,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @SuppressLint("MissingPermission") // Fine permission is checked below; revocation exceptions return null.
     private fun latestSystemLocation(): Location? {
         if (!AmbientTracking.hasFineLocation(this)) return null
         val manager = locationManager ?: getSystemService(LocationManager::class.java).also { locationManager = it }
@@ -934,6 +938,7 @@ class MainActivity : ComponentActivity() {
         } catch (_: Exception) { null }
     }
 
+    @SuppressLint("MissingPermission") // Fine permission is checked below; runCatching also covers revocation.
     private fun beginVisibleLocation() {
         if (!AmbientTracking.hasFineLocation(this)) return
         val lm = locationManager ?: getSystemService(LocationManager::class.java).also { locationManager = it }
@@ -1081,6 +1086,7 @@ class MainActivity : ComponentActivity() {
         toast("诊断已复制，不包含经纬度和个人路线")
     }
 
+    @SuppressLint("MissingPermission") // Fine permission is checked below; GNSS registration failure is handled.
     private fun startShortGps() {
         if(!AmbientTracking.hasFineLocation(this)) { toast("请先在更多设置允许精确定位");return }
         stopShortGps("重新开始短测")
