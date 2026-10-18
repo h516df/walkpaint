@@ -53,6 +53,16 @@ internal object MapSceneProbe {
         var lowest=1.0
         var shots=0
         fun sample() {
+            // The visible exploration control is UI, not geography. Exclude only its
+            // actual accessibility bounds; retain the original geographic threshold.
+            i.uiAutomation.clearCache()
+            fun hud(node:android.view.accessibility.AccessibilityNodeInfo?):android.graphics.Rect? {
+                if(node==null)return null
+                if(node.isVisibleToUser && node.contentDescription?.toString()=="附近探索")return android.graphics.Rect().also{node.getBoundsInScreen(it)}
+                repeat(node.childCount){hud(node.getChild(it))?.let{return it}}
+                return null
+            }
+            val hudRect=hud(i.uiAutomation.rootInActiveWindow)
             val screenshot=i.uiAutomation.takeScreenshot() ?: error("No process screenshot")
             try {
                 shots++
@@ -63,6 +73,7 @@ internal object MapSceneProbe {
                     var expectedUnknown=0;var opaqueUnknown=0
                     for(y in (screenshot.height*.16).toInt() until minOf(fixed.second,(screenshot.height*.77).toInt()) step 22)
                         for(x in (screenshot.width*.06).toInt() until (screenshot.width*.78).toInt() step 22) {
+                            if(hudRect?.contains(x,y)==true)continue
                             val p=screenshot.getPixel(x,y);expectedUnknown++
                             if(Color.red(p)<18 && Color.green(p)<18 && Color.blue(p)<18) opaqueUnknown++
                         }
