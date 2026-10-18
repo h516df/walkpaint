@@ -31,20 +31,9 @@ internal data class PaintFrame(
         lat in latMin..latMax && lon in lonMin..lonMax
 }
 
-/**
- * The veil over ground that has not been walked, and the soft band that walking clears in it.
- *
- * The first attempt cut the veil away in hundred-metre blocks, because a block is either lit or
- * not and no amount of GPS wobble can change that. On the phone the blocks read as exactly what
- * they were: a grid of squares stuck over the map. Fog is not made of squares, and a person
- * walking down a street clears a band along the street, not the fields either side of it.
- *
- * So the veil is cleared by stroking the route: a wide round-capped line, repeated at four widths
- * with rising strength, leaves a corridor whose edge fades instead of stepping. Stroking the same
- * street twice is safe by construction rather than by bookkeeping: the middle of the corridor is
- * cleared and repainted, so it lands on the value it already had, and no line is drawn per pass
- * that could braid. What used to grow with every lap was the tint; the clear pass in front of it
- * is what keeps it from accumulating.
+/** Accepted positions clear a 50-metre circle. Connected accepted samples form its swept area.
+ * Radius is in ground metres, independent of zoom. Gaps remain gaps; GPS filtering is unchanged.
+ * Historical positions use the same radius without changing the original WGS84 records.
  */
 internal object TrailPaint {
     /**
@@ -80,9 +69,10 @@ internal object TrailPaint {
     /** The veil covers the viewport plus this share of it, so a pan does not outrun the image. */
     const val VIEW_MARGIN = 0.35
     /** Width of the ground a walk fully clears, and the band that carries the person's colour. */
-    const val CORRIDOR_M = 30.0
+    const val REVEAL_RADIUS_M = 50.0
+    const val CORRIDOR_M = REVEAL_RADIUS_M * 2
     /** The ramp over which the veil comes back outside that band, so there is no hard edge. */
-    const val FEATHER_M = 3.0
+    const val FEATHER_M = 5.0
     /**
      * The veil over ground not yet walked. Opaque black on purpose: the person asked for unknown
      * ground to be genuinely unknown, and a veil that lets the road network show through is not fog.

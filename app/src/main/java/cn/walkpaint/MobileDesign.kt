@@ -237,7 +237,7 @@ internal fun DesignOnboarding(onEnable: () -> Unit, onSkip: () -> Unit) {
                 Icon(painterResource(R.drawable.ic_route), null, tint = Pigment, modifier = Modifier.padding(top = 24.dp).size(42.dp))
                 Text("足迹涂色  ·  WalkPaint", color = Muted, fontSize = 13.sp)
                 Text("走过的路，\n在地图上慢慢涂满。", color = Ink, fontSize = 32.sp, lineHeight = 42.sp, fontWeight = FontWeight.Bold)
-                Text("记录日常探索，沿已保存的路线显露地图。足迹由你自己保管。", color = Muted, fontSize = 15.sp, lineHeight = 24.sp)
+                Text("定位后点亮周围 50 米，走动时逐步揭开地图。足迹由你自己保管。", color = Muted, fontSize = 15.sp, lineHeight = 24.sp)
                 OnboardingFeature(R.drawable.ic_route, "自动累积足迹", "你同意并授权精确定位后，前台服务会记录走过的路线。")
                 OnboardingFeature(R.drawable.ic_lock, "足迹只存本机", "原始足迹保存在本地，可导出 JSON 备份；联网地图服务另行征求同意。")
                 OnboardingFeature(R.drawable.ic_notification, "记录时保留通知", "后台定位需要系统授权与常驻通知，可能增加耗电。你随时可以暂停。")

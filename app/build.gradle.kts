@@ -24,8 +24,8 @@ android {
         applicationId = "cn.walkpaint"
         minSdk = 26
         targetSdk = 36
-        versionCode = 65
-        versionName = "0.57"
+        versionCode = 66
+        versionName = "0.58"
         testInstrumentationRunner = "cn.walkpaint.RoadAcceptanceInstrumentation"
         // Optional phone-sized APK; the default universal debug APK remains emulator-compatible.
         if (arm64Only) {
@@ -92,3 +92,11 @@ dependencies {
 
 
 
+
+// An official package must contain the restricted application key; users never configure it.
+gradle.taskGraph.whenReady {
+    if(allTasks.any { it.name in listOf("assembleRelease","bundleRelease") }) {
+        require(amapKey.isNotBlank()) { "Official release requires the configured AMap application key" }
+        require(!developerBuild && arm64Only) { "Official release requires the ARM64 AMap build" }
+    }
+}

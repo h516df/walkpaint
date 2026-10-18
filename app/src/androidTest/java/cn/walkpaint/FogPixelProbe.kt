@@ -69,7 +69,7 @@ internal object FogPixelProbe {
         }
         check(outward.last() == 0xFF, "the veil never comes back to full strength: $outward")
         val opaqueAt = outward.indexOfFirst { it == 0xFF }
-        check(opaqueAt in 1..10, "the corridor edge is not a narrow ramp (opaque at sample $opaqueAt): $outward")
+        check(opaqueAt in 1..30, "the corridor edge is not a narrow ramp (opaque at sample $opaqueAt): $outward")
         check(outward.take(opaqueAt + 1).zipWithNext().all { (a, b) -> b >= a },
             "the veil does not come back steadily outside the paint: $outward")
 
@@ -165,7 +165,7 @@ internal object FogPixelProbe {
         val startupPainter = TrailPainter()
         val startup = startupPainter.update(listOf(street), PIGMENT, street.first(), null)!!
         val startupFrame = startupPainter.frame()!!
-        check(!TrailPaint.corridorVisible(startupFrame), "startup frame unexpectedly resolves a 30m corridor")
+        check(!TrailPaint.corridorVisible(startupFrame), "startup frame unexpectedly resolves a 100m corridor")
         check(startup.getPixel(startupFrame.pixelX(BASE_LON).toInt(), startupFrame.pixelY(BASE_LAT).toInt()) == 0xFF000000.toInt(),
             "subpixel startup corridor erased the unknown map")
         val wide = TrailPainter().update(listOf(street), PIGMENT, null, wideView)!!
@@ -186,7 +186,13 @@ internal object FogPixelProbe {
             if(image!=null && area!=null) {
                 val pixel=image.getPixel(area.pixelX(BASE_LON).toInt(),area.pixelY(BASE_LAT).toInt())
                 check(alpha(pixel)<255 && rgb(pixel)!=0,"accepted first fix stayed hidden under black fog")
-                val outsideX=area.pixelX(BASE_LON+40.0/(111195.0*kotlin.math.cos(Math.toRadians(BASE_LAT)))).toInt().coerceIn(0,image.width-1)
+                for(bearing in 0..7) {
+                    val angle=bearing*Math.PI/4
+                    val x=area.pixelX(BASE_LON+35.0*kotlin.math.cos(angle)/(111195.0*kotlin.math.cos(Math.toRadians(BASE_LAT)))).toInt()
+                    val y=area.pixelY(BASE_LAT+35.0*kotlin.math.sin(angle)/111195.0).toInt()
+                    check(alpha(image.getPixel(x,y))<200,"35m circle remained foggy at bearing $bearing")
+                }
+                val outsideX=area.pixelX(BASE_LON+75.0/(111195.0*kotlin.math.cos(Math.toRadians(BASE_LAT)))).toInt().coerceIn(0,image.width-1)
                 check(image.getPixel(outsideX,area.pixelY(BASE_LAT).toInt())==0xFF000000.toInt(),"first fix revealed ground outside its real radius")
             }
         }

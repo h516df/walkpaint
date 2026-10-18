@@ -413,7 +413,7 @@ class MainActivity : ComponentActivity() {
         showFineSettings = savedInstanceState?.getBoolean("showFineSettings") ?: false
         MapLibre.getInstance(applicationContext)
         val mapPref = getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE)
-        onlineMap = mapPref.getBoolean("openfreemap_basemap_consent", false)
+        onlineMap = BuildConfig.DEVELOPER_BUILD && mapPref.getBoolean("openfreemap_basemap_consent", false)
         amapConsent = mapPref.getBoolean("amap_sdk_consent", false)
         showAmapConsent = amapSupported && BuildConfig.AMAP_KEY.isNotBlank() &&
             !amapConsent && !mapPref.getBoolean("amap_sdk_decision_seen", false)
@@ -507,7 +507,7 @@ class MainActivity : ComponentActivity() {
                     onCopyDiagnostics = { openRecordingDiagnostics() },
                     internalBackupCount = backupCount,
                     backupStatus=backupStatus,
-                    mapProviderLabel = if (amapActive) "高德联网地图" else if(onlineMap) "OpenFreeMap 联网备用地图" else "离线足迹视图",
+                    mapProviderLabel = if (amapActive) "高德联网地图" else if(!BuildConfig.DEVELOPER_BUILD) "高德地图 · 待启用" else if(onlineMap) "OpenFreeMap 联网备用地图" else "离线足迹视图",
                     appearanceMode=appearanceMode,
                     onAppearanceMode={ mode ->
                         appearanceMode=mode
@@ -518,7 +518,7 @@ class MainActivity : ComponentActivity() {
                     onRoadAppearance = { showRoadAppearance=true },
                     onChooseAmap = {
                         if(amapSupported) showAmapConsent = true
-                        else { RecordingDiagnostics.problem(this,ProblemCode.MAP_UNAVAILABLE);toast("此设备暂不支持高德地图，请使用离线地图") }
+                        else { RecordingDiagnostics.problem(this,ProblemCode.MAP_UNAVAILABLE);toast("此设备暂不支持当前高德地图版本，足迹记录仍会保留") }
                     },
                     onOnlineMap = { showOnlineConsent = true },
                     roadState = roadState,
@@ -534,7 +534,15 @@ class MainActivity : ComponentActivity() {
                         { privateUpdater.download() },::installUpdate,{ privateUpdater.cancel() },
                         { privateUpdater.logout() },{ openUpdateBrowser(UpdateDestination.URL) },
                         { openUpdateBrowser("https://github.com/h516df/walkpaint#隐私与许可") }) },
-                    mapContent = { if (amapActive) AmapNativeView() else NativeMapView() },
+                    mapContent = { if (amapActive) AmapNativeView() else if(BuildConfig.DEVELOPER_BUILD) NativeMapView() else {
+                        androidx.compose.foundation.layout.Box(Modifier.fillMaxSize(),contentAlignment=androidx.compose.ui.Alignment.Center) {
+                            Column(Modifier.padding(32.dp),horizontalAlignment=androidx.compose.ui.Alignment.CenterHorizontally) {
+                                Text("高德地图",color=androidx.compose.ui.graphics.Color.White,fontSize=24.sp)
+                                Text(if(!amapSupported) "此设备暂不支持当前地图版本，已有足迹仍保留。" else if(BuildConfig.AMAP_KEY.isBlank()) "地图配置暂不可用，请检查更新。" else "首次使用需同意地图隐私说明。无需注册或填写密钥。",color=androidx.compose.ui.graphics.Color.White,modifier=Modifier.padding(vertical=16.dp))
+                                if(amapSupported && BuildConfig.AMAP_KEY.isNotBlank()) Button(onClick={showAmapConsent=true}){Text("启用高德地图")}
+                            }
+                        }
+                    } },
                     onSkin={showSkinPicker=true},
                     onNotifications=::openRecordingNotificationSettings,
                     onBackupEntry={ refreshExecutor.execute {
@@ -552,7 +560,7 @@ class MainActivity : ComponentActivity() {
                     showSkinPicker=false
                 },{showSkinPicker=false})
                 if(showRoadAppearance) RoadColorDialog(roadColor,::chooseRoadColor) { showRoadAppearance=false }
-                if(showOnlineConsent) AlertDialog(
+                if(BuildConfig.DEVELOPER_BUILD && showOnlineConsent) AlertDialog(
                     onDismissRequest={ showOnlineConsent=false },
                     title={ Text("联网显示底图？") },
                     text={ Text("OpenFreeMap 备用地图将收到当前及浏览地图区域、IP 和地图请求；区域可能反映私人位置。同意后会记住选择，今后打开地图也会联网；可随时撤回联网授权。不上传足迹文件，不需要下载道路包。拒绝仍可记录并显示已保存的足迹。") },
@@ -654,7 +662,7 @@ class MainActivity : ComponentActivity() {
                                 .putBoolean("amap_sdk_decision_seen", true)
                                 .putBoolean("amap_sdk_consent", false)
                                 .putBoolean("openfreemap_basemap_consent", false).apply()
-                        }) { Text(if(amapConsent) "撤回并用离线地图" else "暂不用") }
+                        }) { Text(if(amapConsent) "撤回地图授权" else "暂不用") }
                     }
                 )
                 if (showIntro || confirmEnable) DesignOnboarding(
@@ -1201,6 +1209,7 @@ class MainActivity : ComponentActivity() {
         }.getOrDefault(false)
         val engine = when {
             amapActive -> "高德联网地图"
+            !BuildConfig.DEVELOPER_BUILD -> "高德地图 · 待启用"
             onlineMap -> "OpenFreeMap 联网备用地图"
             else -> "离线足迹视图"
         }
