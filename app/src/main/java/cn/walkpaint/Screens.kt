@@ -31,7 +31,7 @@ internal fun exploredDistance(meters: Double): String = if(meters < 1000)
     "%.0f 米".format(Locale.CHINA,meters) else "%.2f 公里".format(Locale.CHINA,meters/1000)
 
 internal fun profileBackDestination(page:String,backupParent:String):String = when(page) {
-    "更多设置" -> "我的"
+    "更多设置", "后台记录设置" -> "我的"
     "备份与恢复" -> if(backupParent=="更多设置") "更多设置" else "我的"
     else -> "更多设置"
 }
@@ -68,7 +68,7 @@ internal fun AppShell(
             when(selectedTab) {
                 0 -> DesignMapOverlay(state,selectedDay,automatic,recordingTitle,recordingHealthy,mapNotice,
                     mapProviderLabel,{onTab(2)},onToggleTracking,onLocate,onShowAll,
-                    mapProviderLabel.contains("OpenFreeMap"),onZoom,{})
+                    mapProviderLabel.contains("OpenFreeMap"),onZoom,{},regionContent={RegionExplorationCard(state,fix,placeName)})
                 1 -> Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(bottom=76.dp)) {
                     DesignTripsPage(state,roadColor,onTrip,onExport,onSkin)
                 }
@@ -547,6 +547,7 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
         when(page) {
             "我的" -> {
                 item { SkinHero(exploredDistance(state.totalMeters),"${state.dayCount}",onSkin) }
+                item {GrowthEntry(walkGrowth(state))}
                 item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                     Surface(onClick=onSkin,color=Canvas,shape=RoundedCornerShape(16.dp),
                         modifier=Modifier.weight(1f)) {
@@ -575,14 +576,14 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
                     Row(Modifier.fillMaxWidth().heightIn(min=64.dp),verticalAlignment=Alignment.CenterVertically) {
                         Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
                             Text("自动记录",color=Ink,fontSize=16.sp,fontWeight=FontWeight.Medium)
-                            Text(if(automatic) "已开启，定位状态请查看下方" else "已暂停，历史足迹保留",
+                            Text(if(automatic) "已开启，外出时自动记录" else "已暂停，历史足迹保留",
                                 color=Muted,fontSize=13.sp,lineHeight=19.sp)
                         }
                         Switch(checked=automatic,onCheckedChange=onToggle,
                             modifier=Modifier.semantics { contentDescription="自动记录" })
                     }
                     HorizontalDivider(color=Line)
-                    SettingRow("定位与记录状态",notice ?: if(automatic) "查看当前定位、记录与恢复情况" else "已暂停记录",onDiagnostics)
+                    SettingRow("后台记录设置","自启动、后台定位与省电设置") {page="后台记录设置"}
                     HorizontalDivider(color=Line)
                     SettingRow("隐藏记录通知","前往系统设置关闭显示，自动记录保持开启",onNotifications)
                     HorizontalDivider(color=Line)
@@ -604,7 +605,6 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
             "更多设置" -> item { Section("设置") {
                 SettingRow("备份与恢复","保存或找回你的足迹") { onBackupEntry();backupParent="更多设置";page="备份与恢复" }
                 SettingRow("隐私与权限","管理授权与后台运行") { page="隐私与权限" }
-                SettingRow("完整诊断文本","原始计数与道路复算，可复制",onDiagnostics)
                 Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     listOf("跟随系统","浅色","深色").forEachIndexed { mode,label ->
                         FilterChip(selected=appearanceMode==mode,onClick={onAppearanceMode(mode)},label={Text(label)})
@@ -619,6 +619,7 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
                 Text("本机自动快照 $backupCount 份，建议定期导出备份。",color=Muted,fontSize=13.sp,lineHeight=20.sp)
                 backupStatus?.let {Text(it,color=Muted,fontSize=13.sp,lineHeight=20.sp)}
             } }
+            "后台记录设置" -> item { BackgroundRecordingSettings(automatic,onPermissions,onPower) }
             "隐私与权限" -> {
                 item { Section("记录授权") {
                     Text("关闭自动记录只会停止后续记录，不删除历史，也不会撤销系统权限。",color=Muted,fontSize=13.sp,lineHeight=20.sp)

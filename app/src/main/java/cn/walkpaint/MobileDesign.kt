@@ -59,7 +59,7 @@ internal fun DesignSummary(state: TrackState) {
 internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolean,
     title: String, healthy: Boolean, notice: String?, provider: String, onSettings: () -> Unit,
     onToggle: (Boolean) -> Unit, onLocate: () -> Unit, onShowAll: () -> Unit,
-    showOsmCredit: Boolean, onZoom: (Int) -> Unit, mapContent: @Composable () -> Unit) {
+    showOsmCredit: Boolean, onZoom: (Int) -> Unit, mapContent: @Composable () -> Unit, regionContent:@Composable ()->Unit={}) {
     val uri = androidx.compose.ui.platform.LocalUriHandler.current
     Box(Modifier.fillMaxSize()) {
         mapContent()
@@ -76,14 +76,17 @@ internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolea
                 Text("返回全部探索",color=Color(0xFFB8D3FF),fontSize=13.sp)
             }
         }
-        if(notice!=null && day==null) Surface(onClick=onSettings,color=chrome,shape=RoundedCornerShape(16.dp),
-            modifier=Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top=12.dp,start=16.dp,end=16.dp)) {
+        if(day==null) Column(Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top=12.dp,start=16.dp,end=16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+        regionContent()
+        if(notice!=null) Surface(onClick=onSettings,color=chrome,shape=RoundedCornerShape(16.dp),
+            modifier=Modifier.fillMaxWidth()) {
             Row(Modifier.padding(horizontal=16.dp,vertical=12.dp),verticalAlignment=Alignment.CenterVertically) {
                 Icon(painterResource(R.drawable.ic_location),null,tint=Color(0xFFB8D3FF),modifier=Modifier.size(18.dp))
                 Spacer(Modifier.width(10.dp))
                 Text(notice,color=chromeInk,fontSize=13.sp,lineHeight=20.sp,modifier=Modifier.weight(1f))
                 Text("›",color=chromeInk,fontSize=20.sp,modifier=Modifier.padding(start=8.dp))
             }
+        }
         }
         Column(Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(end=16.dp,bottom=94.dp),
             verticalArrangement=Arrangement.spacedBy(12.dp)) {

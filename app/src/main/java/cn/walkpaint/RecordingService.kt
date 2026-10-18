@@ -540,7 +540,7 @@ class RecordingService : Service(), LocationListener {
 class FootprintBootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action !in listOf(Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED)) return
-        if (!AmbientTracking.enabled(context)) return
+        if (!AmbientTracking.enabled(context) || !context.getSharedPreferences("growth_v1",0).getBoolean("restore_after_boot",true)) return
         if (!AmbientTracking.hasBackgroundLocation(context)) {
             AmbientTracking.status = "重启后需要在应用里恢复自动足迹，请授权始终允许定位"
             RecordingDiagnostics.event(context, "failure", "BOOT_MISSING_BACKGROUND_PERMISSION")
