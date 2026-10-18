@@ -79,28 +79,28 @@ internal class AmapMapController(private val context: Context, private val onGes
                 view.getLocationOnScreen(mapOrigin);(coverageHost ?: view).getLocationOnScreen(hostOrigin)
                 canvas.translate((mapOrigin[0]-hostOrigin[0]).toFloat(),(mapOrigin[1]-hostOrigin[1]).toFloat())
                 val frame = groundFrame
+                val image = groundImage
                 val projection = map?.projection
+                // Read one projection for both the hole and raster. During native camera
+                // animation a second read can already describe a different frame.
+                val corners = if(frame!=null && image!=null && projection!=null)
+                    listOf(toAmap(frame.latMax,frame.lonMin),toAmap(frame.latMax,frame.lonMax),
+                        toAmap(frame.latMin,frame.lonMax),toAmap(frame.latMin,frame.lonMin))
+                        .map {projection.toScreenLocation(it)} else emptyList()
+                val drawable = image!=null && corners.distinctBy {it.x to it.y}.size==4 &&
+                    fogTransform.setPolyToPoly(
+                        floatArrayOf(0f,0f,image.width.toFloat(),0f,image.width.toFloat(),image.height.toFloat(),0f,image.height.toFloat()),0,
+                        corners.flatMap {listOf(it.x.toFloat(),it.y.toFloat())}.toFloatArray(),0,4)
                 guardPath.reset()
                 guardPath.fillType = android.graphics.Path.FillType.EVEN_ODD
                 guardPath.addRect(0f,0f,view.width.toFloat(),view.height.toFloat(),android.graphics.Path.Direction.CW)
-                if(frame != null && projection != null) {
-                    val corners = listOf(toAmap(frame.latMax,frame.lonMin),toAmap(frame.latMax,frame.lonMax),
-                        toAmap(frame.latMin,frame.lonMax),toAmap(frame.latMin,frame.lonMin)).map { projection.toScreenLocation(it) }
-                    // Degenerate projection must stay covered until the map is ready.
-                    if(corners.distinctBy { it.x to it.y }.size == 4) {
+                if(drawable) {
                         guardPath.moveTo(corners[0].x.toFloat(),corners[0].y.toFloat())
                         corners.drop(1).forEach { guardPath.lineTo(it.x.toFloat(),it.y.toFloat()) }
                         guardPath.close()
-                    }
                 }
                 canvas.drawPath(guardPath,guardPaint)
-                val image=groundImage
-                if(frame!=null && image!=null && projection!=null) {
-                    val src=floatArrayOf(0f,0f,image.width.toFloat(),0f,image.width.toFloat(),image.height.toFloat(),0f,image.height.toFloat())
-                    val corners=listOf(toAmap(frame.latMax,frame.lonMin),toAmap(frame.latMax,frame.lonMax),
-                        toAmap(frame.latMin,frame.lonMax),toAmap(frame.latMin,frame.lonMin)).map {projection.toScreenLocation(it)}
-                    val dst=corners.flatMap {listOf(it.x.toFloat(),it.y.toFloat())}.toFloatArray()
-                    if(fogTransform.setPolyToPoly(src,0,dst,0,4)) {
+                if(drawable && image!=null) {
                         // Outside coverage and inside raster are recorded in one Android display
                         // list. AMap cannot render one with the other frame's bounds anymore.
                         canvas.drawBitmap(image,fogTransform,fogImagePaint)
@@ -112,7 +112,6 @@ internal class AmapMapController(private val context: Context, private val onGes
                         canvas.drawPath(routeOnScreen,routePaint)
                         routePaint.color=(exploredColor and 0x00FFFFFF) or (0xB0 shl 24);routePaint.strokeWidth=minOf(2.5f*density,corridorPixels)
                         canvas.drawPath(routeOnScreen,routePaint)
-                    }
                 }
                 latestPosition?.let { fix ->
                     projection?.toScreenLocation(toAmap(fix.latitude,fix.longitude))?.let { point ->

@@ -628,7 +628,7 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
                 } }
                 item { Section("地图与隐私") {
                     SettingRow("地图服务与隐私",provider,onAmap)
-                        Text("高德地图联网显示底图，足迹直接画在地图上，无需准备地图。原始足迹保存在本机，首次使用地图服务需同意其隐私说明。",color=Muted,fontSize=13.sp,lineHeight=20.sp)
+                        Text("正式版使用高德地图，安装即有地图配置，无需注册开发者或填写密钥。有效定位后揭开周围 50 米范围，走动后连成已探索区域。原始足迹保存在本机，首次使用地图服务需同意其隐私说明。",color=Muted,fontSize=13.sp,lineHeight=20.sp)
                 } }
             }
             "关于" -> item { Section("足迹涂色") {

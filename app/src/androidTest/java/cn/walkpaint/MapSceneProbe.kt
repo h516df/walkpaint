@@ -99,6 +99,21 @@ internal object MapSceneProbe {
                     Thread.sleep(250)
                 }
             }
+            // A delayed raster upload must never punch an uncovered hole in the map.
+            main {
+                val imageField=controller.javaClass.getDeclaredField("groundImage").apply {isAccessible=true}
+                val saved=imageField.get(controller)
+                val view=controller.view()!!
+                val target=Bitmap.createBitmap(view.width,view.height,Bitmap.Config.ARGB_8888)
+                try {
+                    imageField.set(controller,null)
+                    (field(controller,"coverageGuard") as android.graphics.drawable.Drawable)
+                        .draw(android.graphics.Canvas(target))
+                    for(x in listOf(view.width/4,view.width/2,view.width*3/4))
+                        for(y in listOf(view.height/4,view.height/2,view.height*3/4))
+                            check(target.getPixel(x,y)==Color.BLACK) {"Missing raster exposed geography"}
+                } finally {imageField.set(controller,saved);target.recycle()}
+            }
             for(delta in listOf(-1,-1,-1,-1,1,1,1,1)) {
                 main {controller.zoomBy(delta)}
                 repeat(3) {Thread.sleep(80);sample()}
