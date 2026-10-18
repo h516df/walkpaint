@@ -40,6 +40,10 @@ internal object AmapAlignmentProbe {
         var publicDisplay: LatLng? = null
         onMain {
             original = sdk.cameraPosition
+            // This probe owns the camera while comparing a fixed public coordinate.
+            // A live location follow/animation must not race the projection assertion.
+            activity.javaClass.getDeclaredMethod("pauseMapFollowing").apply { isAccessible=true }.invoke(activity)
+            sdk.stopAnimation()
             publicDisplay = CoordinateConverter(i.targetContext).from(CoordinateConverter.CoordType.GPS)
                 .coord(LatLng(39.9075,116.3913)).convert()
             sdk.moveCamera(CameraUpdateFactory.newLatLngZoom(publicDisplay,17f))

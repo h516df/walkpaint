@@ -10,6 +10,32 @@ class UpdateFileDownloadTest {
     private val bytes=ByteArray(200000){(it%127).toByte()}
     private val asset=UpdateAsset(1,bytes.size.toLong(),MessageDigest.getInstance("SHA-256").digest(bytes).joinToString(""){"%02x".format(it)},"fixture.apk")
     private fun file()=File.createTempFile("download", ".apk")
+    @Test fun interruptedTransferResumesAtActualPersistedByteCount() {
+        val f=file();val offsets=mutableListOf<Long>()
+        try {
+            UpdateFileDownload.fetch(f,asset,{},{}) {offset,read->
+                offsets+=offset
+                if(offset==0L)read(bytes.copyOf(80000).inputStream())
+                else read(bytes.copyOfRange(offset.toInt(),bytes.size).inputStream())
+            }
+            assertEquals(listOf(0L,80000L),offsets);assertArrayEquals(bytes,f.readBytes())
+        } finally {f.delete()}
+    }
+    @Test fun resumedCorruptionFailsWithoutRetryAndCleansFile() {
+        val f=file();var attempts=0
+        assertThrows(UpdateFailure::class.java) {
+            UpdateFileDownload.fetch(f,asset,{},{}) {_,read->attempts++;read(bytes.copyOf().also{it[0]=99}.inputStream())}
+        }
+        assertEquals(1,attempts);assertFalse(f.exists())
+    }
+    @Test fun reconnectAttemptsAreBoundedAndCancellationNeverRetries() {
+        val f=file();var attempts=0
+        assertThrows(IOException::class.java) {UpdateFileDownload.fetch(f,asset,{},{}) {_,_->attempts++;throw IOException("offline")}}
+        assertEquals(5,attempts);assertFalse(f.exists())
+        attempts=0
+        assertThrows(InterruptedException::class.java) {UpdateFileDownload.fetch(f,asset,{throw InterruptedException()},{}) {_,_->attempts++}}
+        assertEquals(0,attempts);assertFalse(f.exists())
+    }
     @Test fun successfulDownloadUsesActualBytesAndFinishesAt100Percent() {
         val f=file();val progress=mutableListOf<Int>()
         try {

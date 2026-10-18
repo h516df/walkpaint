@@ -177,7 +177,7 @@ internal object FogPixelProbe {
         check(empty.getPixel(midX, midY) == 0xFF000000.toInt(),
             "empty paths kept a previously explored corridor")
 
-        // Saved observations without travel must leave the exact centre opaque as well.
+        // A stored accepted observation reveals only its footprint, without a fabricated journey.
         for(run in listOf(listOf(point(0.0,0.0)),listOf(point(0.0,0.0),point(0.0,0.0)))) {
             val isolated=TrailPainter()
             val image=isolated.update(listOf(run),PIGMENT,run.first(),view)
@@ -185,7 +185,9 @@ internal object FogPixelProbe {
             check(image!=null && area!=null,"isolated observation did not produce a covering frame")
             if(image!=null && area!=null) {
                 val pixel=image.getPixel(area.pixelX(BASE_LON).toInt(),area.pixelY(BASE_LAT).toInt())
-                check(alpha(pixel)==255 && rgb(pixel)==0,"isolated or zero-length observation dug a pinhole")
+                check(alpha(pixel)<255 && rgb(pixel)!=0,"accepted first fix stayed hidden under black fog")
+                val outsideX=area.pixelX(BASE_LON+40.0/(111195.0*kotlin.math.cos(Math.toRadians(BASE_LAT)))).toInt().coerceIn(0,image.width-1)
+                check(image.getPixel(outsideX,area.pixelY(BASE_LAT).toInt())==0xFF000000.toInt(),"first fix revealed ground outside its real radius")
             }
         }
         return if (failures.isEmpty()) "FOG_PIXEL_PROBE_PASS"

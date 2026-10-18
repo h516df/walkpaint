@@ -348,7 +348,13 @@ internal class TrailPainter {
             }
         }
         for (path in paths) {
-            if (!RecordedTrail.visible(path)) continue
+            if (path.size == 1) {
+                val point = path.single()
+                if (target.contains(point.lat, point.lon)) {
+                    val x = target.pixelX(point.lon); val y = target.pixelY(point.lat)
+                    if (seen.add(keyOf(x, y, x, y))) out.add(floatArrayOf(x, y, x, y))
+                }
+            }
             for (index in 1 until path.size) {
                 val a = path[index - 1]
                 val b = path[index]
@@ -388,7 +394,7 @@ internal class TrailPainter {
             paint.strokeWidth = core + 2f * feather * ring.reach
             paint.alpha = (veilAlpha * ring.alpha).toInt().coerceIn(1, 255)
             for (segment in segments) {
-                canvas.drawLine(segment[0], segment[1], segment[2], segment[3], paint)
+                drawSegment(canvas, segment)
             }
         }
         // Then the person's own colour on the ground the fade has just cleared.
@@ -396,8 +402,17 @@ internal class TrailPainter {
         paint.strokeWidth = core
         paint.alpha = TrailPaint.TINT_ALPHA.coerceIn(1, 255)
         for (segment in segments) {
-            canvas.drawLine(segment[0], segment[1], segment[2], segment[3], paint)
+            drawSegment(canvas, segment)
         }
+    }
+
+    private fun drawSegment(canvas: Canvas, segment: FloatArray) {
+        if (segment[0] == segment[2] && segment[1] == segment[3]) {
+            val style = paint.style
+            paint.style = Paint.Style.FILL
+            canvas.drawCircle(segment[0], segment[1], paint.strokeWidth / 2f, paint)
+            paint.style = style
+        } else canvas.drawLine(segment[0], segment[1], segment[2], segment[3], paint)
     }
 
     private data class Ring(val reach: Float, val alpha: Float)

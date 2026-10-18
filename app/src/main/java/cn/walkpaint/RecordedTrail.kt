@@ -15,6 +15,9 @@ internal object RecordedTrail {
     fun visible(path: List<TrackPoint>): Boolean = path.size >= 2 &&
         path.zipWithNext().sumOf { (a,b) -> Geo.meters(a,b) } >= 3.0
     fun visiblePaths(tracks: List<Track>): List<List<TrackPoint>> = paths(tracks).filter(::visible)
+    /** Accepted stored fixes reveal a footprint even before a continuous walk exists.
+     * This does not accept a new GPS fix or join separate recording segments. */
+    fun exploredPaths(tracks: List<Track>): List<List<TrackPoint>> = paths(tracks)
     fun connected(a:TrackPoint,b:TrackPoint):Boolean {
         val gap=b.time-a.time
         return a.segment==b.segment && gap in 1..MAX_GAP_MS &&
