@@ -1853,7 +1853,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onResume() {
-        super.onResume()
+        super.onResume();GrowthSession.resume(this)
         activityResumed=true;syncHeadingLifecycle()
         mainHandler.removeCallbacks(refreshTask)
         mainHandler.post(refreshTask)
@@ -1867,6 +1867,7 @@ class MainActivity : ComponentActivity() {
         }
     }
     override fun onPause() {
+        GrowthSession.pause()
         mainHandler.removeCallbacks(refreshTask)
         stopShortGps("离开前台，结束短测")
         activityResumed=false;syncHeadingLifecycle()
