@@ -1,6 +1,16 @@
 package cn.walkpaint
 
 import android.location.Location
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -15,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.*
 import java.util.Locale
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable internal fun RegionExplorationCard(state:TrackState,fix:Location?,place:String?,modifier:Modifier=Modifier) {
     val context=LocalContext.current.applicationContext
     val last=state.realTracks.lastOrNull()?.points?.lastOrNull()
@@ -36,8 +47,10 @@ import java.util.Locale
             finally{boundaryBusy=false}
         }
     }
+    var measuredScope by remember{mutableStateOf<String?>(null)}
     LaunchedEffect(state,anchor,boundary,regional,allowed){
-        share=null
+        val key="$anchor:${if(regional)boundary?.code else null}"
+        if(measuredScope!=key){share=null;measuredScope=key}
         if(raw!=null){calculating=true
             try{share=withContext(Dispatchers.Default){
                 val scope=currentCoroutineContext()
@@ -49,24 +62,75 @@ import java.util.Locale
         }
     }
     val county=regional && boundary!=null
-    Surface(onClick={details=true},modifier=modifier.fillMaxWidth(),shape=RoundedCornerShape(18.dp),color=Color(0xEE172334),contentColor=Color(0xFFE9EFFA)) {
-        Column(Modifier.padding(horizontal=16.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(5.dp)) {
-            Row(horizontalArrangement=Arrangement.spacedBy(12.dp),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically) {
-                Text(if(county)boundary!!.name else (place ?: "当前位置")+"附近",Modifier.weight(1f),fontWeight=FontWeight.Medium,fontSize=14.sp,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                Text(if(share!=null)"${String.format(Locale.ROOT,"%.2f",share!!.percent)}%" else if(calculating)"统计中" else if(raw==null)"待定位" else "暂不可用",fontWeight=FontWeight.SemiBold,fontSize=18.sp)
+    val percent=share?.percent ?: 0.0
+    val stage=explorationStage(percent)
+    val title=if(county)boundary!!.name else place?.let{"${it}附近"} ?: "附近"
+    var rules by remember{mutableStateOf(false)}
+    var newlyLit by remember{mutableStateOf(false)}
+    var pulse by remember{mutableIntStateOf(0)}
+    var previousArea by remember(anchor,county){mutableStateOf<Double?>(null)}
+    LaunchedEffect(share,anchor,county){
+        val area=share?.squareMeters ?: return@LaunchedEffect
+        val previous=previousArea
+        previousArea=area
+        if(previous!=null && area>previous+625)pulse++
+    }
+    LaunchedEffect(pulse){if(pulse>0){newlyLit=true;delay(1800);newlyLit=false}}
+    val progress by animateFloatAsState((percent/100).toFloat(),tween(420),label="exploration")
+    val gold=Color(0xFFE2C894)
+    Column(modifier.widthIn(max=268.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+        Surface(onClick={details=true},modifier=Modifier.fillMaxWidth().semantics{contentDescription="附近探索"},shape=RoundedCornerShape(16.dp),color=Color(0xF0202B3B),contentColor=Color(0xFFF7F3EA)) {
+            Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                    ExplorationMark(gold,Modifier.size(26.dp))
+                    Text(title,Modifier.weight(1f),fontWeight=FontWeight.Medium,fontSize=16.sp,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                }
+                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                    Text(stage.title,Modifier.weight(1f),fontSize=12.sp,color=gold)
+                    Text(if(share!=null)String.format(Locale.ROOT,"%.1f%%",percent) else if(raw==null)"定位中" else "…",fontSize=17.sp,fontWeight=FontWeight.Medium)
+                }
+                LinearProgressIndicator(progress={progress},modifier=Modifier.fillMaxWidth().height(3.dp),color=gold,trackColor=Color(0xFF4B5360))
             }
-            Text(if(county)"地区探索 · 区县面积估算" else "地区探索 · 周围 2 公里",fontSize=11.sp,color=Color(0xFFB8C7DE))
+        }
+        AnimatedVisibility(newlyLit){Text("新区域已点亮",color=gold,fontSize=13.sp,modifier=Modifier.padding(horizontal=16.dp))}
+    }
+    if(details) ModalBottomSheet(onDismissRequest={details=false},containerColor=Color(0xFFF6F3EC),contentColor=Color(0xFF273246)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal=28.dp).padding(bottom=32.dp),verticalArrangement=Arrangement.spacedBy(24.dp)) {
+            Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)) {
+                ExplorationMark(Color(0xFF91703A),Modifier.size(40.dp))
+                Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(5.dp)) {
+                    Text(title,fontSize=23.sp,fontWeight=FontWeight.SemiBold)
+                    Text(stage.title,fontSize=14.sp,color=Color(0xFF736344))
+                }
+                Text(String.format(Locale.ROOT,"%.1f%%",percent),fontSize=28.sp,fontWeight=FontWeight.Medium)
+            }
+            LinearProgressIndicator(progress={progress},modifier=Modifier.fillMaxWidth().height(4.dp),color=Color(0xFF91703A),trackColor=Color(0xFFE2DDCF))
+            Text(stage.next?.let{"再点亮到 ${it}% · ${explorationStage(it.toDouble()).title}"} ?: "这一片，已留下满满足迹",fontSize=15.sp)
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) {
+                listOf(5,20,50,80,100).forEach{target->Column(horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                    ExplorationMark(if(percent>=target)Color(0xFF91703A) else Color(0xFF8B8D91),Modifier.size(24.dp),percent>=target)
+                    Text("$target%",fontSize=12.sp)
+                }}
+            }
+            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected=!county,onClick={regional=false},label={Text("附近")})
+                boundary?.let{area->FilterChip(selected=county,onClick={regional=true},label={Text(area.name)})}
+            }
+            TextButton(onClick={rules=!rules},contentPadding=PaddingValues(0.dp)){Text(if(rules)"收起" else "怎么算？",color=Color(0xFF59677B))}
+            if(rules) Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                Text(if(county)"走过的地方越多，点亮的地图越大。" else "看看周围2公里，你点亮了多少地方。",fontSize=14.sp)
+                Text("每段足迹点亮周围50米，走过的地方只算一次。",fontSize=14.sp)
+                if(boundary==null) TextButton(onClick={retry++},enabled=allowed&&!boundaryBusy){Text(if(boundaryBusy)"查找地区中…" else "查找所在区县")}
+            }
         }
     }
-    if(details) AlertDialog(onDismissRequest={details=false},title={Text("地区探索度")},text={Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
-        Text("按已保存足迹周围50米的点亮面积去重估算，不是道路完成率。重复走同一段不会重复增加面积。")
-        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected=!county,onClick={regional=false},label={Text("附近2公里")})
-            FilterChip(selected=county,onClick={regional=true},enabled=boundary!=null,label={Text(boundary?.name ?: "区县待获取")})
-        }
-        share?.let{Text(String.format(Locale.ROOT,"已点亮 %.3f km² / 范围 %.2f km²",it.squareMeters/1e6,it.totalSquareMeters/1e6))}
-        Text(if(county)"边界来自高德，计算为25米网格估算。" else "附近范围以本次定位区域为中心；移动到其他地方，范围也会变化。村/乡镇边界未提供时，不把附近范围称作整个村或乡镇。")
-        if(raw==null)Text("开启自动记录并允许定位后，会显示你当前附近的进度。")
-        if(boundary==null)Text(if(boundaryBusy)"正在获取区县边界…" else if(!allowed)"同意高德服务后可获取区县边界；附近统计仍在本机完成。" else "暂未取得地区边界，先使用附近范围。")
-    }},confirmButton={TextButton(onClick={details=false}){Text("知道了")}},dismissButton={if(allowed && boundary==null)TextButton(onClick={retry++},enabled=!boundaryBusy){Text("重试边界")}})
+}
+
+@Composable private fun ExplorationMark(ink:Color,modifier:Modifier=Modifier,filled:Boolean=true) {
+    Canvas(modifier){
+        val w=size.width;val h=size.height
+        val p=Path().apply{moveTo(w*.5f,0f);lineTo(w*.65f,h*.35f);lineTo(w,h*.5f);lineTo(w*.65f,h*.65f);lineTo(w*.5f,h);lineTo(w*.35f,h*.65f);lineTo(0f,h*.5f);lineTo(w*.35f,h*.35f);close()}
+        if(filled)drawPath(p,ink) else drawPath(p,ink,style=Stroke(1.4.dp.toPx()))
+        if(filled)drawCircle(Color(0xFFF6F3EC),w*.08f,Offset(w*.5f,h*.5f))
+    }
 }

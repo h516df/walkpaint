@@ -12,7 +12,10 @@ internal object RegionJourney {
   @Suppress("UNCHECKED_CAST")
   val fix=activity.javaClass.getDeclaredField("userFix\$delegate").apply{isAccessible=true}.get(activity) as androidx.compose.runtime.MutableState<android.location.Location?>
   var previous:android.location.Location?=null
-  i.runOnMainSync {previous=fix.value;fix.value=null}
+  val previousGps=AmbientTracking.lastGps;val previousFix=AmbientTracking.lastFix
+  val manager=activity.javaClass.getDeclaredField("locationManager").apply{isAccessible=true}.get(activity) as? android.location.LocationManager
+  val listener=activity.javaClass.getDeclaredField("visibleLocationListener").apply{isAccessible=true}.get(activity) as android.location.LocationListener
+  i.runOnMainSync {previous=fix.value;manager?.removeUpdates(listener);AmbientTracking.lastGps=null;AmbientTracking.lastFix=null;fix.value=null}
   try {
   fun nodes():List<AccessibilityNodeInfo>{i.uiAutomation.clearCache();val result=mutableListOf<AccessibilityNodeInfo>();fun visit(n:AccessibilityNodeInfo?){if(n==null)return;if(n.isVisibleToUser)result+=n;repeat(n.childCount){visit(n.getChild(it))}};visit(i.uiAutomation.rootInActiveWindow);return result}
   fun waitFor(test:(AccessibilityNodeInfo)->Boolean):AccessibilityNodeInfo{val end=SystemClock.elapsedRealtime()+25000;while(SystemClock.elapsedRealtime()<end){nodes().firstOrNull(test)?.let{return it};Thread.sleep(150)};error("Region UI not ready: "+nodes().mapNotNull{it.text}.take(20))}
@@ -20,14 +23,14 @@ internal object RegionJourney {
   tap(waitFor{it.text?.toString()=="探索"})
   val percent=waitFor{val text=it.text?.toString();text?.matches(Regex("[0-9]+\\.[0-9]+%"))==true && text.removeSuffix("%").toDouble()>0}.text.toString().removeSuffix("%").toDouble()
   check(percent>0 && percent<=100){"Saved trails did not contribute to exploration"}
-  tap(waitFor{it.text?.toString()=="地区探索 · 周围 2 公里"})
-  waitFor{it.text?.toString()=="地区探索度"}
-  waitFor{it.text?.toString()?.startsWith("已点亮 ")==true}
+  tap(waitFor{it.contentDescription?.toString()=="附近探索"})
+  waitFor{it.text?.toString()=="渐渐熟悉"}
+  waitFor{it.text?.toString()?.startsWith("再点亮到 ")==true}
   val screenshot=i.uiAutomation.takeScreenshot()!!
   File(i.targetContext.getExternalFilesDir(null),"region-exploration.png").outputStream().use{screenshot.compress(Bitmap.CompressFormat.PNG,100,it)};screenshot.recycle()
   val fetched=File(i.targetContext.cacheDir,"exploration-district.json").isFile
-  tap(waitFor{it.text?.toString()=="知道了"})
+  i.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
   "REGION_PASS: "+JSONObject().put("nearbyPercent",percent).put("scopeMeters",2000).put("districtCacheAvailable",fetched).put("phoneVerified",false)
-  }finally{i.runOnMainSync{fix.value=previous}}
+  }finally{i.runOnMainSync{AmbientTracking.lastGps=previousGps;AmbientTracking.lastFix=previousFix;fix.value=previous;activity.javaClass.getDeclaredMethod("beginVisibleLocation").apply{isAccessible=true}.invoke(activity)}}
  }
 }

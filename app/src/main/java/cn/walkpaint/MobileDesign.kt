@@ -76,7 +76,7 @@ internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolea
                 Text("返回全部探索",color=Color(0xFFB8D3FF),fontSize=13.sp)
             }
         }
-        if(day==null) Column(Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top=12.dp,start=16.dp,end=16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+        if(day==null) Column(Modifier.align(Alignment.TopStart).statusBarsPadding().padding(top=12.dp,start=16.dp,end=16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
         regionContent()
         if(notice!=null) Surface(onClick=onSettings,color=chrome,shape=RoundedCornerShape(16.dp),
             modifier=Modifier.fillMaxWidth()) {

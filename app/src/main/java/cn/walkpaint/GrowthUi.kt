@@ -82,21 +82,20 @@ import java.time.ZoneId
             TextButton(onClick={information=true}){Text("说明")}
         }
         LazyColumn(Modifier.weight(1f),contentPadding=PaddingValues(horizontal=28.dp,vertical=24.dp),verticalArrangement=Arrangement.spacedBy(32.dp)) {
-            item {Column(Modifier.fillMaxWidth().padding(vertical=12.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(12.dp)) {
-                MedalMark(true,Modifier.size(64.dp))
-                Text("Lv.${GrowthRules.level(points)}",fontSize=34.sp,fontWeight=FontWeight.SemiBold)
-                Text("已收获 ${badges.count{it.id in earned}} 枚徽章",fontSize=14.sp,color=colors.onSurfaceVariant)
-                Text("$points 成长值",style=MaterialTheme.typography.labelMedium,color=colors.primary)
+            item {Row(Modifier.fillMaxWidth().padding(vertical=12.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(20.dp)) {
+                MedalMark(true,Modifier.size(48.dp))
+                Column(verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                    Text("Lv.${GrowthRules.level(points)}",fontSize=26.sp,fontWeight=FontWeight.SemiBold)
+                    Text("收获 ${badges.count{it.id in earned}} 枚徽章",fontSize=14.sp,color=colors.onSurfaceVariant)
+                }
             }}
-            item {Column(verticalArrangement=Arrangement.spacedBy(24.dp)) {
-                val statsRows=listOf(
-                    listOf("相伴" to "${java.time.temporal.ChronoUnit.DAYS.between(firstDate,today).coerceAtLeast(0)+1} 天","使用" to "${days.size} 天"),
-                    listOf("连续" to "${GrowthRules.streak(days,today)} 天","前台时长" to "${store.seconds/60} 分钟"))
-                statsRows.forEach{row->Row(Modifier.fillMaxWidth()){row.forEach{(label,value)->Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                    Text(label,fontSize=12.sp,color=colors.onSurfaceVariant)
-                    Text(value,fontSize=22.sp,fontWeight=FontWeight.Medium)
-                }}}}
-                Text("本机初次安装 $firstDate",fontSize=12.sp,color=colors.onSurfaceVariant)
+            item {Row(Modifier.fillMaxWidth()) {
+                listOf("相伴" to "${java.time.temporal.ChronoUnit.DAYS.between(firstDate,today).coerceAtLeast(0)+1} 天","连续使用" to "${GrowthRules.streak(days,today)} 天").forEach{(label,value)->
+                    Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                        Text(label,fontSize=14.sp,color=colors.onSurfaceVariant)
+                        Text(value,fontSize=22.sp,fontWeight=FontWeight.Medium)
+                    }
+                }
             }}
             item {HorizontalDivider(color=colors.outlineVariant.copy(alpha=.5f))}
             item {Column(verticalArrangement=Arrangement.spacedBy(14.dp)) {
@@ -135,6 +134,8 @@ import java.time.ZoneId
             if(timeline){
                 item {Column(verticalArrangement=Arrangement.spacedBy(14.dp)) {
                     Text("最近 28 天",fontWeight=FontWeight.SemiBold,fontSize=18.sp)
+                    Text("用过 ${days.size} 天 · 打开了 ${store.seconds/60} 分钟",fontSize=14.sp,color=colors.onSurfaceVariant)
+                    Text("这台手机的初次安装：$firstDate",fontSize=13.sp,color=colors.onSurfaceVariant)
                     (27 downTo 0).toList().chunked(7).forEach{week->Row(horizontalArrangement=Arrangement.spacedBy(7.dp)){week.forEach{ago->val date=today.minusDays(ago.toLong());val active=date in days
                         Box(Modifier.weight(1f).height(24.dp).background(if(active)colors.primary else colors.surfaceContainerHighest,RoundedCornerShape(5.dp)).semantics{contentDescription="$date ${if(active)"使用过" else "未记录使用"}"})
                     }}}
@@ -148,9 +149,9 @@ import java.time.ZoneId
         }
     }
     if(information) AlertDialog(onDismissRequest={information=false},title={Text("成长说明")},text={Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
-        Text("真实记录解锁徽章，每枚只奖励一次。已获得的徽章不会因删除记录或中断使用而扣除。")
-        Text("使用天数与前台时长从此功能启用后统计，时长按整分钟显示。每周目标在周一重新开始。")
-        Text("初次载入已有资料时，符合条件的徽章记为本次发现。成长统计仅保存在本机，清除数据或换机后不会保留。")
+        Text("平时使用就能收获徽章，拿到后一直保留。")
+        Text("小目标每周一重新开始。不打卡，也不扣分。")
+        Text("使用记录从新版开始累计，仅存在这台手机。换机或清除数据会丢失。")
     }},confirmButton={TextButton(onClick={information=false}){Text("知道了")}})
 }
 
@@ -158,7 +159,7 @@ import java.time.ZoneId
     val context=LocalContext.current;val store=remember{GrowthStore(context)}
     var hidden by remember{mutableStateOf(store.hidden)}
     Row(Modifier.fillMaxWidth().heightIn(min=64.dp).semantics{contentDescription="从最近任务中隐藏"}.toggleable(value=hidden,role=Role.Switch,onValueChange={hidden=it;store.hideRecents(it)}).padding(vertical=8.dp),verticalAlignment=Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)){Text("从最近任务中隐藏");Text("仅隐藏卡片，不保证后台常驻",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+        Column(Modifier.weight(1f)){Text("从最近任务中隐藏");Text("桌面仍能打开；不影响系统省电限制",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
         Switch(hidden,onCheckedChange=null)
     }
 }
