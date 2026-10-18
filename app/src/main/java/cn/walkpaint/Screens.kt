@@ -30,6 +30,12 @@ import java.util.Locale
 internal fun exploredDistance(meters: Double): String = if(meters < 1000)
     "%.0f 米".format(Locale.CHINA,meters) else "%.2f 公里".format(Locale.CHINA,meters/1000)
 
+internal fun profileBackDestination(page:String,backupParent:String):String = when(page) {
+    "更多设置" -> "我的"
+    "备份与恢复" -> if(backupParent=="更多设置") "更多设置" else "我的"
+    else -> "更多设置"
+}
+
 @Composable
 internal fun AppShell(
     selectedTab: Int, onTab: (Int) -> Unit, state: TrackState, fix: Location?, placeName: String? = null,
@@ -530,31 +536,38 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
     feedbackContent: @Composable (onBack:()->Unit)->Unit,
     updatesContent: @Composable (onBack:()->Unit)->Unit,onBackupEntry:()->Unit,onSkin:()->Unit,onNotifications:()->Unit,backupStatus:String?) {
     var page by rememberSaveable { mutableStateOf("我的") }
+    var backupParent by rememberSaveable { mutableStateOf("我的") }
     var revokeConfirm by rememberSaveable { mutableStateOf(false) }
     if(page=="问题反馈") { feedbackContent { page="我的" };return }
     if(page=="检查更新") { updatesContent { page="我的" };return }
-    BackHandler(enabled=page!="我的") { page=if(page=="更多设置") "我的" else "更多设置" }
+    BackHandler(enabled=page!="我的") { page=profileBackDestination(page,backupParent) }
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(horizontal=20.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
         item { TrailHeader(page,if(page=="我的") "你的探索记录，都在这部手机里。" else "历史足迹始终保留。",
-            onBack=if(page=="我的") null else ({page=if(page=="更多设置") "我的" else "更多设置"})) }
+            onBack=if(page=="我的") null else ({page=profileBackDestination(page,backupParent)})) }
         when(page) {
             "我的" -> {
                 item { SkinHero(exploredDistance(state.totalMeters),"${state.dayCount}",onSkin) }
                 item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                     Surface(onClick=onSkin,color=Canvas,shape=RoundedCornerShape(16.dp),
                         modifier=Modifier.weight(1f)) {
-                        Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                            Icon(painterResource(R.drawable.ic_paint),null,tint=Pigment,modifier=Modifier.size(23.dp))
-                            Text("主图皮肤",color=Ink,fontSize=15.sp,fontWeight=FontWeight.Medium)
-                            Text(LocalVisualSkin.current.label,color=Muted,fontSize=12.sp)
+                        Row(Modifier.heightIn(min=76.dp).padding(14.dp),verticalAlignment=Alignment.CenterVertically,
+                            horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                            Icon(painterResource(R.drawable.ic_paint),null,tint=Pigment,modifier=Modifier.size(22.dp))
+                            Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                                Text("主图皮肤",color=Ink,fontSize=14.sp,fontWeight=FontWeight.Medium)
+                                Text(LocalVisualSkin.current.label,color=Muted,fontSize=12.sp)
+                            }
                         }
                     }
                     Surface(onClick=onAppearance,color=Canvas,shape=RoundedCornerShape(16.dp),
                         modifier=Modifier.weight(1f)) {
-                        Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
-                            Box(Modifier.size(23.dp).background(androidx.compose.ui.graphics.Color(roadColor),CircleShape))
-                            Text("足迹颜色",color=Ink,fontSize=15.sp,fontWeight=FontWeight.Medium)
-                            Text(RoadPaintColor.name(roadColor),color=Muted,fontSize=12.sp)
+                        Row(Modifier.heightIn(min=76.dp).padding(14.dp),verticalAlignment=Alignment.CenterVertically,
+                            horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                            Box(Modifier.size(22.dp).background(androidx.compose.ui.graphics.Color(roadColor),CircleShape))
+                            Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                                Text("足迹颜色",color=Ink,fontSize=14.sp,fontWeight=FontWeight.Medium)
+                                Text(RoadPaintColor.name(roadColor),color=Muted,fontSize=12.sp)
+                            }
                         }
                     }
                 } }
@@ -575,7 +588,7 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
                     HorizontalDivider(color=Line)
                     AppearanceSelector(appearanceMode,onAppearanceMode)
                     HorizontalDivider(color=Line)
-                    SettingRow("备份与数据","导出备份、恢复足迹") { onBackupEntry();page="备份与恢复" }
+                    SettingRow("备份与数据","导出备份、恢复足迹") { onBackupEntry();backupParent="我的";page="备份与恢复" }
                 } }
                 item { TrailSectionLabel("帮助与管理") }
                 item { TrailPanel(spacing=0.dp) {
@@ -589,7 +602,7 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
                     modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),textAlign=TextAlign.Center) }
             }
             "更多设置" -> item { Section("设置") {
-                SettingRow("备份与恢复","保存或找回你的足迹") { onBackupEntry();page="备份与恢复" }
+                SettingRow("备份与恢复","保存或找回你的足迹") { onBackupEntry();backupParent="更多设置";page="备份与恢复" }
                 SettingRow("隐私与权限","管理授权与后台运行") { page="隐私与权限" }
                 SettingRow("完整诊断文本","原始计数与道路复算，可复制",onDiagnostics)
                 Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
