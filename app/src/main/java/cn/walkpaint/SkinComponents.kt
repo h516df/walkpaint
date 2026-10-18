@@ -82,9 +82,9 @@ internal fun AppearanceSelector(mode:Int,onMode:(Int)->Unit) {
 
 @Composable
 internal fun SkinPicker(selectedSkin:VisualSkin,onSelect:(VisualSkin)->Unit,onDismiss:()->Unit) {
-    AlertDialog(onDismissRequest=onDismiss,title={Text("主图与皮肤")},text={
+    AlertDialog(onDismissRequest=onDismiss,title={Text("主题皮肤")},text={
         Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(10.dp)) {
-            Text("同步更换主图、界面与足迹配色。之后仍可单独调整足迹颜色和深浅外观。",color=Muted,fontSize=13.sp)
+            Text("更换界面与足迹配色，也能单独调整足迹颜色。",color=Muted,fontSize=13.sp)
             VisualSkin.entries.forEach { skin ->
                 Surface(onClick={onSelect(skin)},color=if(skin==selectedSkin) PigmentSoft else Canvas,
                     shape=RoundedCornerShape(14.dp),border=BorderStroke(1.dp,if(skin==selectedSkin) Pigment else Line),

@@ -1,0 +1,27 @@
+{
+  "versionName": "0.61",
+  "versionCode": 69,
+  "apkSha256": "e3e98b4d5f1d4b1200dce3a1e62f26d317b39fb5a34f5f538b79a257cc47b10d",
+  "apkBytes": 66496547,
+  "productTreeSha256": "254fbcd963032a104ca61fda386f3606a3f08f2fdb7cf992d737f71d74c7c05c",
+  "productFiles": 113,
+  "baseline": "752edf141bb9fabbb09ec187c1a81056cad9b241",
+  "jvmTests": 420,
+  "pythonTests": 41,
+  "device": "emulator-5588 / WalkPaint_Google_API36_V044",
+  "abi": "x86_64,arm64-v8a",
+  "resolution": "1080x2400 @420dpi",
+  "fontScales": [
+    1.0,
+    1.3
+  ],
+  "runtime": "AMap ARM64 through native bridge",
+  "nearbyPercent": 13.7,
+  "scopeMeters": 2000,
+  "districtBoundaryAvailable": false,
+  "sceneFrames": 25,
+  "minimumUnknownBlack": 1.0,
+  "phoneVerified": false,
+  "completeBasemapVerified": false,
+  "restoredFontScale": 1.0
+}

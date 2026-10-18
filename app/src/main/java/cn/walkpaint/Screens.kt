@@ -31,7 +31,7 @@ internal fun exploredDistance(meters: Double): String = if(meters < 1000)
     "%.0f 米".format(Locale.CHINA,meters) else "%.2f 公里".format(Locale.CHINA,meters/1000)
 
 internal fun profileBackDestination(page:String,backupParent:String):String = when(page) {
-    "更多设置", "后台记录设置" -> "我的"
+    "更多设置", "后台记录设置", "外观与配色" -> "我的"
     "备份与恢复" -> if(backupParent=="更多设置") "更多设置" else "我的"
     else -> "更多设置"
 }
@@ -542,36 +542,11 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
     if(page=="检查更新") { updatesContent { page="我的" };return }
     BackHandler(enabled=page!="我的") { page=profileBackDestination(page,backupParent) }
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(horizontal=20.dp,vertical=12.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-        item { TrailHeader(page,if(page=="我的") "你的探索记录，都在这部手机里。" else "历史足迹始终保留。",
+        item { TrailHeader(page,
             onBack=if(page=="我的") null else ({page=profileBackDestination(page,backupParent)})) }
         when(page) {
             "我的" -> {
-                item { SkinHero(exploredDistance(state.totalMeters),"${state.dayCount}",onSkin) }
-                item {GrowthEntry(walkGrowth(state))}
-                item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                    Surface(onClick=onSkin,color=Canvas,shape=RoundedCornerShape(16.dp),
-                        modifier=Modifier.weight(1f)) {
-                        Row(Modifier.heightIn(min=76.dp).padding(14.dp),verticalAlignment=Alignment.CenterVertically,
-                            horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                            Icon(painterResource(R.drawable.ic_paint),null,tint=Pigment,modifier=Modifier.size(22.dp))
-                            Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                                Text("主图皮肤",color=Ink,fontSize=14.sp,fontWeight=FontWeight.Medium)
-                                Text(LocalVisualSkin.current.label,color=Muted,fontSize=12.sp)
-                            }
-                        }
-                    }
-                    Surface(onClick=onAppearance,color=Canvas,shape=RoundedCornerShape(16.dp),
-                        modifier=Modifier.weight(1f)) {
-                        Row(Modifier.heightIn(min=76.dp).padding(14.dp),verticalAlignment=Alignment.CenterVertically,
-                            horizontalArrangement=Arrangement.spacedBy(10.dp)) {
-                            Box(Modifier.size(22.dp).background(androidx.compose.ui.graphics.Color(roadColor),CircleShape))
-                            Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                                Text("足迹颜色",color=Ink,fontSize=14.sp,fontWeight=FontWeight.Medium)
-                                Text(RoadPaintColor.name(roadColor),color=Muted,fontSize=12.sp)
-                            }
-                        }
-                    }
-                } }
+                item {GrowthEntry(walkGrowth(state),state,roadColor)}
                 item { TrailPanel(spacing=0.dp) {
                     Row(Modifier.fillMaxWidth().heightIn(min=64.dp),verticalAlignment=Alignment.CenterVertically) {
                         Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
@@ -583,33 +558,29 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
                             modifier=Modifier.semantics { contentDescription="自动记录" })
                     }
                     HorizontalDivider(color=Line)
-                    SettingRow("后台记录设置","自启动、后台定位与省电设置") {page="后台记录设置"}
-                    HorizontalDivider(color=Line)
-                    SettingRow("隐藏记录通知","前往系统设置关闭显示，自动记录保持开启",onNotifications)
-                    HorizontalDivider(color=Line)
-                    AppearanceSelector(appearanceMode,onAppearanceMode)
-                    HorizontalDivider(color=Line)
-                    SettingRow("备份与数据","导出备份、恢复足迹") { onBackupEntry();backupParent="我的";page="备份与恢复" }
+                    if(notice!=null) {
+                        SettingRow(notice,"查看如何恢复记录",onResolve)
+                        HorizontalDivider(color=Line)
+                    }
+                    SettingRow("后台记录设置") {page="后台记录设置"}
                 } }
-                item { TrailSectionLabel("帮助与管理") }
                 item { TrailPanel(spacing=0.dp) {
-                    SettingRow("问题反馈","定位短测、记录状态与反馈") { page="问题反馈" }
+                    SettingRow("外观与配色",LocalVisualSkin.current.label) {page="外观与配色"}
+                    HorizontalDivider(color=Line)
+                    SettingRow("备份与数据") { onBackupEntry();backupParent="我的";page="备份与恢复" }
+                } }
+                item { TrailPanel(spacing=0.dp) {
+                    SettingRow("问题反馈") { page="问题反馈" }
                     HorizontalDivider(color=Line)
                     SettingRow("检查更新","当前版本 ${BuildConfig.VERSION_NAME}") { page="检查更新" }
                     HorizontalDivider(color=Line)
-                    SettingRow("更多设置","权限、隐私与使用说明") { page="更多设置" }
+                    SettingRow("更多设置") { page="更多设置" }
                 } }
                 item { Text("足迹涂色  ${BuildConfig.VERSION_NAME}",color=Muted,fontSize=12.sp,
                     modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),textAlign=TextAlign.Center) }
             }
             "更多设置" -> item { Section("设置") {
-                SettingRow("备份与恢复","保存或找回你的足迹") { onBackupEntry();backupParent="更多设置";page="备份与恢复" }
                 SettingRow("隐私与权限","管理授权与后台运行") { page="隐私与权限" }
-                Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                    listOf("跟随系统","浅色","深色").forEachIndexed { mode,label ->
-                        FilterChip(selected=appearanceMode==mode,onClick={onAppearanceMode(mode)},label={Text(label)})
-                    }
-                }
                 SettingRow("首次使用引导","查看自动记录与隐私说明",onShowIntro)
                 SettingRow("关于","版本与地图来源") { page="关于" }
             } }
@@ -619,7 +590,18 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
                 Text("本机自动快照 $backupCount 份，建议定期导出备份。",color=Muted,fontSize=13.sp,lineHeight=20.sp)
                 backupStatus?.let {Text(it,color=Muted,fontSize=13.sp,lineHeight=20.sp)}
             } }
-            "后台记录设置" -> item { BackgroundRecordingSettings(automatic,onPermissions,onPower) }
+            "外观与配色" -> item { TrailPanel(spacing=0.dp) {
+                SettingRow("主题皮肤",LocalVisualSkin.current.label,onSkin)
+                HorizontalDivider(color=Line)
+                SettingRow("足迹颜色",RoadPaintColor.name(roadColor),onAppearance)
+                HorizontalDivider(color=Line)
+                AppearanceSelector(appearanceMode,onAppearanceMode)
+            } }
+            "后台记录设置" -> item { TrailPanel {
+                BackgroundRecordingSettings(automatic,onPermissions,onPower)
+                HorizontalDivider(color=Line)
+                SettingRow("隐藏记录通知","在系统设置中管理显示",onNotifications)
+            } }
             "隐私与权限" -> {
                 item { Section("记录授权") {
                     Text("关闭自动记录只会停止后续记录，不删除历史，也不会撤销系统权限。",color=Muted,fontSize=13.sp,lineHeight=20.sp)

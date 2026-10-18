@@ -135,11 +135,11 @@ internal fun RouteThumbnail(track: Track, modifier: Modifier = Modifier, color: 
         val coords = points.map { (it.lon - lon0) * scale to lat0 - it.lat }
         val minX = coords.minOf { it.first }; val maxX = coords.maxOf { it.first }
         val minY = coords.minOf { it.second }; val maxY = coords.maxOf { it.second }
-        val span = maxOf(maxX - minX, maxY - minY, .00005)
-        val side = minOf(size.width, size.height) * .74f
+        val fit = minOf(size.width * .78 / (maxX - minX).coerceAtLeast(.00005),
+            size.height * .70 / (maxY - minY).coerceAtLeast(.00005))
         fun position(p: TrackPoint) = Offset(
-            size.width / 2 + (((p.lon - lon0) * scale - (minX + maxX) / 2) / span * side).toFloat(),
-            size.height / 2 + ((lat0 - p.lat - (minY + maxY) / 2) / span * side).toFloat())
+            size.width / 2 + (((p.lon - lon0) * scale - (minX + maxX) / 2) * fit).toFloat(),
+            size.height / 2 + ((lat0 - p.lat - (minY + maxY) / 2) * fit).toFloat())
         drawLine(faint, Offset(size.width / 2, 0f), Offset(size.width / 2, size.height), 1.dp.toPx())
         drawLine(faint, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), 1.dp.toPx())
         lines.forEach { (a, b) -> drawLine(pigment, position(a), position(b), 3.dp.toPx(), StrokeCap.Round) }
@@ -160,15 +160,15 @@ internal fun DesignTripsPage(state: TrackState, roadColor: Int, onTrip: (Track) 
         return
     }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal=20.dp,vertical=12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { TrailHeader("足迹","${days.size} 个探索日，记录每一次出发") {
+        item { TrailHeader("足迹") {
             TextButton(onClick={showStats=!showStats}) { Text(if(showStats) "日历" else "统计") }
             IconButton(onClick=onExport) { Icon(painterResource(R.drawable.ic_export),"导出全部足迹",tint=Pigment) }
         } }
         item {
             val month=java.time.LocalDate.now().toString().take(7)
             val monthDays=remember(days,month) {days.filter {it.key.startsWith(month)}}
-            SkinHero(exploredDistance(monthDays.sumOf {it.meters}),"${monthDays.size}",onSkin,
-                "本月里程","本月探索天数")
+            Text("本月 ${monthDays.size} 天出发 · ${exploredDistance(monthDays.sumOf {it.meters})}",color=Muted,fontSize=14.sp,
+                modifier=Modifier.padding(bottom=8.dp))
         }
         if (showStats) item { RecapCard(RecapMaker.of(days, java.time.LocalDate.now().toString().take(7)),
             RecapMaker.of(days, java.time.LocalDate.now().toString().take(4))) }
@@ -179,7 +179,7 @@ internal fun DesignTripsPage(state: TrackState, roadColor: Int, onTrip: (Track) 
         if(days.isNotEmpty()) {
             item { TrailSectionLabel("最近探索") }
             items(days.take(5),key={"recent:${it.key}"}) { day ->
-                Surface(onClick={detailKey=day.key},color=Canvas,shape=RoundedCornerShape(16.dp),border=BorderStroke(1.dp,Line)) {
+                Surface(onClick={detailKey=day.key},color=Canvas,shape=RoundedCornerShape(16.dp)) {
                     Row(Modifier.fillMaxWidth().padding(12.dp),verticalAlignment=Alignment.CenterVertically,
                         horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                         RouteThumbnail(day.focusTrack(),Modifier.size(56.dp),roadColor)
@@ -220,12 +220,10 @@ private fun DesignTripDetail(day: DailyFootprint, color: Int, onBack: () -> Unit
             Icon(painterResource(R.drawable.ic_map),null,modifier=Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp));Text("在地图查看这天的足迹")
         }
-        Text("地图将回到当天的足迹、迷雾和最后位置。预览显示最长连续路线；定位断档保留分段。",
-            color=Muted,fontSize=13.sp,lineHeight=21.sp)
         TextButton(onClick={showIntegrity=!showIntegrity},modifier=Modifier.fillMaxWidth()) {
             Text(if(showIntegrity) "收起记录完整性" else "记录完整性")
         }
-        if(showIntegrity) TrailPanel { Text(integrity.report(),color=Muted,fontSize=13.sp,lineHeight=21.sp) }
+        if(showIntegrity) TrailPanel { Text("预览显示最长连续路线；定位断档保留分段。\n"+integrity.report(),color=Muted,fontSize=13.sp,lineHeight=21.sp) }
         OutlinedButton(onClick=onExport,modifier=Modifier.fillMaxWidth().heightIn(min=48.dp)) { Text("导出全部足迹备份") }
     }
 
