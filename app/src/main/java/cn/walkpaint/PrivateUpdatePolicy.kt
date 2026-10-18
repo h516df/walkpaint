@@ -6,11 +6,12 @@ import java.security.MessageDigest
 import java.io.File
 import java.util.zip.ZipFile
 
-internal class UpdateFailure(val userMessage:String):Exception()
+internal open class UpdateFailure(val userMessage:String):Exception()
+internal class UpdateUnavailable(message:String):UpdateFailure(message)
 internal fun updateRequire(value:Boolean,message:String="更新资料不完整，请稍后重试") {
     if(!value) throw UpdateFailure(message)
 }
-internal data class UpdateAsset(val id:Long,val size:Long,val digest:String,val name:String)
+internal data class UpdateAsset(val id:Long,val size:Long,val digest:String,val name:String,val publicUrl:String?=null)
 internal data class UpdateCandidate(val notes:CurrentRelease,val asset:UpdateAsset)
 internal object PrivateUpdatePolicy {
     const val REPO="h516df/walkpaint"

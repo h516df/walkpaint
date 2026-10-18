@@ -724,7 +724,7 @@ class MainActivity : ComponentActivity() {
         recordingTitle=status.title; recordingHealthy=status.healthy
         recordingCode=status.code
         profileNotice=TrackingSetup.notice(status.code,backgroundGranted)
-        mapNotice=MapNotice.from(status,recordedAt("gps_callback_at") > 0 && recordedAt("gps_callback_at") >= recordedAt("service_start_at"))
+        mapNotice=MapNotice.from(status,recordedAt("gps_callback_at") > 0 && recordedAt("gps_callback_at") >= recordedAt("service_start_at"),snapshot.realPointCount>0)
         val diagnosis = status.title + " · " + status.hint
         val gpsLabel = when {
             recentGps != null -> "GPS ±" + recentGps.accuracy.toInt() + "米"
@@ -759,7 +759,7 @@ class MainActivity : ComponentActivity() {
                     val displayedRoad = RoadState()
                     val displayedTrack = DailyFootprints.select(next,day)
                     // Day review has its own ground, not later exploration or today's GPS dot.
-                    val veilPaths = RecordedTrail.visiblePaths(displayedTrack.realTracks)
+                    val veilPaths = RecordedTrail.exploredPaths(displayedTrack.realTracks)
                     val veilStart = System.nanoTime()
                     // The painter reuses its two buffers. A deferred handover and the SDK's GL
                     // thread can still be reading either one after the next paint starts.

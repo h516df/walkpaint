@@ -47,8 +47,15 @@ internal class PrivateUpdater(context:Context,private val changed:(PrivateUpdate
         }
     }
     private fun inspect(http:UpdateTransport,g:Int) {
-        val result=PublicUpdateCatalog.read(BuildConfig.VERSION_CODE,Build.SUPPORTED_ABIS.toList(),http::json) { id ->
-            http.asset(id) { http.readBounded(it,65536) }
+        val result=try {
+            PublicUpdateCatalog.read(BuildConfig.VERSION_CODE,Build.SUPPORTED_ABIS.toList(),http::json) { id ->
+                http.asset(id) { http.readBounded(it,65536) }
+            }
+        } catch(e:Exception) {
+            if(e !is UpdateUnavailable && e !is java.io.IOException) throw e
+            http.checkCancelled()
+            publish(state.copy(message="正在通过官方发布页检查…",busy=true),g)
+            PublicReleaseFiles.read(BuildConfig.VERSION_CODE,Build.SUPPORTED_ABIS.toList(),http.latestTag(),http::publicBytes,http::publicSize)
         }
         val legacyAuthorization=store.load()!=null
         when(result) {
@@ -63,11 +70,9 @@ internal class PrivateUpdater(context:Context,private val changed:(PrivateUpdate
             val partial=File(directory,"pending.apk");val file=File(directory,"update.apk")
             file.delete();partial.delete()
             try {
-                http.asset(candidate.asset.id) { input ->
-                    UpdateFileDownload.copy(input,partial,candidate.asset,{http.checkCancelled()}) { percent ->
+                UpdateFileDownload.fetch(partial,candidate.asset,{http.checkCancelled()}, { percent ->
                         publish(state.copy(message="正在下载新版…",busy=true,userCode=null,progress=percent),g)
-                    }
-                }
+                    }, { offset,read -> http.download(candidate.asset,offset,read) })
                 http.checkCancelled()
                 validateApk(partial,candidate.notes.code,candidate.notes.version)
                 http.checkCancelled();updateRequire(partial.renameTo(file),"无法保存安装包，请重新下载")

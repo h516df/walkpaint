@@ -27,27 +27,35 @@ internal object PublicUpdateProbe {
             store.save(UpdateAuthorization("ghu_"+"a".repeat(40),"ghr_"+"b".repeat(40),now+60000,now+120000))
             return "PUBLIC_UPDATE_LEGACY_STAGE_PASS: synthetic local-only authorization; no account or network access"
         }
-        check(mode in setOf("catalog","download"))
+        check(mode in setOf("catalog","download","files","files-download"))
         val http=UpdateTransport()
+        fun step(message:String){i.sendStatus(0,android.os.Bundle().apply {putString("stream","PUBLIC_UPDATE_STEP: $message\n")})}
         try {
             // The AVD runs the phone APK with ARM translation. Explicit fixture ABI selection
             // does not alter Build.SUPPORTED_ABIS or production selection/installation policy.
-            val result=PublicUpdateCatalog.read(if(mode=="download") BuildConfig.VERSION_CODE-1 else BuildConfig.VERSION_CODE,
-                listOf("arm64-v8a"),http::json) { id -> http.asset(id) { http.readBounded(it,65536) } }
-            if(mode=="catalog") {
+            val downloading=mode.endsWith("download")
+            val installed=if(downloading) 0 else BuildConfig.VERSION_CODE
+            val result=if(mode.startsWith("files")) {
+                step("latest");val tag=http.latestTag()
+                PublicReleaseFiles.read(installed,listOf("arm64-v8a"),tag,
+                    {url->step("metadata "+url.substringAfterLast('/'));http.publicBytes(url)},
+                    {url->step("apk size");http.publicSize(url)})
+            }
+                else PublicUpdateCatalog.read(installed,listOf("arm64-v8a"),http::json) { id -> http.asset(id) { http.readBounded(it,65536) } }
+            if(!downloading) {
                 val version=when(result) {
                     is UpdateCatalogResult.Current->result.latest.version
                     is UpdateCatalogResult.Available->result.candidate.notes.version
                 }
-                return "PUBLIC_UPDATE_ANONYMOUS_CATALOG_PASS: latest=$version; account_authorization_sent=false; fixture_abi=arm64-v8a"
+                return "PUBLIC_UPDATE_ANONYMOUS_CATALOG_PASS: route=$mode; latest=$version; account_authorization_sent=false; fixture_abi=arm64-v8a"
             }
             val candidate=(result as UpdateCatalogResult.Available).candidate
             val directory=File(ctx.cacheDir,"public-update-probe-"+UUID.randomUUID()).apply {mkdirs()}
             try {
                 val file=File(directory,"download.apk")
-                http.asset(candidate.asset.id) { input ->
-                    UpdateFileDownload.copy(input,file,candidate.asset,{http.checkCancelled()}) { }
-                }
+                step("apk transfer")
+                UpdateFileDownload.fetch(file,candidate.asset,{http.checkCancelled()},{},
+                    {offset,read->step("transfer offset=$offset");http.download(candidate.asset,offset,read)})
                 PrivateUpdatePolicy.verifyHash(file,candidate.asset)
                 val pm=ctx.packageManager
                 val archive=pm.getPackageArchiveInfo(file.path,PackageManager.GET_SIGNING_CERTIFICATES)!!
@@ -55,7 +63,7 @@ internal object PublicUpdateProbe {
                 check(archive.packageName==ctx.packageName && archive.versionName==candidate.notes.version)
                 check(archive.longVersionCode==candidate.notes.code.toLong())
                 check(archive.signingInfo!!.apkContentsSigners.toList()==current.signingInfo!!.apkContentsSigners.toList())
-                return "PUBLIC_UPDATE_ANONYMOUS_DOWNLOAD_PASS: bytes=${file.length()}; sha256=${candidate.asset.digest}; original_signer=true; fixture_installed_code=${BuildConfig.VERSION_CODE-1}; real_install_claimed=false"
+                return "PUBLIC_UPDATE_ANONYMOUS_DOWNLOAD_PASS: route=$mode; bytes=${file.length()}; sha256=${candidate.asset.digest}; original_signer=true; fixture_installed_code=$installed; real_install_claimed=false"
             } finally {check(directory.deleteRecursively())}
         } finally {http.cancel()}
     }

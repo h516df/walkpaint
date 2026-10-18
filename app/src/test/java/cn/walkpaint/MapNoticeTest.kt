@@ -2,6 +2,10 @@ package cn.walkpaint
 import org.junit.Assert.*
 import org.junit.Test
 class MapNoticeTest {
+    @Test fun firstRunExplainsBlackFogWithoutCallingItMapFailure() {
+        for(code in listOf("PAUSED","STARTING","INVALID_FIX","CALLBACK_INTERRUPTED"))
+            assertFalse(MapNotice.from(RecordingStatus(code,"title","hint"),hasExploration=false).isNullOrBlank())
+    }
     @Test fun normalAndNoFixNeverCoverMap() {
         listOf("PAUSED","STARTING","SAVED","WAITING_MOVEMENT","INVALID_FIX","CALLBACK_INTERRUPTED").forEach {
             assertNull(MapNotice.from(RecordingStatus(it,"title","hint")))
