@@ -1,7 +1,7 @@
 {
   "version": "0.58",
-  "apkSha256": "5ca20c5ec7bef2d360a2955e59d0f5656c546f172cf906ca9a30934a5c770e34",
-  "bytes": 66430968,
+  "apkSha256": "8785a8ffa9c6c0d15b1175c716e773d50e83aa4def2771c2014e017e59645ebe",
+  "bytes": 66430969,
   "unitTests": 409,
   "failures": 0,
   "device": "Android 16 / API36 task-owned emulator",
