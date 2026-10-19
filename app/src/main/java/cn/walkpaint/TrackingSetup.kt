@@ -17,7 +17,6 @@ internal object TrackingSetup {
         "SAVE_FAILED" -> "足迹暂时无法保存"
         "REGISTER_FAILED", "SERVICE_STOPPED" -> "当前无法记录"
         else -> when {
-            !background -> "需要允许后台定位"
             code == "CALLBACK_INTERRUPTED" -> "很久没收到定位了"
             code in setOf("STARTING", "INVALID_FIX") -> "正在等待可靠定位"
             else -> null

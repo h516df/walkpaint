@@ -95,6 +95,9 @@ dependencies {
 
 // An official package must contain the restricted application key; users never configure it.
 gradle.taskGraph.whenReady {
+    if(!developerBuild && allTasks.any { it.name in listOf("assembleDebug","packageDebug","bundleDebug","assembleRelease","packageRelease","bundleRelease") }) {
+        require(amapKey.isNotBlank()) { "Official packages require the configured AMap application key; use walkpaintDeveloperBuild=true for an isolated developer build" }
+    }
     if(allTasks.any { it.name in listOf("assembleRelease","bundleRelease") }) {
         require(amapKey.isNotBlank()) { "Official release requires the configured AMap application key" }
         require(!developerBuild && arm64Only) { "Official release requires the ARM64 AMap build" }

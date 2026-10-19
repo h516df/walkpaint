@@ -230,36 +230,33 @@ private fun DesignTripDetail(day: DailyFootprint, color: Int, onBack: () -> Unit
 }
 
 @Composable
-internal fun DesignOnboarding(onEnable: () -> Unit, onSkip: () -> Unit) {
+internal fun DesignOnboarding(mapConsentRequired: Boolean = false, onPrivacy: () -> Unit = {},
+    onEnable: () -> Unit, onSkip: () -> Unit) {
     Dialog(onDismissRequest = onSkip, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(color = CanvasSoft, modifier = Modifier.fillMaxSize()) {
-            Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                Icon(painterResource(R.drawable.ic_route), null, tint = Pigment, modifier = Modifier.padding(top = 24.dp).size(42.dp))
-                Text("足迹涂色  ·  WalkPaint", color = Muted, fontSize = 13.sp)
-                Text("走过的路，\n在地图上慢慢涂满。", color = Ink, fontSize = 32.sp, lineHeight = 42.sp, fontWeight = FontWeight.Bold)
-                Text("定位后点亮周围 50 米，走动时逐步揭开地图。足迹由你自己保管。", color = Muted, fontSize = 15.sp, lineHeight = 24.sp)
-                OnboardingFeature(R.drawable.ic_route, "自动累积足迹", "你同意并授权精确定位后，前台服务会记录走过的路线。")
-                OnboardingFeature(R.drawable.ic_lock, "足迹只存本机", "原始足迹保存在本地，可导出 JSON 备份；联网地图服务另行征求同意。")
-                OnboardingFeature(R.drawable.ic_notification, "记录时保留通知", "后台定位需要系统授权与常驻通知，可能增加耗电。你随时可以暂停。")
-                Button(onClick = onEnable, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
-                    Text("同意并开启自动记录", fontWeight = FontWeight.SemiBold)
+            Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(24.dp)) {
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Icon(painterResource(R.drawable.ic_route), null, tint = Pigment, modifier = Modifier.padding(top = 8.dp).size(36.dp))
+                    Text("足迹涂色", color = Muted, fontSize = 13.sp)
+                    Text("走到哪里，\n就点亮哪里。", color = Ink, fontSize = 32.sp, lineHeight = 42.sp, fontWeight = FontWeight.Bold)
+                    Text("允许定位后，走过的地方会在地图上慢慢亮起来。", color = Muted, fontSize = 15.sp, lineHeight = 24.sp)
+                    Text(if(mapConsentRequired) "默认高德地图，无需注册。足迹保存在本机。" else "足迹保存在本机，随时可以暂停记录。",
+                        color = Ink, fontSize = 15.sp, lineHeight = 24.sp)
+                    Text("开启后，应用会在后台和锁屏时使用定位保存足迹，可能增加耗电。记录提示由系统管理，可随时暂停。",
+                        color = Muted, fontSize = 13.sp, lineHeight = 21.sp)
+                    if(mapConsentRequired) {
+                        Text(AmapDisclosure.SUMMARY, color = Muted, fontSize = 13.sp, lineHeight = 21.sp)
+                        TextButton(onClick = onPrivacy, contentPadding = PaddingValues(0.dp)) { Text("阅读高德隐私政策") }
+                    }
                 }
-                TextButton(onClick = onSkip, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("先看看，暂不记录") }
-                Text("下一步由 Android 系统请求权限。拒绝授权也能查看已有足迹；不会自动上传位置。", color = Muted, fontSize = 12.sp, lineHeight = 20.sp)
-            }
-        }
-    }
-}
-
-@Composable
-private fun OnboardingFeature(icon: Int, title: String, detail: String) {
-    Surface(color = Canvas, shape = PanelShape, border = BorderStroke(1.dp, Line)) {
-        Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Icon(painterResource(icon), null, tint = Pigment, modifier = Modifier.size(22.dp))
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(title, color = Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                Text(detail, color = Muted, fontSize = 13.sp, lineHeight = 20.sp)
+                Spacer(Modifier.height(16.dp))
+                Text("下一步选择“精确位置”和“使用应用时允许”。后台增强设置可稍后再开。", color = Muted, fontSize = 12.sp, lineHeight = 20.sp)
+                Spacer(Modifier.height(12.dp))
+                Button(onClick = onEnable, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+                    Text("同意并开始", fontWeight = FontWeight.SemiBold)
+                }
+                TextButton(onClick = onSkip, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("暂不开始") }
             }
         }
     }

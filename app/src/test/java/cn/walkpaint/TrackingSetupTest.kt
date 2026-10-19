@@ -29,9 +29,20 @@ class TrackingSetupTest {
         assertNull(TrackingSetup.notice("SAVED",true))
         assertNull(TrackingSetup.notice("WAITING_MOVEMENT",true))
     }
-    @Test fun missingBackgroundAndNotificationAreReportedWithoutClaimingStopped() {
-        assertEquals("需要允许后台定位",TrackingSetup.notice("SAVED",false))
+    @Test fun optionalBackgroundPermissionDoesNotMakeWorkingRecordingLookBroken() {
+        assertNull(TrackingSetup.notice("SAVED",false))
+        assertNull(TrackingSetup.notice("WAITING_MOVEMENT",false))
         assertNull(TrackingSetup.notice("SAVED",true))
+    }
+    @Test fun firstRunWaitsOnlyForPreciseLocationAndThenStartsWithoutSettingsDetour() {
+        assertEquals(TrackingSetup.Step.LOCATION,
+            TrackingSetup.next(36,false,false,backgroundDeferred=true))
+        assertEquals(TrackingSetup.Step.START,
+            TrackingSetup.next(36,true,false,backgroundDeferred=true))
+    }
+    @Test fun gpsProblemsStayVisibleWithoutOptionalBackgroundAccess() {
+        assertEquals("很久没收到定位了",TrackingSetup.notice("CALLBACK_INTERRUPTED",false))
+        assertEquals("正在等待可靠定位",TrackingSetup.notice("INVALID_FIX",false))
     }
     @Test fun failuresTakePriorityOverPermissionTipsAndUsePlainLanguage() {
         assertEquals("足迹暂时无法保存",TrackingSetup.notice("SAVE_FAILED",false))

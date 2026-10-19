@@ -109,7 +109,7 @@ def main():
         checks['installed_artifact_matches_report']=True
         shell('am','start','-n','cn.walkpaint/.MainActivity');time.sleep(3)
         visible=labels()
-        if '先看看，暂不记录' in visible:tap('先看看，暂不记录')
+        if '暂不开始' in visible:tap('暂不开始')
         assert '有效记录时长' in labels()
         if original_automatic:tap('暂停记录')
         assert '继续记录' in labels()
@@ -142,8 +142,8 @@ def main():
         tap('检查更新',scroll=True);assert '当前版本 0.41' in labels();shot('updates')
         checks['offline_current_version_and_update_entry']=True
         tap('返回');tap('返回')
-        tap('首次使用引导',scroll=True);assert '同意并开启自动记录' in labels();shot('onboarding')
-        tap('先看看，暂不记录');checks['onboarding_without_forced_permission']=True
+        tap('首次使用引导',scroll=True);assert '同意并开始' in labels();shot('onboarding')
+        tap('暂不开始');checks['onboarding_without_forced_permission']=True
         tap('导出足迹 JSON',scroll=True)
         assert 'cn.walkpaint' not in shell('dumpsys','activity','activities').split('topResumedActivity=')[-1].split('\n')[0]
         shell('input','keyevent','KEYCODE_BACK');checks['system_backup_picker']=True
