@@ -43,7 +43,8 @@ internal object JournalJourneyProbe {
             }
         }
         fun nodes():List<AccessibilityNodeInfo> {
-            automation.clearCache();val result=mutableListOf<AccessibilityNodeInfo>()
+            if(android.os.Build.VERSION.SDK_INT>=34) automation.clearCache()
+            val result=mutableListOf<AccessibilityNodeInfo>()
             fun walk(node:AccessibilityNodeInfo?) {if(node==null)return;if(node.isVisibleToUser)result+=node;repeat(node.childCount){walk(node.getChild(it))}}
             walk(automation.rootInActiveWindow);return result
         }
