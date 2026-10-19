@@ -29,14 +29,21 @@ import java.time.LocalDate
 import java.time.Instant
 import java.time.ZoneId
 
+/** Original mountain seal: the same quiet landscape language as the journey cover. */
 @Composable internal fun MedalMark(unlocked:Boolean,modifier:Modifier=Modifier) {
     val ink=if(unlocked)MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+    val fill=if(unlocked)MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest
     Canvas(modifier) {
-        val w=size.width;val h=size.height;val stroke=2.dp.toPx()
-        drawLine(ink,Offset(w*.35f,h*.58f),Offset(w*.26f,h*.94f),stroke)
-        drawLine(ink,Offset(w*.65f,h*.58f),Offset(w*.74f,h*.94f),stroke)
-        drawCircle(ink,w*.29f,Offset(w*.5f,h*.36f),style=Stroke(stroke))
-        if(unlocked){drawLine(ink,Offset(w*.38f,h*.36f),Offset(w*.47f,h*.45f),stroke);drawLine(ink,Offset(w*.47f,h*.45f),Offset(w*.63f,h*.27f),stroke)}
+        val w=size.width;val h=size.height;val stroke=1.5.dp.toPx()
+        drawCircle(fill,w*.46f)
+        drawCircle(ink.copy(alpha=.7f),w*.44f,style=Stroke(stroke))
+        val mountain=androidx.compose.ui.graphics.Path().apply {
+            moveTo(w*.20f,h*.66f);lineTo(w*.43f,h*.33f);lineTo(w*.57f,h*.53f)
+            lineTo(w*.68f,h*.42f);lineTo(w*.81f,h*.66f)
+        }
+        drawPath(mountain,ink,style=Stroke(stroke,cap=androidx.compose.ui.graphics.StrokeCap.Round,
+            join=androidx.compose.ui.graphics.StrokeJoin.Round))
+        if(unlocked)drawCircle(ink,w*.045f,Offset(w*.66f,h*.28f))
     }
 }
 
@@ -53,18 +60,7 @@ import java.time.ZoneId
     val badges=GrowthRules.badges(metrics)+regionalBadges
     var earned by remember{mutableStateOf(store.earned())}
     LaunchedEffect(badges){earned=store.settle(badges)}
-    Surface(onClick={opened=true},modifier=modifier.fillMaxWidth(),shape=RoundedCornerShape(16.dp),color=Canvas) {
-        Row(Modifier.padding(16.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(16.dp)) {
-            val recent=state.realTracks.lastOrNull()
-            if(recent!=null) RouteThumbnail(recent,Modifier.size(64.dp),roadColor)
-            else Icon(painterResource(R.drawable.ic_route),null,tint=Pigment,modifier=Modifier.size(32.dp))
-            Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(5.dp)) {
-                Text(stats.title,fontWeight=FontWeight.Medium,fontSize=17.sp)
-                Text(if(state.dayCount>0)"${state.dayCount} 天足迹 · 继续探索山河" else "从第一次出发开始",fontSize=13.sp,color=Muted)
-            }
-            Icon(painterResource(R.drawable.ic_back),null,Modifier.size(16.dp).rotate(180f),tint=Muted)
-        }
-    }
+    JourneyCover(stats.title,state,{opened=true},modifier)
     if(opened) Dialog(onDismissRequest={opened=false},properties=DialogProperties(usePlatformDefaultWidth=false)) {
         Surface(Modifier.fillMaxSize(),color=MaterialTheme.colorScheme.background) {
             GrowthDashboard(stats,state,roadColor,badges,earned,store,journey,{regionRetry++}){opened=false}
