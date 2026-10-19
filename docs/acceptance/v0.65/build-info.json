@@ -1,5 +1,5 @@
 {
-  "source_commit": "83cbca464f56fb2611adb483c229e52cb7a08778",
+  "source_commit": "d5f54d37e74a52183389dbbe30df1bbb1b4b9fdf",
   "version_name": "0.65",
   "version_code": 73,
   "package": "cn.walkpaint.dev",
@@ -15,16 +15,19 @@
   "artifacts": [
     {
       "file": "app-debug.apk",
-      "bytes": 84331656,
-      "sha256": "efa07281a837c648873648169b65b4b6f45a649734a986d15636ba129c184eb4"
+      "bytes": 84346676,
+      "sha256": "3790e0ee35fe92c1e1e36be863f68595a4f6b4add4d215ba8e44cb975f365703"
     },
     {
       "file": "app-debug-androidTest.apk",
-      "bytes": 371056,
-      "sha256": "88d0f5186ebe84928d27e54d2147e1e703a128a5aa6bce2ee601f802328da7fe"
+      "bytes": 371801,
+      "sha256": "e7701a1320b70c954189cfe32ff30ad6c5d424a15cbc41f01473a1580f84e6e4"
     }
   ],
   "contains_maplibre": false,
+  "base_main": "a88a11f839401c7b700e513173db351a9bfb6643",
+  "earlier_native_evidence": "build-info-pre-navigation.json",
+  "app_source_commit": "619577d00895860b596c5b5ab7cfd2123b7bb446",
   "native_journal": {
     "passed": true,
     "font_scale": 1.3,
@@ -37,11 +40,34 @@
     "saved_png_read_through": "actual_document_result_uri",
     "system_share_chooser": true,
     "recipient_selected": false,
-    "activity_recreation": false
+    "activity_recreation": true,
+    "evidence": "merged-journey-large.log"
   },
-  "native_picker_recreation": {
-    "passed": true,
-    "font_scale": 1.3,
-    "sqlite_unchanged": true
-  }
+  "screenshots": [
+    {
+      "file": "images/detail-large.png",
+      "sha256": "dd91a3fe46c5697026c2b4adc31b62d6f440a84f029433fc16458b4b7600b5fa"
+    },
+    {
+      "file": "images/card-paper-large.png",
+      "sha256": "98ddc8d7ea562ef485f8103bb69529edd63eecef13ccd157f0cdfe1f43dda6ec"
+    },
+    {
+      "file": "images/card-night-large.png",
+      "sha256": "e3c536948ce91223d44e21f57f3a1191e507440cb5ddb596ac9130afdf8706a8"
+    },
+    {
+      "file": "images/share-large.png",
+      "sha256": "fb9d3f92a4d44830007a0449196efb2a871c07590ae7934b32b48dbddc3fb4fc"
+    },
+    {
+      "file": "images/collection-large.png",
+      "sha256": "aa37d3df0fbc2a4b41284ba6f0fab4ac9284c3001ba0805c41c8ec32eea05ccf"
+    },
+    {
+      "file": "images/search-large.png",
+      "sha256": "fd3318131044b3aa74b81e27fb627d96edecca69e1dbd5a82cee8a8c61f2a1ae"
+    }
+  ],
+  "environment_restored_and_owned_avd_stopped": true
 }

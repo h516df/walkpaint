@@ -92,3 +92,11 @@ PR88已合并，v0.55绑定1a250bfc7d5a9d76257c62150e714f406862d624正式发布�
 生产实现已通过最终41项针对性、449 JVM、41 Python与开发包/androidTest/lint（0 errors）。新增保存当前底部页的Bundle状态，系统选图期间Activity重建后仍能恢复足迹/明信片；隐私文案明确标题会进入图片。原生隔离备份恢复通过，正常及1.3字体的备注/收藏/双主题预览已实际操作并截图。系统保存返回“图片已保存”后，原工具按文件路径寻找失败，现改在androidTest中观察真实SAF返回URI，直接读取其PNG；不增加生产诊断Intent或测试出口。完整保存/分享/查找闭环已在1.3倍字体下通过，真实SAF返回URI的PNG尺寸/夜色/文件名及系统分享选择器均核对，SQLite五表摘要保持；额外Activity重建场景也已通过同一完整流程，见docs/acceptance/v0.65/picker-recreation-large.log。
 
 本任务Google API36 AVD/emulator-5556由当前环境新建，无KVM，仅软件仿真；曾临时设硬件超时倍率10、watchdog_timeout_millis=600000、hide_error_dialogs=1、720x1600/density280、动画0，测试字体1.3；结束已恢复1080x2400/density420、动画1.0、字体1.0并删除两个全局设置，读回核对后只停本AVD。系统Settings与SystemUI曾ANR，不作系统稳定/性能声明；ADB root与只读硬件超时属性随冷启动重置。正式高德配置/原签名仍未在环境中，PR104保持候选，未发布。
+
+### 0.65 最终主分支同步
+
+同步 main a88a11f 的自适应底部导航与山水主题，冲突处理保留实测导航高度避让，同时保留地图记录提示的直接处理入口；最终应用源码619577d00895860b596c5b5ab7cfd2123b7bb446。重新执行41项针对性、449项完整JVM、41项Python、lintDebug（0 errors）与两个开发APK构建通过。此前原生完整流程证据继续绑定其原源码，不用新构建摘要重标旧结果；最新整合验收来源见docs/acceptance/v0.65。
+
+最终整合原生流程已通过：应用619577d、工具d5f54d3，1.3字体下完整编辑/持久化、收藏搜索、双主题预览、真实SAF返回URI的PNG、系统分享选择器及保存期间Activity重建均通过，SQLite五表摘要保持。原始结果与截图见docs/acceptance/v0.65/merged-journey-large.log；工具修正的两次中止单独保留，不重标旧证据。
+
+最终复测结束后再次恢复字体1.0、动画1.0、1080x2400/density420，删除hide_error_dialogs与watchdog_timeout_millis并读回核对；仅删除本任务walkpaint-card-*临时输出，随后停止本任务AVD。
