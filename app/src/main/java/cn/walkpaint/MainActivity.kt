@@ -465,7 +465,7 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onToggleTracking = { requested ->
-                        if (requested) beginEnable()
+                        if (requested) beginEnable(deferBackground=true)
                         else {
                             pendingEnable=false;pendingSettingsEnable=false
                             AmbientTracking.stop(this)
