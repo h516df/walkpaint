@@ -352,9 +352,10 @@ class MainActivity : ComponentActivity() {
     private var pendingTripFocus: Triple<Double, Double, Double>? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private var locationManager: LocationManager? = null
+    private val visibleSubscriptions=VisibleLocationSubscriptions()
 
     private val visibleLocationListener = LocationListener { fix ->
-        if (fix.hasAccuracy() && fix.accuracy in 1f..200f) {
+        if (activityResumed && AmbientTracking.hasFineLocation(this) && fix.hasAccuracy() && fix.accuracy in 1f..200f) {
             updatePosition(fix, pendingCenter)
             pendingCenter = false
         }
@@ -1061,19 +1062,22 @@ class MainActivity : ComponentActivity() {
         } catch (_: Exception) { null }
     }
 
-    @SuppressLint("MissingPermission") // Fine permission is checked below; runCatching also covers revocation.
+    @SuppressLint("MissingPermission") // Rechecked for each refresh; per-provider failures are isolated.
     private fun beginVisibleLocation() {
-        if (!AmbientTracking.hasFineLocation(this)) return
-        val lm = locationManager ?: getSystemService(LocationManager::class.java).also { locationManager = it }
-        runCatching {
-            latestSystemLocation()?.let { updatePosition(it, firstMapCenter || pendingCenter) }
-            if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 2_000, 0f, visibleLocationListener, Looper.getMainLooper())
-            }
-            if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 20_000, 8f, visibleLocationListener, Looper.getMainLooper())
-            }
+        val fine=AmbientTracking.hasFineLocation(this)
+        if(!activityResumed || !fine) {
+            visibleSubscriptions.stop {locationManager?.removeUpdates(visibleLocationListener)}
+            return
         }
+        val lm=locationManager ?: getSystemService(LocationManager::class.java).also {locationManager=it}
+        runCatching {latestSystemLocation()?.let {updatePosition(it,firstMapCenter || pendingCenter)}}
+        // isProviderEnabled would lose the subscription when GPS is enabled from Quick Settings
+        // without another Activity resume. allProviders deliberately includes disabled providers.
+        val available=runCatching {lm.allProviders.toSet()}.getOrNull() ?: return
+        visibleSubscriptions.refresh(activityResumed,fine,available,
+            {spec -> lm.requestLocationUpdates(spec.provider,spec.intervalMillis,spec.distanceMeters,
+                visibleLocationListener,Looper.getMainLooper())},
+            {lm.removeUpdates(visibleLocationListener)})
     }
 
     private fun prepareNearbyRoads() {
@@ -1768,7 +1772,7 @@ class MainActivity : ComponentActivity() {
         mainHandler.removeCallbacks(refreshTask)
         stopShortGps("离开前台，结束短测")
         activityResumed=false;landmarkArrival.reset();syncHeadingLifecycle()
-        locationManager?.let { runCatching { it.removeUpdates(visibleLocationListener) } }
+        visibleSubscriptions.stop {locationManager?.removeUpdates(visibleLocationListener)}
         super.onPause()
     }
     override fun onDestroy() {
