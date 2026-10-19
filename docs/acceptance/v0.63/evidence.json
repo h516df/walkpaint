@@ -1,0 +1,24 @@
+{
+  "versionName": "0.63",
+  "versionCode": 71,
+  "apkSha256": "d7ac16d39116536a53ba5f94c65816ccf9bc5ad0b87198bfd619f8f6169f43e4",
+  "apkBytes": 66545965,
+  "package": "cn.walkpaint",
+  "architecture": "arm64-v8a",
+  "debuggable": false,
+  "signerSha256": "21b74e3e2a10e12da8284d4e6bd7d99e55b00a385215902e94d7896f7a46c967",
+  "signatureSchemesVerified": [
+    "v1",
+    "v2",
+    "v3"
+  ],
+  "baseline": "a899014ad0f26a3594d68ddd5f3561f9b3143ee8",
+  "functionalSourceDiffExcludingVersionAndNotes": false,
+  "nativeLibrariesIdenticalToV062": true,
+  "changedDexFiles": [
+    "classes2.dex"
+  ],
+  "functionalAcceptance": "../v0.62/README.md",
+  "uiRerun": false,
+  "reason": "Only version and release notes changed; v0.62 published asset blob was unavailable. Existing release untouched."
+}
