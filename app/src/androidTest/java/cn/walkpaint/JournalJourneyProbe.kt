@@ -115,19 +115,21 @@ internal object JournalJourneyProbe {
                     i.runOnMainSync {screen.recreate()}
                 }
                 fun saveAction():AccessibilityNodeInfo? {
-                    var node=nodes().firstOrNull {it.viewIdResourceName?.endsWith("action_menu_select")==true || it.text?.toString()?.equals("save",true)==true || it.text?.toString()=="保存"}
+                    val current=nodes()
+                    if(current.any {it.className?.toString()?.endsWith("ProgressBar")==true}) return null
+                    var node=current.firstOrNull {it.viewIdResourceName?.endsWith("action_menu_select")==true || it.text?.toString()?.equals("save",true)==true || it.text?.toString()=="保存"}
                     while(node!=null && !node.isClickable)node=node.parent
                     return node?.takeIf {it.isEnabled}
                 }
                 await("enabled system save action") {find("图片已保存")!=null || saveAction()?.performAction(AccessibilityNodeInfo.ACTION_CLICK)==true}
                 // A11y may acknowledge a click while DocumentsUI is still loading its provider.
                 // Retry only its visible, enabled save control; an acknowledged action is not a save.
-                var retrySaveAt=SystemClock.uptimeMillis()+3000
+                var retrySaveAt=SystemClock.uptimeMillis()+5000
                 await("图片已保存") {
                     if(find("图片已保存")!=null) true else {
                         if(SystemClock.uptimeMillis()>=retrySaveAt) {
                             saveAction()?.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                            retrySaveAt=SystemClock.uptimeMillis()+3000
+                            retrySaveAt=SystemClock.uptimeMillis()+5000
                         }
                         false
                     }
@@ -137,7 +139,9 @@ internal object JournalJourneyProbe {
                 val actualName=context.contentResolver.query(saved,arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),null,null,null)?.use {cursor->
                     if(cursor.moveToFirst())cursor.getString(0) else null
                 }
-                check(actualName==name){"Unexpected document name: $actualName"};savedUri=saved
+                // DocumentsProvider may add a collision suffix; keep the unique request stem bound.
+                val providerName=Regex(Regex.escape(name.removeSuffix(".png"))+" \\([1-9][0-9]*\\)\\.png")
+                check(actualName==name || actualName?.matches(providerName)==true){"Unexpected document name: $actualName"};savedUri=saved
                 val exported=context.contentResolver.openInputStream(saved).use {BitmapFactory.decodeStream(it)} ?: error("Invalid saved PNG")
                 check(exported.width==RoutePostcard.WIDTH && exported.height==RoutePostcard.HEIGHT){"Unexpected saved PNG dimensions"}
                 check(exported.getPixel(5,5)==CardTheme.NIGHT.background){"Saved PNG was not the selected night theme"};exported.recycle()
