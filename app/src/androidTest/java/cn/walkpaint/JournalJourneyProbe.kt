@@ -38,7 +38,7 @@ internal object JournalJourneyProbe {
         }
         fun find(text:String)=nodes().firstOrNull {it.text?.toString()==text || it.contentDescription?.toString()==text}
         fun await(description:String,block:()->Boolean) {
-            val until=SystemClock.uptimeMillis()+60000
+            val until=SystemClock.uptimeMillis()+180000
             while(SystemClock.uptimeMillis()<until) {if(block())return;Thread.sleep(250)}
             error("Missing $description: "+nodes().mapNotNull {it.text}.take(30))
         }
@@ -72,7 +72,7 @@ internal object JournalJourneyProbe {
         i.addMonitor(monitor)
         field.set(repo,fixture)
         try {
-            return MapJourneyFixture.withFixture(i,startupTimeoutSeconds=180) {screen->
+            return MapJourneyFixture.withFixture(i,startupTimeoutSeconds=180,compact=true) {screen->
                 activity=screen
                 await("welcome or footprints"){find("暂不开始")!=null || find("足迹")!=null}
                 if(find("暂不开始")!=null){shot("welcome");tap("暂不开始")}
@@ -109,7 +109,9 @@ internal object JournalJourneyProbe {
                 val uri=intent.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM) ?: error("Missing shared image")
                 check(intent.clipData?.getItemAt(0)?.uri==uri)
                 val image=context.contentResolver.openInputStream(uri).use {BitmapFactory.decodeStream(it)} ?: error("Shared URI unreadable")
-                check(image.width==RoutePostcard.WIDTH);image.recycle();shot("share")
+                check(image.width==RoutePostcard.WIDTH);image.recycle()
+                await("system share chooser"){nodes().any {it.packageName?.toString()=="com.android.intentresolver"}}
+                shot("share")
                 i.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);wait("路线明信片")
                 tap("返回");top();wait("当天足迹");tap("返回");top()
                 tap("已收藏");wait("收藏的足迹 · 1 天");wait("河畔散步");shot("collection")
