@@ -63,9 +63,11 @@ def main():
             '界面验收与限制：docs/acceptance/ui-preview/README.md\n'
             'APK SHA256：' + expected['walkpaint-ui-preview.apk'][1])
     api('git/refs', '--method', 'POST', '-f', 'ref=refs/tags/' + tag, '-f', 'sha=' + args.source_sha)
-    gh('release', 'create', tag, '--repo', REPOSITORY, '--target', args.source_sha,
-       '--title', 'WalkPaint · 原生界面独立预览', '--notes', body, '--draft', '--prerelease', *files)
-    release_id = json.loads(gh('release', 'view', tag, '--repo', REPOSITORY, '--json', 'databaseId'))['databaseId']
+    created = api('releases', '--method', 'POST', '-f', 'tag_name=' + tag,
+                  '-f', 'target_commitish=' + args.source_sha, '-f', 'name=WalkPaint · 原生界面独立预览',
+                  '-f', 'body=' + body, '-F', 'draft=true', '-F', 'prerelease=true')
+    release_id = created['id']
+    gh('release', 'upload', tag, '--repo', REPOSITORY, *files)
     release = api('releases/' + str(release_id))
     if not release['draft'] or not release['prerelease'] or release['target_commitish'] != args.source_sha:
         raise RuntimeError('Draft release identity does not match')

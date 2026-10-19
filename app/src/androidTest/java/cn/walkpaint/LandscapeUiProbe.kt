@@ -70,7 +70,7 @@ internal object LandscapeUiProbe {
         tap("更多设置",true);tap("隐私与权限");wait("撤回自动记录授权")
         tap("撤回自动记录授权");wait("撤回自动记录授权？");tap("取消")
         back();wait("首次使用引导");back();wait("山河行记")
-        tap("山河行记");wait("山河成就");shot("journey")
+        tap("山河行记");wait("山河成就",true);shot("journey")
         tap("说明");wait("行记说明");tap("知道了");back();wait("山河行记")
         try {
             tap("外观与配色",true);tap("外观：深色");back();wait("山河行记");shot("dark")

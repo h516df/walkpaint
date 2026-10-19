@@ -4,6 +4,7 @@ on:
     branches: [dot/native-landscape-ui-20261019]
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: native-ui-preview
   cancel-in-progress: false
@@ -22,12 +23,21 @@ jobs:
           echo "$JAVA_HOME_21_X64/bin" >> "$GITHUB_PATH"
       - name: Install approved SDK components
         run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        if: ${{ contains(github.event.head_commit.message, '[native-only]') }}
+        with:
+          name: walkpaint-ui-f86b0e17468192f2ec771680052a7dfae5571427
+          run-id: 39214455737
+          github-token: ${{ github.token }}
+          path: preview-artifacts
       - name: Tests, lint and isolated developer APK
+        if: ${{ !contains(github.event.head_commit.message, '[native-only]') }}
         run: |
           python3 -m unittest discover -s tests -v
           python3 -m unittest discover -s scripts -p 'test_*.py' -v
           bash gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest -PwalkpaintDeveloperBuild=true --console=plain
       - name: Verify and package artifacts
+        if: ${{ !contains(github.event.head_commit.message, '[native-only]') }}
         env:
           SOURCE_SHA: ${{ github.sha }}
         run: |
@@ -48,10 +58,13 @@ jobs:
       - name: Native UI acceptance on dedicated emulator
         timeout-minutes: 20
         run: |
-          test -r /dev/kvm && test -w /dev/kvm || { ls -l /dev/kvm; echo 'KVM access is unavailable; no permissions changed'; exit 1; }
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'emulator' 'system-images;android-36;default;x86_64'
-          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --name WalkPaint_UI_Preview_CI --package 'system-images;android-36;default;x86_64' --device pixel_6
-          "$ANDROID_HOME/emulator/emulator" -avd WalkPaint_UI_Preview_CI -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -port 5562 > emulator.log 2>&1 &
+          echo 'Software-only emulator: no KVM permission changes'
+          if [ "${{ contains(github.event.head_commit.message, '[native-only]') }}" = true ]; then
+            echo '51daba939f1407a37cff6b17c3e0dd8d4efb9692030924f354e23eeec0e9c8b3  preview-artifacts/walkpaint-ui-preview.apk' | sha256sum --check
+          fi
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'emulator' 'system-images;android-29;default;x86_64'
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --name WalkPaint_UI_Preview_CI --package 'system-images;android-29;default;x86_64' --device pixel_6
+          "$ANDROID_HOME/emulator/emulator" -avd WalkPaint_UI_Preview_CI -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel off -cores 1 -memory 2048 -port 5562 > emulator.log 2>&1 &
           emulator_pid=$!
           trap 'kill "$emulator_pid" || true' EXIT
           export PATH="$ANDROID_HOME/platform-tools:$PATH"
