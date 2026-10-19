@@ -79,7 +79,9 @@ internal object JournalJourneyProbe {
             image.recycle()
         }
         var activity:MainActivity?=null
-        var savedPath:String?=null
+        var savedUri:android.net.Uri?=null
+        val documentResult=AtomicReference<android.net.Uri?>()
+        var documentObserver:AutoCloseable?=null
         i.addMonitor(monitor)
         field.set(repo,fixture)
         try {
@@ -100,6 +102,7 @@ internal object JournalJourneyProbe {
                 stage("memo_persisted");top();shot("detail")
                 tap("制作路线明信片",scroll=true);wait("$day 的路线明信片预览");shot("card-paper")
                 tap("夜色");wait("$day 的路线明信片预览");shot("card-night")
+                i.runOnMainSync {documentObserver=DocumentResultCapture.install(screen,documentResult)}
                 stage("postcard_preview");tap("保存图片")
                 val name="walkpaint-card-${UUID.randomUUID()}.png"
                 setField(0,name)
@@ -119,10 +122,12 @@ internal object JournalJourneyProbe {
                 await("enabled system save action") {find("图片已保存")!=null || saveAction()?.performAction(AccessibilityNodeInfo.ACTION_CLICK)==true}
                 wait("图片已保存")
                 if(recreatePicker){await("activity recreated during picker"){screen.isDestroyed};stage("picker_recreation_verified")}
-                fun shell(command:String)=android.os.ParcelFileDescriptor.AutoCloseInputStream(automation.executeShellCommand(command)).bufferedReader().use {it.readText()}
-                val path=shell("find /sdcard/Download /sdcard/Documents -name $name -type f 2>/dev/null").lineSequence().firstOrNull {it.endsWith(name)} ?: error("Saved image missing")
-                check(path.matches(Regex("[A-Za-z0-9/._-]+")));savedPath=path
-                val exported=android.os.ParcelFileDescriptor.AutoCloseInputStream(automation.executeShellCommand("cat $path")).use {BitmapFactory.decodeStream(it)} ?: error("Invalid saved PNG")
+                val saved=checkNotNull(documentResult.get()){"Document result was not observed"}
+                val actualName=context.contentResolver.query(saved,arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),null,null,null)?.use {cursor->
+                    if(cursor.moveToFirst())cursor.getString(0) else null
+                }
+                check(actualName==name){"Unexpected document name: $actualName"};savedUri=saved
+                val exported=context.contentResolver.openInputStream(saved).use {BitmapFactory.decodeStream(it)} ?: error("Invalid saved PNG")
                 check(exported.width==RoutePostcard.WIDTH && exported.height==RoutePostcard.HEIGHT){"Unexpected saved PNG dimensions"}
                 check(exported.getPixel(5,5)==CardTheme.NIGHT.background){"Saved PNG was not the selected night theme"};exported.recycle()
                 stage("png_saved");tap("分享图片");await("image share intent"){shared.get()!=null}
@@ -149,11 +154,12 @@ internal object JournalJourneyProbe {
             runCatching {shot("failure")}
             throw e
         } finally {
+            i.runOnMainSync {documentObserver?.close()}
             i.removeMonitor(monitor)
             field.set(repo,original)
             i.runOnMainSync {if(activity?.isDestroyed==false)activity?.finish()}
             journalFile.delete()
-            savedPath?.let {automation.executeShellCommand("rm $it").close()}
+            savedUri?.let {runCatching {android.provider.DocumentsContract.deleteDocument(context.contentResolver,it)}}
         }
     }
 }
