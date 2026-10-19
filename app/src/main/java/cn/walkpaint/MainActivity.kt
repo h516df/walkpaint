@@ -139,14 +139,32 @@ class MainActivity : ComponentActivity() {
     private val headingContinuity=HeadingContinuity()
     private var mapHeading=0f
     private var mapViewReady by mutableStateOf(false)
+    private var landmarkPoints by mutableStateOf<List<ExplorationLandmark>>(emptyList())
+    private var selectedLandmark by mutableStateOf<ExplorationLandmark?>(null)
+    private var showLandmarkList by mutableStateOf(false)
+    private var landmarkError by mutableStateOf<String?>(null)
+    private val landmarkArrival=LandmarkArrival()
+    private val landmarkExecutor=java.util.concurrent.Executors.newSingleThreadExecutor()
+    private fun changeLandmarks(onSuccess:()->Unit = {},change:()->Unit = {}) {
+        if(landmarkExecutor.isShutdown) return
+        landmarkExecutor.execute {
+            val result=runCatching {change();repository.landmarks.snapshot().values.filter {!it.deleted}}
+            runOnUiThread {
+                if(isDestroyed) return@runOnUiThread
+                result.onSuccess {landmarkPoints=it;landmarkError=null;if(amapActive)amapController.showLandmarks(it);onSuccess()}
+                    .onFailure {landmarkError="探索点暂时无法读取或保存，原文件已保留"}
+            }
+        }
+    }
     private var lastCameraPoint:TrackPoint?=null
     private var lastCameraBearing=0f
     private val locateZoom=LocateZoomRequest()
     private val headingSensor by lazy { HeadingSensor(this,
         { @Suppress("DEPRECATION") windowManager.defaultDisplay.rotation },
         { bearing -> mapHeading=headingContinuity.resolve(bearing);syncFollowCamera() }) }
-    private val amapController by lazy { AmapMapController(this,::pauseMapFollowing,
-        { mapViewReady=true;refreshVeilForViewport(force=true);syncFollowCamera(force=true) }, ::onMapCameraMoved, ::onMapCameraSettled) }
+    private val amapController:AmapMapController by lazy { AmapMapController(this,::pauseMapFollowing,
+        { mapViewReady=true;amapController.showLandmarks(landmarkPoints);refreshVeilForViewport(force=true);syncFollowCamera(force=true) }, ::onMapCameraMoved, ::onMapCameraSettled,
+        {point -> selectedLandmark=landmarkPoints.firstOrNull {it.id==point.id} ?: point}) }
     private val amapSupported get() = AmapPlatform.supported(Build.SUPPORTED_ABIS.toList(), BuildConfig.ARM64_ONLY)
     private val amapActive get() = amapSupported && BuildConfig.AMAP_KEY.isNotBlank() && amapConsent
     private var showDiagnostics by mutableStateOf(false)
@@ -436,7 +454,7 @@ class MainActivity : ComponentActivity() {
                 }.onSuccess { result ->
                     runOnUiThread {
                         updateUi()
-                        toast(result.message())
+                        toast(result.message());changeLandmarks()
                     }
                 }.onFailure { runOnUiThread { RecordingDiagnostics.problem(this,ProblemCode.BACKUP_FAILED);toast("无法导入，请确认是有效的足迹备份") } }
             }.start()
@@ -465,16 +483,15 @@ class MainActivity : ComponentActivity() {
         appearanceMode=getSharedPreferences("ui_appearance",Context.MODE_PRIVATE).getInt("mode",0).coerceIn(0,2)
         visualSkin=VisualSkin.stored(getSharedPreferences("ui_appearance",Context.MODE_PRIVATE).getString("skin",null))
         showIntro=!trackingEnabled && !mapPref.getBoolean("mobile_intro_seen",false)
+        changeLandmarks()
         setContent {
             WalkPaintTheme(appearanceMode,currentTab==0,visualSkin) {
                 AppShell(
                     selectedTab = currentTab,
                     onTab = {
                         if(it!=2 && privateUpdateState.busy) privateUpdater.cancel()
-                        currentTab=it;syncHeadingLifecycle()
-                        // The veil is opaque now, so entering the map tab without one shows a map the
-                        // person has not explored. The camera may not move at all on this switch, so
-                        // nothing else would ask for a redraw.
+                        currentTab=it;landmarkArrival.reset();syncHeadingLifecycle()
+                        // Refresh the themed veil even if returning to a resting camera.
                         if(it==0) refreshVeilForViewport(force=true)
                     },
                     state = snapshot,
@@ -572,7 +589,9 @@ class MainActivity : ComponentActivity() {
                         { privateUpdater.download() },::installUpdate,{ privateUpdater.cancel() },
                         { privateUpdater.logout() },{ openUpdateBrowser(UpdateDestination.URL) },
                         { openUpdateBrowser("https://github.com/h516df/walkpaint#隐私与许可") }) },
-                    mapContent = { if (amapActive) {
+                    mapContent = {
+                        androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+                        if (amapActive) {
                         androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
                             AmapNativeView()
                             if(selectedDay==null && snapshot.realTracks.all {it.points.isEmpty()}) {
@@ -590,7 +609,14 @@ class MainActivity : ComponentActivity() {
                                 if(amapSupported && BuildConfig.AMAP_KEY.isNotBlank()) Button(onClick={showAmapConsent=true}){Text("开启高德地图")}
                             }
                         }
-                    } },
+                    }
+                        Surface(modifier=Modifier.align(androidx.compose.ui.Alignment.CenterStart).padding(start=8.dp),
+                            shape=androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
+                            color=MaterialTheme.colorScheme.surface.copy(alpha=.95f),tonalElevation=2.dp) {
+                            TextButton(onClick={showLandmarkList=true;changeLandmarks()}) {Text("◇ 探索点")}
+                        }
+                        }
+                    },
                     replay = ReplayControls(replayActive,replayPlaying,{replayProgress},
                         ::startReplay,::toggleReplay,::stopReplay),
                     onSkin={showSkinPicker=true},
@@ -601,6 +627,12 @@ class MainActivity : ComponentActivity() {
                     } }
                 )
 
+                if(showLandmarkList) LandmarkList(landmarkPoints,landmarkError,amapActive,
+                    {selectedLandmark=it;showLandmarkList=false},{showLandmarkList=false})
+                selectedLandmark?.let {point -> LandmarkDetail(point,landmarkPoints.any {it.id==point.id},landmarkError,
+                    {changeLandmarks(onSuccess={selectedLandmark=null}) {repository.landmarks.save(point)}},
+                    {changeLandmarks(onSuccess={selectedLandmark=null}) {repository.landmarks.remove(point.id)}},
+                    {selectedLandmark=null}) }
                 if(showSkinPicker) SkinPicker(visualSkin,{ skin ->
                     visualSkin=skin
                     appearanceMode=if(skin==VisualSkin.NIGHT) 2 else 0
@@ -766,6 +798,7 @@ class MainActivity : ComponentActivity() {
     private fun updateUi() {
         val now = System.currentTimeMillis()
         trackingEnabled = AmbientTracking.enabled(this)
+        if(!trackingEnabled) landmarkArrival.reset()
         trackingRunning = AmbientTracking.running
         backgroundGranted = AmbientTracking.hasBackgroundLocation(this)
         userFix = if(AmbientTracking.hasFineLocation(this)) chooseMapFix(listOfNotNull(AmbientTracking.lastGps, AmbientTracking.lastFix,userFix)) else null
@@ -807,6 +840,7 @@ class MainActivity : ComponentActivity() {
             val generation=mapSceneGeneration
             // Read on the UI thread: the worker must not race a fix arriving while it paints.
             val fogColour = roadColor
+            val themedFogColor=FogAppearance.color(visualSkin)
             val fogAnchor = userFix?.let { TrackPoint(it.latitude, it.longitude, it.time, it.accuracy) }
             val fogViewport = currentViewport
             refreshExecutor.execute {
@@ -827,7 +861,7 @@ class MainActivity : ComponentActivity() {
                     val veilStart = System.nanoTime()
                     // The painter reuses its two buffers. A deferred handover and the SDK's GL
                     // thread can still be reading either one after the next paint starts.
-                    val fogImage = fogPainter.update(veilPaths, fogColour, MapHistory.anchor(displayedTrack,day) ?: fogAnchor, fogViewport)
+                    val fogImage = fogPainter.update(veilPaths, fogColour, MapHistory.anchor(displayedTrack,day) ?: fogAnchor, fogViewport,themedFogColor)
                         ?.copy(android.graphics.Bitmap.Config.ARGB_8888,false)
                     val veilNanos = System.nanoTime() - veilStart
                     if (BuildConfig.DEBUG) {
@@ -1057,6 +1091,13 @@ class MainActivity : ComponentActivity() {
         val chosen=chooseMapFix(listOfNotNull(fix,userFix,AmbientTracking.lastGps)) ?: return
         userFix = chosen
         AmbientTracking.lastFix = chosen
+        @Suppress("DEPRECATION")
+        val mock=chosen.isFromMockProvider
+        val arrivals=landmarkArrival.sample(landmarkPoints,chosen.latitude,chosen.longitude,chosen.accuracy,
+            chosen.elapsedRealtimeNanos/1_000_000L,fixQuality(chosen).ageMillis,
+            chosen.provider==LocationManager.GPS_PROVIDER,mock,
+            trackingEnabled && activityResumed && currentTab==0 && AmbientTracking.hasFineLocation(this))
+        if(arrivals.isNotEmpty()) changeLandmarks {arrivals.forEach {repository.landmarks.visit(it,System.currentTimeMillis())}}
         updateLocationLayer()
         refreshPlaceName(chosen)
         syncFollowCamera(force=center || firstMapCenter, streetZoom=streetZoom)
@@ -1518,6 +1559,7 @@ class MainActivity : ComponentActivity() {
         }
         val viewport = currentViewport
         val colour = roadColor
+        val veilColor=FogAppearance.color(visualSkin)
         val handOver = true
         val day = selectedDay
         val generation=mapSceneGeneration
@@ -1526,7 +1568,7 @@ class MainActivity : ComponentActivity() {
         refreshExecutor.execute {
             try {
                 val start = System.nanoTime()
-                val paintedImage = fogPainter.update(paths, colour, anchor, viewport)
+                val paintedImage = fogPainter.update(paths, colour, anchor, viewport,veilColor)
                 val nanos = System.nanoTime() - start
                 if (BuildConfig.DEBUG) PerfTrace.pan(nanos)
                 val frame = fogPainter.frame()
@@ -1572,6 +1614,7 @@ class MainActivity : ComponentActivity() {
     private fun updateMapLayers() {
         if (!amapActive) return
         // 回放时画“长到一半”的那条线；停回放后自动回到当天完整足迹。
+        amapController.setFogColor(FogAppearance.color(visualSkin))
         amapController.render(mapTrackState,mapRoadState,if(replayActive) replayPaths else mapTrailPaths,fogBitmap,fogFrame,fogRevision)
     }
 
@@ -1677,11 +1720,12 @@ class MainActivity : ComponentActivity() {
         GrowthSession.pause()
         mainHandler.removeCallbacks(refreshTask)
         stopShortGps("离开前台，结束短测")
-        activityResumed=false;syncHeadingLifecycle()
+        activityResumed=false;landmarkArrival.reset();syncHeadingLifecycle()
         locationManager?.let { runCatching { it.removeUpdates(visibleLocationListener) } }
         super.onPause()
     }
     override fun onDestroy() {
+        landmarkExecutor.shutdown()
         privateUpdater.close()
         headingSensor.stop()
         roadDownload?.cancel()

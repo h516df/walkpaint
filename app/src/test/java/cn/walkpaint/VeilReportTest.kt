@@ -15,12 +15,18 @@ class VeilReportTest {
     private fun pixel(alpha: Int, rgb: Int) = (alpha shl 24) or rgb
 
     @Test fun opaqueBlackIsReportedAsBothHidingAndBlack() {
-        val stats = VeilReport.of(IntArray(100) { TrailPaint.FOG_COLOR })
+        val stats = VeilReport.of(IntArray(100) { 0xFF000000.toInt() })
         assertEquals(1.0, stats.hiddenShare, 0.0001)
         assertEquals(1.0, stats.blackShare, 0.0001)
         assertEquals(0.0, stats.openShare, 0.0001)
     }
 
+    @Test fun themedFogReportsTransparencyWithoutClaimingExploration() {
+        val stats=VeilReport.of(IntArray(100){TrailPaint.FOG_COLOR})
+        assertEquals(1.0,stats.openShare,0.0001)
+        assertEquals(0.0,stats.hiddenShare,0.0001)
+        assertTrue(VeilReport.image(stats,1).contains("不代表已探索"))
+    }
     @Test fun anOpaqueVeilThatIsNotBlackHidesButIsNotTheAgreedColour() {
         // Exactly the 0.39 veil: alpha 255 and navy. It hides perfectly well, and it is still not
         // what the person asked for, so a report that only counted "opaque" would have missed it.
@@ -40,7 +46,7 @@ class VeilReportTest {
 
     @Test fun theRampBetweenClearedGroundAndVeilIsCountedSeparately() {
         val image = IntArray(4)
-        image[0] = TrailPaint.FOG_COLOR          // untouched veil: hides, and is black
+        image[0] = 0xFF000000.toInt()          // untouched veil: hides, and is black
         image[1] = pixel(200, 0)                 // the ramp: the basemap shows through faintly
         image[2] = pixel(40, 0x334455)           // walked ground, carrying the person's colour
         image[3] = pixel(0, 0)                   // fully cleared: the map itself

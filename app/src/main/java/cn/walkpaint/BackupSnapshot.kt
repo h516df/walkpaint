@@ -6,7 +6,7 @@ import org.json.JSONObject
 import org.json.JSONArray
 
 /** Immutable database snapshot. Encoding runs after the repository monitor is released. */
-internal data class BackupSnapshot(val state:TrackState,val packs:List<RoadPack>) {
+internal data class BackupSnapshot(val state:TrackState,val packs:List<RoadPack>,val landmarks:Map<String,ExplorationLandmark> = emptyMap()) {
     fun writeTo(output:Writer) {
         val json=JsonWriter(output)
         json.beginObject().name("version").value(1).name("activeId")
@@ -23,7 +23,9 @@ internal data class BackupSnapshot(val state:TrackState,val packs:List<RoadPack>
         }
         json.endArray().name("roadBackupVersion").value(1).name("roadPacks").beginArray()
         packs.forEach {writeValue(json,JSONObject(RoadPackCodec.encode(it)))}
-        json.endArray().endObject()
+        json.endArray().name("landmarks")
+        writeValue(json,LandmarkCodec.encode(landmarks))
+        json.endObject()
         json.flush() // AtomicFile owns the underlying stream and its final fsync/close.
     }
     private fun writeValue(json:JsonWriter,value:Any?) {

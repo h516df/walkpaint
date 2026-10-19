@@ -18,11 +18,11 @@ internal data class VeilStats(
     val pixels: Int,
     /** alpha 250..255: genuinely hides whatever is under it. */
     val hidden: Int,
-    /** alpha 255 *and* rgb 0: hides, and is the black the effect was specified as. */
+    /** alpha 255 *and* rgb 0: distinguishes black-screen evidence from a themed veil. */
     val black: Int,
     /** alpha 128..249: the basemap shows through faintly, which is how a road becomes readable. */
     val partial: Int,
-    /** alpha below 128: cleared ground, the band the person has walked. */
+    /** alpha below 128: highly translucent pixels, not proof of explored ground. */
     val open: Int,
 ) {
     val hiddenShare: Double get() = share(hidden)
@@ -65,7 +65,7 @@ internal object VeilReport {
     fun image(stats: VeilStats, revision: Int): String =
         "雾位图=${stats.pixels}像素 不透光=${percent(stats.hiddenShare)} " +
             "其中纯黑=${percent(stats.blackShare)} 半透=${percent(stats.partialShare)} " +
-            "透出地面=${percent(stats.openShare)} 版本=$revision"
+            "透出地面=${percent(stats.openShare)}（仅透明度，不代表已探索） 版本=$revision"
 
     /**
      * The frame, and what it is able to show.
@@ -81,7 +81,7 @@ internal object VeilReport {
         val perMetre = TrailPainter.pixelsPerMeter(frame)
         val raw = TrailPaint.CORRIDOR_M * perMetre
         val drawn = raw
-        val floor = if (!TrailPaint.corridorVisible(frame)) "（这一帧太宽，画不出走廊；雾层保持不透光，路线用线条显示）" else ""
+        val floor = if (!TrailPaint.corridorVisible(frame)) "（这一帧太宽，画不出走廊；雾层保留主题透明度，路线用线条显示）" else ""
         return String.format(Locale.ROOT,
             "雾帧=%dx%d像素 覆盖纬度%.5f° 经度%.5f° 每米=%.3f像素 走廊=%.1f像素%s 地图画行走线=%s",
             frame.widthPx, frame.heightPx, frame.latSpan, frame.lonSpan, perMetre, drawn, floor,

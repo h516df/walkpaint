@@ -23,7 +23,8 @@ import com.amap.api.maps.model.LatLngBounds
  */
 internal class AmapMapController(private val context: Context, private val onGesture:()->Unit,
                                  private val onReady:()->Unit, private val onCamera:()->Unit,
-                                 private val onCameraSettled:()->Unit) {
+                                 private val onCameraSettled:()->Unit,
+                                 private val onLandmark:(ExplorationLandmark)->Unit = {}) {
     private var currentView: MapView? = null
     private var map: AMap? = null
     private var latestPosition: Location? = null
@@ -46,7 +47,7 @@ internal class AmapMapController(private val context: Context, private val onGes
     private var coverageHost:android.view.View?=null
     private var coverageGuard: android.graphics.drawable.Drawable? = null
     private val guardPath = android.graphics.Path()
-    private val guardPaint = Paint().apply { color = Color.BLACK }
+    private val guardPaint = Paint().apply { color = FogAppearance.DEFAULT }
     private var frameQueued=false
     private var cameraMovingUntil=0L
     private val choreographer by lazy { android.view.Choreographer.getInstance() }
@@ -179,7 +180,21 @@ internal class AmapMapController(private val context: Context, private val onGes
         val view = MapView(context)
         view.onCreate(null)
         currentView = view
+        landmarkMarkers.clear();landmarkSnapshot=emptyList()
         map = view.map
+        map?.setOnPOIClickListener { poi ->
+            runCatching {
+                val coordinate=poi.coordinate
+                val source=fromAmap(coordinate.latitude,coordinate.longitude)
+                val id=poi.poiId?.takeIf {it.isNotBlank()} ?: "${poi.name}:${coordinate.latitude}:${coordinate.longitude}"
+                ExplorationLandmark(id.take(200),poi.name.orEmpty().take(120),source.latitude,source.longitude)
+                    .also {LandmarkCodec.validate(it)}
+            }.getOrNull()?.let(onLandmark)
+        }
+        map?.setOnMarkerClickListener { marker ->
+            val point=marker.`object` as? ExplorationLandmark
+            if(point!=null) {onLandmark(point);true} else false
+        }
         groundFrame = null
         installCoverageGuard(view)
         renderedPaths=null
@@ -355,6 +370,27 @@ internal class AmapMapController(private val context: Context, private val onGes
         map?.stopAnimation()
     }
 
+    private val landmarkMarkers=mutableListOf<com.amap.api.maps.model.Marker>()
+    private var landmarkSnapshot:List<ExplorationLandmark> = emptyList()
+    fun setFogColor(color:Int) {guardPaint.color=color;updateCoverageGuard()}
+    fun showLandmarks(points:List<ExplorationLandmark>) {
+        if(points==landmarkSnapshot && landmarkMarkers.isNotEmpty()) return
+        val a=map ?: return
+        landmarkMarkers.forEach {it.remove()};landmarkMarkers.clear();landmarkSnapshot=points.toList()
+        points.filter {!it.deleted}.forEach {point ->
+            val bitmap=Bitmap.createBitmap(48,56,Bitmap.Config.ARGB_8888)
+            val canvas=Canvas(bitmap);val paint=Paint(Paint.ANTI_ALIAS_FLAG)
+            paint.color=if(point.visitedAt!=null) Color.rgb(44,133,103) else Color.rgb(83,104,150)
+            val path=android.graphics.Path().apply {moveTo(24f,3f);lineTo(43f,24f);lineTo(24f,51f);lineTo(5f,24f);close()}
+            canvas.drawPath(path,paint);paint.color=Color.WHITE;paint.style=Paint.Style.STROKE;paint.strokeWidth=3f
+            canvas.drawCircle(24f,24f,7f,paint)
+            a.addMarker(com.amap.api.maps.model.MarkerOptions().position(toAmap(point.lat,point.lon))
+                .title(point.name).anchor(.5f,1f).icon(com.amap.api.maps.model.BitmapDescriptorFactory.fromBitmap(bitmap)))?.let {
+                    it.`object`=point;landmarkMarkers+=it
+                }
+        }
+    }
+
     fun view(): MapView? = currentView
 
     /** Shows a whole walked area, used when the person asks to see all of their exploration. */
@@ -434,6 +470,7 @@ internal class AmapMapController(private val context: Context, private val onGes
         groundFrame = null
         mapLoaded = false
         paintedRevision = -1
+        landmarkMarkers.clear();landmarkSnapshot=emptyList()
         map = null
         currentView = null
         view.onPause()
