@@ -196,12 +196,33 @@ class MainActivity : ComponentActivity() {
      * pile up as a braid of overlapping passes.
      */
     private var mapTrailPaths: List<List<TrackPoint>> = emptyList()
+    // 回放节奏：40 毫秒一帧（约 25fps），每帧推进 0.8%，一整天大约 5 秒走完。
+    private val REPLAY_FRAME_MS = 40L
+    private val REPLAY_STEP = 0.008f
+    /**
+     * 历史回放：把选中那天的原始轨迹按时间切成一段段，播放时只画到进度位置。
+     * 回放不改数据库、不改当天选择，只替换喂给地图的折线，退出即恢复原状。
+     */
+    private var replayTrips: List<List<TrackPoint>> = emptyList()
+    private var replayPaths: List<List<TrackPoint>> = emptyList()
+    private var replayActive by mutableStateOf(false)
+    private var replayPlaying by mutableStateOf(false)
+    private var replayProgress by mutableStateOf(0f)
+    private val replayTick = object : Runnable {
+        override fun run() {
+            if (!replayActive || !replayPlaying) return
+            val next = replayProgress + REPLAY_STEP
+            applyReplayProgress(next)
+            if (next < 1f) mainHandler.postDelayed(this, REPLAY_FRAME_MS) else replayPlaying = false
+        }
+    }
     private var selectedDay by mutableStateOf<String?>(null)
     private var roadAreaHint by mutableStateOf("")
     private var boundaryCatalog: RoadCatalog?=null
     private var boundaryRoads: List<RoadSegment>?=null
     private fun clearDaySelection(showExtent: Boolean = true) {
         fallbackZoomSteps.reset()
+        stopReplay()
         mapSceneGeneration++;pendingVeil=null;fogPaths=emptyList()
         selectedDay=null;pendingTripFocus=null;follow.locate();lastCameraPoint=null
         lastRevision=-1;updateUi()
@@ -210,6 +231,53 @@ class MainActivity : ComponentActivity() {
         // days ago is kilometres away, and dragging there by hand at street zoom is not something a
         // person can do. The person's own position is one tap away with 定位我.
         if (!showExtent || !showExploredExtent()) syncFollowCamera(force=true)
+    }
+
+    /**
+     * 开始回放选中那天的足迹。轨迹按行程、再按时间排序，所以画面上的线一定沿着当时的走法长出来，
+     * 不会因为数据库里的 id 顺序把两段路连成一条直线。回放期间不写任何表。
+     */
+    private fun startReplay() {
+        val day = selectedDay ?: return
+        val trips = DailyFootprints.select(snapshot, day).realTracks
+            .sortedBy { it.started }
+            .map { track -> track.points.sortedBy { it.time } }
+            .filter { it.size >= 2 }
+        if (trips.isEmpty()) { toast("这一天还没有可以回放的轨迹"); return }
+        pauseMapFollowing()
+        replayTrips = trips
+        replayActive = true
+        replayPlaying = true
+        replayProgress = 0f
+        applyReplayProgress(0f)
+        mainHandler.removeCallbacks(replayTick)
+        mainHandler.postDelayed(replayTick, REPLAY_FRAME_MS)
+    }
+
+    private fun toggleReplay() {
+        if (!replayActive) return
+        if (replayPlaying) { replayPlaying = false; mainHandler.removeCallbacks(replayTick); return }
+        if (replayProgress >= 1f) applyReplayProgress(0f)
+        replayPlaying = true
+        mainHandler.removeCallbacks(replayTick)
+        mainHandler.postDelayed(replayTick, REPLAY_FRAME_MS)
+    }
+
+    private fun stopReplay() {
+        mainHandler.removeCallbacks(replayTick)
+        if (replayActive || replayPaths.isNotEmpty()) {
+            replayActive = false; replayPlaying = false
+            replayTrips = emptyList(); replayPaths = emptyList(); replayProgress = 0f
+            updateMapLayers()
+        }
+    }
+
+    /** 进度按“一共多少个点”折算，长走和短走都走完同样的时间，但线永远画到该到的位置。 */
+    private fun applyReplayProgress(raw: Float) {
+        val progress = raw.coerceIn(0f, 1f)
+        replayProgress = progress
+        replayPaths = replaySlices(replayTrips, progress)
+        updateMapLayers()
     }
 
     /**
@@ -484,6 +552,7 @@ class MainActivity : ComponentActivity() {
                     },
                     onTrip = { trip ->
                         fallbackZoomSteps.reset()
+                        if(replayActive) stopReplay()
                         follow.history();syncHeadingLifecycle()
                         mapSceneGeneration++;pendingVeil=null;fogPaths=emptyList()
                         selectedDay=DailyFootprints.key(trip.started)
@@ -548,6 +617,8 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     } },
+                    replay = ReplayControls(replayActive,replayPlaying,{replayProgress},
+                        ::startReplay,::toggleReplay,::stopReplay),
                     onSkin={showSkinPicker=true},
                     onNotifications=::openRecordingNotificationSettings,
                     onBackupEntry={ refreshExecutor.execute {
@@ -1696,7 +1767,8 @@ class MainActivity : ComponentActivity() {
 
     private fun updateMapLayers() {
         if (amapActive) {
-            amapController.render(mapTrackState,mapRoadState,mapTrailPaths,fogBitmap,fogFrame,fogRevision)
+            // 回放时画“长到一半”的那条线；停回放后自动回到当天完整足迹。
+            amapController.render(mapTrackState,mapRoadState,if(replayActive) replayPaths else mapTrailPaths,fogBitmap,fogFrame,fogRevision)
             return
         }
         val style = mapInstance?.style ?: return

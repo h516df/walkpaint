@@ -51,7 +51,8 @@ internal fun AppShell(
     appearanceMode:Int, onAppearanceMode:(Int)->Unit, onShowIntro:()->Unit,
     feedbackContent: @Composable (onBack:()->Unit)->Unit,
     updatesContent: @Composable (onBack:()->Unit)->Unit, mapContent: @Composable () -> Unit,
-    onBackupEntry:()->Unit={},onSkin:()->Unit={},onNotifications:()->Unit={},backupStatus:String?=null
+    onBackupEntry:()->Unit={},onSkin:()->Unit={},onNotifications:()->Unit={},backupStatus:String?=null,
+    replay: ReplayControls? = null
 ) {
     Box(Modifier.fillMaxSize().background(PageBackground)) {
         // Keep the SDK and GL surface alive across bottom-tab journeys. Only the controls/pages
@@ -68,7 +69,7 @@ internal fun AppShell(
             when(selectedTab) {
                 0 -> DesignMapOverlay(state,selectedDay,automatic,recordingTitle,recordingHealthy,mapNotice,
                     mapProviderLabel,{onTab(2)},onToggleTracking,onLocate,onShowAll,
-                    mapProviderLabel.contains("OpenFreeMap"),onZoom,{},regionContent={RegionExplorationCard(state,fix,placeName)})
+                    mapProviderLabel.contains("OpenFreeMap"),onZoom,{},regionContent={RegionExplorationCard(state,fix,placeName)},replay=replay)
                 1 -> Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(bottom=76.dp)) {
                     DesignTripsPage(state,roadColor,onTrip,onExport,onSkin)
                 }
