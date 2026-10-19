@@ -203,6 +203,8 @@ class MainActivity : ComponentActivity() {
     private var backgroundDeferred = false
     private var profileNotice by mutableStateOf<String?>(null)
     private var pendingSettingsEnable = false
+    private var pendingLocateSettings = false
+    private var fineSettingsPurpose = LocationPermissionRecovery.Purpose.RECORD
     private var pendingBackgroundSettings = false
     private var recordingCode = "PAUSED"
     private val refreshExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
@@ -399,7 +401,14 @@ class MainActivity : ComponentActivity() {
     private val permissionSettingsLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
             val waiting=pendingSettingsEnable
+            val locateWaiting=pendingLocateSettings
+            pendingLocateSettings=false
             pendingSettingsEnable=false
+            if(locateWaiting) {
+                if(LocationPermissionRecovery.returned(true,AmbientTracking.hasFineLocation(this),
+                    LocationPermissionRecovery.Purpose.LOCATE)==LocationPermissionRecovery.Return.LOCATE) centerUser()
+                else {pendingCenter=false;toast("尚未允许精确定位，无法查看当前位置")}
+            }
             if(waiting && pendingEnable) {
                 if(AmbientTracking.hasFineLocation(this)) {
                     // Returning without "always allow" is a valid decline, never a prompt loop.
@@ -485,6 +494,9 @@ class MainActivity : ComponentActivity() {
         roadColor=roadAppearance.color
         pendingEnable = savedInstanceState?.getBoolean("pendingEnable") ?: false
         pendingSettingsEnable = savedInstanceState?.getBoolean("pendingSettingsEnable") ?: false
+        pendingLocateSettings = savedInstanceState?.getBoolean("pendingLocateSettings") ?: false
+        pendingCenter = savedInstanceState?.getBoolean("pendingCenter") ?: false
+        fineSettingsPurpose = LocationPermissionRecovery.restore(savedInstanceState?.getString("fineSettingsPurpose"))
         pendingBackgroundSettings = savedInstanceState?.getBoolean("pendingBackgroundSettings") ?: false
         backgroundDeferred = savedInstanceState?.getBoolean("backgroundDeferred") ?: false
         confirmEnable = savedInstanceState?.getBoolean("confirmEnable") ?: false
@@ -797,15 +809,16 @@ class MainActivity : ComponentActivity() {
                         showBackgroundPrompt=false;backgroundDeferred=true;continueEnable()
                     }) {Text("先这样记录")}}
                 )
-                if(showFineSettings) AlertDialog(
-                    onDismissRequest={showFineSettings=false;pendingEnable=false},
-                    title={Text("需要允许精确定位")},
-                    text={Text("目前自动记录未开启。你可以在系统位置权限中开启精确定位；不授权也能查看原有足迹。")},
-                    confirmButton={Button(onClick={
-                        showFineSettings=false;pendingEnable=true;pendingSettingsEnable=true;pendingBackgroundSettings=false
+                if(showFineSettings) LocationPermissionSettingsDialog(
+                    purpose=fineSettingsPurpose,
+                    onDismiss={showFineSettings=false;pendingEnable=false;pendingCenter=false},
+                    onSettings={
+                        showFineSettings=false
+                        val locating=fineSettingsPurpose==LocationPermissionRecovery.Purpose.LOCATE
+                        pendingEnable=!locating;pendingSettingsEnable=!locating;pendingLocateSettings=locating
+                        pendingBackgroundSettings=false
                         permissionSettingsLauncher.launch(appSettingsIntent())
-                    }) {Text("去设置")}},
-                    dismissButton={TextButton(onClick={showFineSettings=false;pendingEnable=false}) {Text("稍后")}}
+                    }
                 )
             }
         }
@@ -971,14 +984,7 @@ class MainActivity : ComponentActivity() {
         when(TrackingSetup.next(Build.VERSION.SDK_INT,AmbientTracking.hasFineLocation(this),
             AmbientTracking.hasBackgroundLocation(this),backgroundDeferred)) {
             TrackingSetup.Step.LOCATION -> {
-                val prefs=getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE)
-                if(prefs.getBoolean("fine_request_seen",false) &&
-                    !shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION)) {
-                    pendingEnable=false;showFineSettings=true
-                } else {
-                    prefs.edit().putBoolean("fine_request_seen",true).apply()
-                    askLocation()
-                }
+                requestFineLocation(LocationPermissionRecovery.Purpose.RECORD)
             }
             TrackingSetup.Step.BACKGROUND -> showBackgroundPrompt=true
             TrackingSetup.Step.START -> {
@@ -1011,7 +1017,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun requestFineLocation(purpose:LocationPermissionRecovery.Purpose) {
+        val prefs=getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE)
+        if(LocationPermissionRecovery.route(prefs.getBoolean("fine_request_seen",false),
+            shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION))==LocationPermissionRecovery.Route.SETTINGS) {
+            fineSettingsPurpose=purpose
+            if(purpose==LocationPermissionRecovery.Purpose.RECORD) pendingEnable=false
+            showFineSettings=true
+        } else askLocation()
+    }
+
     private fun askLocation() {
+        getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE).edit().putBoolean("fine_request_seen",true).apply()
         locationPermissionLauncher.launch(arrayOf(
             Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION
         ))
@@ -1029,7 +1046,7 @@ class MainActivity : ComponentActivity() {
         locateZoom.request()
         if (!AmbientTracking.hasFineLocation(this)) {
             pendingCenter = true
-            askLocation()
+            requestFineLocation(LocationPermissionRecovery.Purpose.LOCATE)
             return
         }
         val fix = chooseMapFix(listOfNotNull(userFix,latestSystemLocation(),AmbientTracking.lastGps))
@@ -1742,6 +1759,9 @@ class MainActivity : ComponentActivity() {
         outState.putInt("mobileTab",currentTab)
         outState.putBoolean("pendingEnable", pendingEnable)
         outState.putBoolean("pendingSettingsEnable", pendingSettingsEnable)
+        outState.putBoolean("pendingLocateSettings",pendingLocateSettings)
+        outState.putBoolean("pendingCenter",pendingCenter)
+        outState.putString("fineSettingsPurpose",fineSettingsPurpose.name)
         outState.putBoolean("pendingBackgroundSettings",pendingBackgroundSettings)
         outState.putBoolean("backgroundDeferred",backgroundDeferred)
         outState.putBoolean("confirmEnable",confirmEnable)
