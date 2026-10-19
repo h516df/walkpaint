@@ -67,10 +67,10 @@ internal object RegionCoverage {
 
 internal data class ExplorationStage(val title:String,val next:Int?)
 internal fun explorationStage(percent:Double):ExplorationStage = when {
-    percent>=100 -> ExplorationStage("点亮全境",null)
-    percent>=80 -> ExplorationStage("处处皆熟悉",100)
-    percent>=50 -> ExplorationStage("街巷达人",80)
-    percent>=20 -> ExplorationStage("轻车熟路",50)
-    percent>=5 -> ExplorationStage("渐渐熟悉",20)
-    else -> ExplorationStage("初来乍到",5)
+    percent>=100 -> ExplorationStage("满光",null)
+    percent>=80 -> ExplorationStage("流光",100)
+    percent>=50 -> ExplorationStage("映野",80)
+    percent>=20 -> ExplorationStage("照途",50)
+    percent>=5 -> ExplorationStage("寻光",20)
+    else -> ExplorationStage("初光",5)
 }

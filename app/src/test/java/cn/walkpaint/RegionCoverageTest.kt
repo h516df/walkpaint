@@ -27,10 +27,10 @@ class RegionCoverageTest {
  }
  @Test fun explorationStagesUnlockOnlyAtRealThresholds(){
   assertEquals(5,explorationStage(0.0).next)
-  assertEquals("初来乍到",explorationStage(4.999).title)
-  assertEquals("渐渐熟悉",explorationStage(5.0).title)
+  assertEquals("初光",explorationStage(4.999).title)
+  assertEquals("寻光",explorationStage(5.0).title)
   assertEquals(50,explorationStage(20.0).next)
-  assertEquals("处处皆熟悉",explorationStage(99.99).title)
+  assertEquals("流光",explorationStage(99.99).title)
   assertNull(explorationStage(100.0).next)
  }
 }

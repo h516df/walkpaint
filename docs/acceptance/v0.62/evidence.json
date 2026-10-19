@@ -1,0 +1,62 @@
+{
+  "versionName": "0.62",
+  "versionCode": 70,
+  "apkSha256": "cd18e245baecfcf1fa751c8cae3e2a70ec6bb7019798e0ec5ed93441cf663aa5",
+  "apkBytes": 66545915,
+  "baseline": "f1dfeead47bdbb621bfc828caf443f93b5ead074",
+  "productTreeSha256": "f266065984619bb400f93d2166b514478644cbb2b9174d03e10fb4758e4ec3dc",
+  "productFiles": 116,
+  "fingerprintMethod": "Sorted relative paths under app/src/main plus app/build.gradle.kts; UTF-8 path + NUL + file bytes + NUL",
+  "jvmTests": 431,
+  "pythonTests": 41,
+  "device": "emulator-5588 / WalkPaint_Google_API36_V044 / API36",
+  "runtime": "AMap ARM64 via x86_64 native bridge",
+  "resolution": "1080x2400 @420dpi",
+  "fontScales": [
+    1.0,
+    1.3
+  ],
+  "realProvider": {
+    "county": "东城区",
+    "countyCode": "110101",
+    "city": "北京城区",
+    "province": "北京市",
+    "boundaryVertices": 593,
+    "syncException": null,
+    "syncDistrictCount": 1,
+    "transport": "Task emulator process HTTP proxy and DNS; host VPN unchanged"
+  },
+  "backgroundHidden": {
+    "committedPoints": 9,
+    "launcherReopen": true,
+    "persistedFlag": true,
+    "notificationsUnchanged": true,
+    "finalApk": true
+  },
+  "dataPreservation": {
+    "initialUpgrade": "0.52/code58 to first 0.62 candidate: five table counts and SHA identical",
+    "finalApkReinstall": "Five table counts and SHA identical before/after final APK reinstall; background probes intentionally added synthetic points"
+  },
+  "administrativeUi": {
+    "syntheticFixture": true,
+    "recordedDays": 31,
+    "countyCityProvince": true,
+    "areaAwards": 2,
+    "awardTimestampStable": true,
+    "largeFontAllMedalsReachable": true,
+    "runnerResult": "Business assertions and screenshot passed; final cleanup navigation failed because Back collapsed expanded sheet. Unnecessary cleanup navigation removed from test source, not rerun."
+  },
+  "reusedUnaffectedEvidence": [
+    "Growth 1.0/1.3 and nearby 13.7% were run on earlier v0.62 candidate; affected UI/GPS/coverage production code unchanged by final synchronous-result fix"
+  ],
+  "fog": {
+    "frames": 25,
+    "minimumUnknownBlack": 1.0,
+    "finalApk": true
+  },
+  "phoneVerified": false,
+  "completeBasemapVerified": false,
+  "restoredFontScale": 1.0,
+  "gitProductTreeSha256": "3637507628797db9667edc8ff3bccd54bbc158312874d5994cc4e16eff6617d8",
+  "gitFingerprintMethod": "Same sorted-path method, Git index blob bytes (line endings normalized), for merged-tree verification"
+}
