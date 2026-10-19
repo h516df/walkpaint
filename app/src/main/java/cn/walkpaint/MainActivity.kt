@@ -181,7 +181,19 @@ class MainActivity : ComponentActivity() {
     /** Recognized only by the separate developer debug build. */
     private val EXTRA_EXPORT_FIELD_REPORT = "cn.walkpaint.extra.EXPORT_FIELD_REPORT"
     private var privateUpdateState by mutableStateOf(PrivateUpdateState())
-    private val privateUpdater by lazy { PrivateUpdater(this) { privateUpdateState=it } }
+    private val privateUpdater by lazy { androidx.lifecycle.ViewModelProvider(this)[UpdateSession::class.java].updater }
+    private var installPermissionRequestedAt=0L
+    private val updateListener:(PrivateUpdateState)->Unit = {
+        privateUpdateState=it
+        if(activityResumed && it.installVerified) deliverVerifiedInstall()
+        else if(activityResumed && installPermissionRequestedAt>0 && !it.busy && it.ready!=null && packageManager.canRequestPackageInstalls()) {
+            continueInstallAfterPermission()
+        }
+    }
+    private val updateInstallPermission=registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        if(packageManager.canRequestPackageInstalls()) continueInstallAfterPermission()
+        else {installPermissionRequestedAt=0;privateUpdater.notice("未允许安装更新，原版本仍可使用；需要时可再次点击安装")}
+    }
     private val currentRelease by lazy {
         CurrentRelease.decode(assets.open("release-notes.json").bufferedReader().use { it.readText() })
     }
@@ -463,7 +475,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Local-only snapshot: legacy authorization cleanup must be reachable before any network request.
-        privateUpdateState=privateUpdater.snapshot()
+        installPermissionRequestedAt=savedInstanceState?.getLong("updateInstallPermissionAt",0L) ?: 0L
+        privateUpdater.bind(updateListener)
         roadColor=roadAppearance.color
         pendingEnable = savedInstanceState?.getBoolean("pendingEnable") ?: false
         pendingSettingsEnable = savedInstanceState?.getBoolean("pendingSettingsEnable") ?: false
@@ -489,7 +502,6 @@ class MainActivity : ComponentActivity() {
                 AppShell(
                     selectedTab = currentTab,
                     onTab = {
-                        if(it!=2 && privateUpdateState.busy) privateUpdater.cancel()
                         currentTab=it;landmarkArrival.reset();syncHeadingLifecycle()
                         // Refresh the themed veil even if returning to a resting camera.
                         if(it==0) refreshVeilForViewport(force=true)
@@ -585,9 +597,9 @@ class MainActivity : ComponentActivity() {
                         onClear={RecordingDiagnostics.clearHistory(this)},gpsSurvey=shortGpsText,
                         gpsSurveyActive=shortGpsActive,onGpsSurvey=::startShortGps) },
                     updatesContent = { onBack -> UpdatesPage(currentRelease,privateUpdateState,
-                        { if(privateUpdateState.busy) privateUpdater.cancel();onBack() },::checkUpdates,
-                        { privateUpdater.download() },::installUpdate,{ privateUpdater.cancel() },
-                        { privateUpdater.logout() },{ openUpdateBrowser(UpdateDestination.URL) },
+                        { onBack() },::checkUpdates,
+                        { installPermissionRequestedAt=0;privateUpdater.download() },::installUpdate,{ installPermissionRequestedAt=0;privateUpdater.cancel() },
+                        { installPermissionRequestedAt=0;privateUpdater.logout() },{ openUpdateBrowser(UpdateDestination.URL) },
                         { openUpdateBrowser("https://github.com/h516df/walkpaint#隐私与许可") }) },
                     mapContent = {
                         androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
@@ -1374,6 +1386,7 @@ class MainActivity : ComponentActivity() {
         catch(_:android.content.ActivityNotFoundException) { toast("没有可用分享应用，可复制报告") }
     }
     private fun checkUpdates() {
+        installPermissionRequestedAt=0
         val connectivity=getSystemService(android.net.ConnectivityManager::class.java)
         val capabilities=connectivity.getNetworkCapabilities(connectivity.activeNetwork)
         val available=capabilities?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)==true &&
@@ -1385,20 +1398,31 @@ class MainActivity : ComponentActivity() {
         try { startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)) }
         catch(_:android.content.ActivityNotFoundException) { privateUpdater.notice(UpdateDestination.NO_BROWSER) }
     }
-    private fun installUpdate() {
-        privateUpdater.prepareInstall { file ->
-            try {
-                if(!packageManager.canRequestPackageInstalls()) {
-                    privateUpdater.notice("请允许足迹涂色安装更新，返回后再点击安装；拒绝不会影响原版本")
-                    startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,Uri.parse("package:$packageName")))
-                } else {
-                    val uri=androidx.core.content.FileProvider.getUriForFile(this,"$packageName.updates",file)
-                    startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri,"application/vnd.android.package-archive")
-                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
-                    privateUpdater.notice("请在系统窗口确认覆盖安装；取消后仍可使用原版本")
-                }
-            } catch(_:Exception) { privateUpdater.notice("暂时无法打开系统安装，请重新下载后重试") }
+    private fun installUpdate() {installPermissionRequestedAt=0;privateUpdater.prepareInstall()}
+    private fun continueInstallAfterPermission() {
+        if(!UpdateInstallContinuation.allowed(installPermissionRequestedAt,SystemClock.elapsedRealtime())) {
+            installPermissionRequestedAt=0;return
         }
+        if(!UpdateInstallContinuation.ready(installPermissionRequestedAt,SystemClock.elapsedRealtime(),activityResumed,
+            packageManager.canRequestPackageInstalls(),privateUpdateState.busy,privateUpdateState.ready!=null)) return
+        installPermissionRequestedAt=0
+        privateUpdater.prepareInstall() // Recheck the exact file after returning from Settings.
+    }
+    private fun deliverVerifiedInstall() {
+        installPermissionRequestedAt=0 // Clear before the synchronous consumed-state notification.
+        val file=privateUpdater.takeVerifiedInstall() ?: return
+        try {
+            if(!packageManager.canRequestPackageInstalls()) {
+                installPermissionRequestedAt=SystemClock.elapsedRealtime()
+                privateUpdater.notice("请允许足迹涂色安装更新；返回后会继续，仍需在系统窗口确认。拒绝不影响原版本")
+                updateInstallPermission.launch(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,Uri.parse("package:$packageName")))
+            } else {
+                val uri=androidx.core.content.FileProvider.getUriForFile(this,"$packageName.updates",file)
+                startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri,"application/vnd.android.package-archive")
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                privateUpdater.notice("请在系统窗口确认覆盖安装；取消后仍可使用原版本")
+            }
+        } catch(_:Exception) {installPermissionRequestedAt=0;privateUpdater.notice("暂时无法打开系统安装，请返回后再次点击安装")}
     }
 
     private fun openAppSettings() {
@@ -1697,6 +1721,7 @@ class MainActivity : ComponentActivity() {
         outState.putBoolean("pendingBackgroundSettings",pendingBackgroundSettings)
         outState.putBoolean("backgroundDeferred",backgroundDeferred)
         outState.putBoolean("confirmEnable",confirmEnable)
+        outState.putLong("updateInstallPermissionAt",installPermissionRequestedAt)
         outState.putBoolean("showBackgroundPrompt",showBackgroundPrompt)
         outState.putBoolean("showFineSettings",showFineSettings)
         super.onSaveInstanceState(outState)
@@ -1705,6 +1730,8 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume();GrowthSession.resume(this)
         activityResumed=true;syncHeadingLifecycle()
+        if(privateUpdateState.installVerified) deliverVerifiedInstall()
+        else if(installPermissionRequestedAt>0) continueInstallAfterPermission()
         mainHandler.removeCallbacks(refreshTask)
         mainHandler.post(refreshTask)
         updateUi()
@@ -1726,7 +1753,7 @@ class MainActivity : ComponentActivity() {
     }
     override fun onDestroy() {
         landmarkExecutor.shutdown()
-        privateUpdater.close()
+        privateUpdater.unbind(updateListener)
         headingSensor.stop()
         roadDownload?.cancel()
         mainHandler.removeCallbacksAndMessages(null)
