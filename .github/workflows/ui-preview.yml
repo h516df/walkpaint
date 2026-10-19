@@ -58,17 +58,35 @@ jobs:
       - name: Native UI acceptance on dedicated emulator
         timeout-minutes: 20
         run: |
-          echo 'Software-only emulator: no KVM permission changes'
+          # One explicitly approved ephemeral runner only; retries require fresh authorization.
+          test "${{ github.run_number }}" = 5
+          test "${{ github.run_attempt }}" = 1
+          command -v setfacl
+          getfacl -p /dev/kvm > "$RUNNER_TEMP/walkpaint-kvm.acl"
+          cleanup() {
+            if [ -n "${emulator_pid:-}" ]; then kill "$emulator_pid" || true; fi
+            sudo setfacl --restore="$RUNNER_TEMP/walkpaint-kvm.acl"
+          }
+          trap cleanup EXIT
+          sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+          test -r /dev/kvm && test -w /dev/kvm
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/walkpaint-avd"
+          export ANDROID_USER_HOME="$RUNNER_TEMP/walkpaint-android"
+          mkdir -p "$ANDROID_AVD_HOME" "$ANDROID_USER_HOME"
           if [ "${{ contains(github.event.head_commit.message, '[native-only]') }}" = true ]; then
             echo '51daba939f1407a37cff6b17c3e0dd8d4efb9692030924f354e23eeec0e9c8b3  preview-artifacts/walkpaint-ui-preview.apk' | sha256sum --check
           fi
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'emulator' 'system-images;android-29;default;x86_64'
-          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --name WalkPaint_UI_Preview_CI --package 'system-images;android-29;default;x86_64' --device pixel_6
-          "$ANDROID_HOME/emulator/emulator" -avd WalkPaint_UI_Preview_CI -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel off -cores 1 -memory 2048 -port 5562 > emulator.log 2>&1 &
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'emulator' 'system-images;android-36;google_apis;x86_64'
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --name WalkPaint_UI_Preview_CI --package 'system-images;android-36;google_apis;x86_64' --device pixel_6
+          "$ANDROID_HOME/emulator/emulator" -avd WalkPaint_UI_Preview_CI -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel on -cores 2 -memory 4096 -port 5562 > emulator.log 2>&1 &
           emulator_pid=$!
-          trap 'kill "$emulator_pid" || true' EXIT
           export PATH="$ANDROID_HOME/platform-tools:$PATH"
-          timeout 300 adb -s emulator-5562 wait-for-device
+          for attempt in $(seq 1 60); do
+            kill -0 "$emulator_pid" || { cat emulator.log; exit 1; }
+            if adb devices | grep -q 'emulator-5562.*device'; then break; fi
+            sleep 3
+          done
+          timeout 30 adb -s emulator-5562 wait-for-device
           for attempt in $(seq 1 120); do
             if [ "$(adb -s emulator-5562 shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then break; fi
             sleep 3

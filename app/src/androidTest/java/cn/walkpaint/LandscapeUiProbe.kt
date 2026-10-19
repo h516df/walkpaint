@@ -17,7 +17,7 @@ internal object LandscapeUiProbe {
         val originalMode=i.targetContext.getSharedPreferences("ui_appearance",0).getInt("mode",0)
         UiEntry.main(i)
         fun nodes():List<AccessibilityNodeInfo> {
-            i.uiAutomation.clearCache()
+            if (android.os.Build.VERSION.SDK_INT >= 34) i.uiAutomation.clearCache()
             val all=mutableListOf<AccessibilityNodeInfo>()
             fun visit(node:AccessibilityNodeInfo?) {
                 if(node==null)return
