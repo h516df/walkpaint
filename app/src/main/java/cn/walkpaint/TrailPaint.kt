@@ -74,10 +74,9 @@ internal object TrailPaint {
     /** The ramp over which the veil comes back outside that band, so there is no hard edge. */
     const val FEATHER_M = 5.0
     /**
-     * The veil over ground not yet walked. Opaque black on purpose: the person asked for unknown
-     * ground to be genuinely unknown, and a veil that lets the road network show through is not fog.
+     * Default soft veil keeps geographical context visible. Exploration geometry is unchanged.
      */
-    const val FOG_COLOR = 0xFF000000.toInt()
+    const val FOG_COLOR = FogAppearance.DEFAULT
     /** How strongly cleared ground takes the person's own colour. */
     const val TINT_ALPHA = 84
     /**
@@ -188,6 +187,7 @@ internal class TrailPainter {
     /** The buffer being drawn into next, so the map can keep reading the one it was handed. */
     private var scratch: Bitmap? = null
     private var colour = 0
+    private var veilColor=TrailPaint.FOG_COLOR
     private var paintedPaths:List<List<TrackPoint>>?=null
 
     private val fog = Paint().apply {
@@ -233,23 +233,25 @@ internal class TrailPainter {
     fun frame(): PaintFrame? = frame
 
     fun update(paths: List<List<TrackPoint>>, color: Int, anchor: TrackPoint? = null,
-               viewport: ViewBounds? = null): Bitmap? {
+               viewport: ViewBounds? = null, fogColor:Int=TrailPaint.FOG_COLOR): Bitmap? {
+        val styleChanged=veilColor!=fogColor
+        veilColor=fogColor;fog.color=fogColor
         val walked = paths.any { it.isNotEmpty() }
         val current = frame
         // The frame follows the map, so a pan or a zoom is what moves it; the person's own position
         // only matters before the map has reported a projection at all.
         val frameMoved = current == null || viewportMoved(current, viewport) ||
             (viewport == null && anchor != null && !current.contains(anchor.lat, anchor.lon))
-        if(!frameMoved && bitmap!=null && paintedPaths==paths && colour==color) {
+        if(!frameMoved && bitmap!=null && paintedPaths==paths && colour==color && !styleChanged) {
             lastUpdateRebuilt=false
             return bitmap
         }
         colour=color
         // Someone who has not walked anywhere yet still has unknown ground in front of them, so the
-        // veil is drawn all black rather than not drawn at all. Skipping it entirely is what showed
+        // veil remains visually distinct rather than disappearing entirely. Skipping it entirely is what showed
         // a brand-new person the whole basemap on the first screen. The skip also requires that the
         // image does not currently show a corridor: with no paths, an image that has one is wrong.
-        if (!walked && !frameMoved && bitmap != null && !paintedCorridor) return bitmap
+        if (!walked && !frameMoved && bitmap != null && !paintedCorridor && !styleChanged) return bitmap
         val next = if (!frameMoved && current != null) current
             else TrailPaint.frameFor(viewport, paths.flatten(), anchor) ?: return bitmap
         frame = next
@@ -378,11 +380,12 @@ internal class TrailPainter {
         // feather, which is what used to inflate the reveal on wide frames.
         val core = (TrailPaint.CORRIDOR_M * perMetre).toFloat()
         val feather = (TrailPaint.FEATHER_M * perMetre).toFloat().coerceAtLeast(0.5f)
-        val veilAlpha = (TrailPaint.FOG_COLOR ushr 24).toFloat()
-        paint.color = TrailPaint.FOG_COLOR or (0xFF shl 24)
+        paint.color = veilColor or (0xFF shl 24)
         ringsFor(feather).forEach { ring ->
             paint.strokeWidth = core + 2f * feather * ring.reach
-            paint.alpha = (veilAlpha * ring.alpha).toInt().coerceIn(1, 255)
+            // Keep the feather continuous with the corridor tint even for a light veil.
+            // A zero-alpha inner ring would create a brighter halo than the explored centre.
+            paint.alpha = FogAppearance.featherAlpha(veilColor,ring.alpha,TrailPaint.TINT_ALPHA)
             for (segment in segments) {
                 drawSegment(canvas, segment)
             }

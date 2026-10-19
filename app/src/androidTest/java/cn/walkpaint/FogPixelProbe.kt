@@ -11,8 +11,8 @@ import android.graphics.Bitmap
  * piles up on the second pass would all pass those tests. These assertions read the rendered
  * bitmap and look at the pixels the person would actually see.
  *
- * v0.39 restated the contract: unknown ground is opaque black, the cleared corridor ramps back to
- * it over a narrow band, and the frame's own border is opaque — the border must never be visible,
+ * The readable-fog contract: unknown ground keeps a themed translucent veil, the cleared corridor ramps back to
+ * it over a narrow band, and the frame's own border has the same veil — the border must never be visible,
  * which is now achieved by always covering the view rather than by fading out.
  */
 internal object FogPixelProbe {
@@ -28,6 +28,10 @@ internal object FogPixelProbe {
 
         fun alpha(colour: Int): Int = colour ushr 24
         fun rgb(colour: Int): Int = colour and 0x00FFFFFF
+        val veilAlpha=alpha(TrailPaint.FOG_COLOR)
+        fun isVeil(pixel:Int):Boolean = listOf(0,8,16,24).all {shift ->
+            kotlin.math.abs((pixel ushr shift and 255)-(TrailPaint.FOG_COLOR ushr shift and 255))<=1
+        }
 
         fun point(north: Double, east: Double): TrackPoint = TrackPoint(
             BASE_LAT + north / 111194.9,
@@ -45,7 +49,7 @@ internal object FogPixelProbe {
         val midX = frame.pixelX(BASE_LON).toInt().coerceIn(0, frame.widthPx - 1)
 
         // 1. The walked corridor keeps only the person's own tint, and ground away from it is
-        //    veiled at full strength in black — the map underneath must not show through.
+        //    veiled at the selected theme strength while geographical context remains visible.
         val centre = bitmap.getPixel(midX, midY)
         val initialRevision=painter.revision
         val unchangedImage=painter.update(listOf(street),PIGMENT,null,view)
@@ -58,30 +62,30 @@ internal object FogPixelProbe {
         val offX = (frame.widthPx * 0.30).toInt().coerceIn(0, frame.widthPx - 1)
         val offY = (frame.heightPx * 0.30).toInt().coerceIn(0, frame.heightPx - 1)
         val unknown = bitmap.getPixel(offX, offY)
-        check(alpha(unknown) == 0xFF, "ground nobody walked is not fully veiled: alpha=${alpha(unknown)}")
-        check(rgb(unknown) == 0, "the veil is not black: ${Integer.toHexString(unknown)}")
+        check(isVeil(unknown), "unknown ground lost the selected themed veil")
+        check(veilAlpha in 1..200, "default fog hides all geographical context")
 
         // 2. Outside the painted band the veil must come back to full strength over a narrow ramp:
-        //    narrow, because the person asked for unknown ground to be unreadable, but a ramp all
+        //    narrow, because the exploration radius must remain unchanged, but a ramp all
         //    the same, because a hard cut is what a stair-stepped edge looks like on a phone.
         val outward = (0..40).map { step ->
             alpha(bitmap.getPixel(minOf(frame.widthPx - 1, midX + step * 3), midY))
         }
-        check(outward.last() == 0xFF, "the veil never comes back to full strength: $outward")
-        val opaqueAt = outward.indexOfFirst { it == 0xFF }
+        check(outward.last() == veilAlpha, "the veil never comes back to full strength: $outward")
+        val opaqueAt = outward.indexOfFirst { it == veilAlpha }
         check(opaqueAt in 1..30, "the corridor edge is not a narrow ramp (opaque at sample $opaqueAt): $outward")
         check(outward.take(opaqueAt + 1).zipWithNext().all { (a, b) -> b >= a },
             "the veil does not come back steadily outside the paint: $outward")
 
-        // 3. The frame border is opaque on every side. It is not faded any more: the frame is wider
+        // 3. The frame border keeps the theme strength on every side. It is not faded any more: the frame is wider
         //    than the view, so its border must simply never be on screen, and a translucent border
         //    at the wrong origin was what produced a visible rectangular seam when panning.
         val edgeY = frame.heightPx / 2
         val edgeX = frame.widthPx / 2
-        check(alpha(bitmap.getPixel(0, edgeY)) == 0xFF, "the left frame border is transparent")
-        check(alpha(bitmap.getPixel(frame.widthPx - 1, edgeY)) == 0xFF, "the right frame border is transparent")
-        check(alpha(bitmap.getPixel(edgeX, 0)) == 0xFF, "the top frame border is transparent")
-        check(alpha(bitmap.getPixel(edgeX, frame.heightPx - 1)) == 0xFF, "the bottom frame border is transparent")
+        check(alpha(bitmap.getPixel(0, edgeY)) == veilAlpha, "the left frame border is transparent")
+        check(alpha(bitmap.getPixel(frame.widthPx - 1, edgeY)) == veilAlpha, "the right frame border is transparent")
+        check(alpha(bitmap.getPixel(edgeX, 0)) == veilAlpha, "the top frame border is transparent")
+        check(alpha(bitmap.getPixel(edgeX, frame.heightPx - 1)) == veilAlpha, "the bottom frame border is transparent")
 
         // 4. Before the map reports a view the frame is drawn around the person; it must be wide
         //    enough that its border cannot fall inside any view the app accepts.
@@ -130,13 +134,15 @@ internal object FogPixelProbe {
         var worstWhere = ""
         before.indices.forEach { index ->
             val was = before[index]
-            if (was > 0xB0 - 8) return@forEach
+            if (was >= veilAlpha - 8) return@forEach
             val x = index * 2
             val pixel = crossed.getPixel(x, rowY)
-            // Being painted over is not being veiled again. The veil is pure black at every
-            // strength; the person's colour never is.
-            val isVeil = rgb(pixel) == 0
-            val increase = if (isVeil) after[index] - was else 0
+            // Tint and veil are now both coloured; compare the chosen veil hue, allowing
+            // premultiplied-alpha rounding at a faint feather edge.
+            val veilHue = listOf(0,8,16).all { shift ->
+                kotlin.math.abs((pixel ushr shift and 255)-(TrailPaint.FOG_COLOR ushr shift and 255))<=8
+            }
+            val increase = if (veilHue) after[index] - was else 0
             if (increase > worstRevelled) {
                 worstRevelled = increase
                 worstWhere = "x=$x was=$was now=${after[index]} colour=${Integer.toHexString(pixel)}"
@@ -166,15 +172,15 @@ internal object FogPixelProbe {
         val startup = startupPainter.update(listOf(street), PIGMENT, street.first(), null)!!
         val startupFrame = startupPainter.frame()!!
         check(!TrailPaint.corridorVisible(startupFrame), "startup frame unexpectedly resolves a 100m corridor")
-        check(startup.getPixel(startupFrame.pixelX(BASE_LON).toInt(), startupFrame.pixelY(BASE_LAT).toInt()) == 0xFF000000.toInt(),
+        check(isVeil(startup.getPixel(startupFrame.pixelX(BASE_LON).toInt(), startupFrame.pixelY(BASE_LAT).toInt())),
             "subpixel startup corridor erased the unknown map")
         val wide = TrailPainter().update(listOf(street), PIGMENT, null, wideView)!!
-        check(wide.getPixel(wide.width / 2, wide.height / 2) == 0xFF000000.toInt(),
+        check(isVeil(wide.getPixel(wide.width / 2, wide.height / 2)),
             "wide viewport widened a subpixel corridor")
 
         // 10. An empty selection must not inherit the previous selection's cleared corridor.
         val empty = painter.update(emptyList(), PIGMENT, null, view)!!
-        check(empty.getPixel(midX, midY) == 0xFF000000.toInt(),
+        check(isVeil(empty.getPixel(midX, midY)),
             "empty paths kept a previously explored corridor")
 
         // A stored accepted observation reveals only its footprint, without a fabricated journey.
@@ -185,17 +191,24 @@ internal object FogPixelProbe {
             check(image!=null && area!=null,"isolated observation did not produce a covering frame")
             if(image!=null && area!=null) {
                 val pixel=image.getPixel(area.pixelX(BASE_LON).toInt(),area.pixelY(BASE_LAT).toInt())
-                check(alpha(pixel)<255 && rgb(pixel)!=0,"accepted first fix stayed hidden under black fog")
+                check(alpha(pixel)<veilAlpha && rgb(pixel)!=0,"accepted first fix stayed hidden under the veil")
                 for(bearing in 0..7) {
                     val angle=bearing*Math.PI/4
                     val x=area.pixelX(BASE_LON+35.0*kotlin.math.cos(angle)/(111195.0*kotlin.math.cos(Math.toRadians(BASE_LAT)))).toInt()
                     val y=area.pixelY(BASE_LAT+35.0*kotlin.math.sin(angle)/111195.0).toInt()
-                    check(alpha(image.getPixel(x,y))<200,"35m circle remained foggy at bearing $bearing")
+                    check(alpha(image.getPixel(x,y))<veilAlpha,"35m circle remained foggy at bearing $bearing")
                 }
                 val outsideX=area.pixelX(BASE_LON+75.0/(111195.0*kotlin.math.cos(Math.toRadians(BASE_LAT)))).toInt().coerceIn(0,image.width-1)
-                check(image.getPixel(outsideX,area.pixelY(BASE_LAT).toInt())==0xFF000000.toInt(),"first fix revealed ground outside its real radius")
+                check(isVeil(image.getPixel(outsideX,area.pixelY(BASE_LAT).toInt())),"first fix revealed ground outside its real radius")
             }
         }
+        val themed=TrailPainter()
+        themed.update(emptyList(),PIGMENT,null,view)
+        val revision=themed.revision
+        val dusk=themed.update(emptyList(),PIGMENT,null,view,FogAppearance.color(VisualSkin.DUSK))!!
+        check(themed.revision>revision && alpha(dusk.getPixel(0,0))==veilAlpha,"theme-only change did not repaint")
+        val restored=themed.update(emptyList(),PIGMENT,null,view)!!
+        check(isVeil(restored.getPixel(0,0)),"reused buffer compounded translucent veil")
         return if (failures.isEmpty()) "FOG_PIXEL_PROBE_PASS"
         else "FOG_PIXEL_PROBE_FAIL: " + failures.joinToString(" | ")
     }

@@ -34,6 +34,7 @@ class FootprintDatabase(private val context: Context) :
         private set
     @Volatile var lastFilterReason: String = "NONE"
         private set
+    internal val landmarks=LandmarkStore(File(context.filesDir,"exploration-landmarks.json"))
     @Volatile var revision: Long = 0
         private set
     private var cached: TrackState? = null
@@ -438,7 +439,9 @@ class FootprintDatabase(private val context: Context) :
         revision++
     }
 
-    @Synchronized private fun backupSnapshot():BackupSnapshot {
+    private fun backupSnapshot():BackupSnapshot {
+        val savedLandmarks=landmarks.snapshot()
+        return synchronized(this) {
         val state=snapshot()
         val roads=catalog().roads.associateBy {it.stableId}
         val groups=linkedMapOf<Pair<String,String>,MutableList<RoadSegment>>()
@@ -448,7 +451,8 @@ class FootprintDatabase(private val context: Context) :
             }
         }
         val packs=groups.flatMap {(name,items) -> items.chunked(2000).map {RoadPack(name.first,name.second,it)}}
-        return BackupSnapshot(state,packs)
+        BackupSnapshot(state,packs,savedLandmarks)
+        }
     }
     fun exportBackup():String {
         return java.io.StringWriter().also {exportBackup(it)}.toString()
@@ -461,6 +465,7 @@ class FootprintDatabase(private val context: Context) :
         require(text.length <= 80 * 1024 * 1024) { "备份文件过大" }
         val imported = TrackCodec.decode(text)
         val root = org.json.JSONObject(text)
+        val savedLandmarks=if(root.has("landmarks")) LandmarkCodec.decode(root.getJSONObject("landmarks")) else null
         val packs = root.optJSONArray("roadPacks")?.let { a ->
             require(root.getInt("roadBackupVersion") == 1 && a.length() <= 5000)
             (0 until a.length()).map { RoadPackCodec.decode(a.getJSONObject(it).toString()) }
@@ -480,7 +485,8 @@ class FootprintDatabase(private val context: Context) :
         } finally { db.endTransaction(); roadCatalog = null }
         cached = null
         revision++
-        return plan.result
+        val landmarksPending=if(savedLandmarks==null) false else try {landmarks.mergeMissing(savedLandmarks);false} catch(_:Exception) {true}
+        return plan.result.copy(landmarksPending=landmarksPending)
     }
 
     @Synchronized fun backupFiles(): List<File> =
