@@ -332,9 +332,9 @@ internal class AmapMapController(private val context: Context, private val onGes
      * [minZoom] is supplied only when the person explicitly asked to be located: it lifts a wide
      * camera to street level. Following a moving fix leaves the camera's own zoom alone.
      */
-    fun followCamera(fix: Location, bearing: Float, animate: Boolean, minZoom: Float? = null) {
-        if (!mapLoaded || initialFocusPending) return
-        val a=map ?: return
+    fun followCamera(fix: Location, bearing: Float, animate: Boolean, minZoom: Float? = null): Boolean {
+        if (!mapLoaded || initialFocusPending) return false
+        val a=map ?: return false
         zoomSteps.reset()
         val current=a.cameraPosition
         val zoom=when {
@@ -347,6 +347,7 @@ internal class AmapMapController(private val context: Context, private val onGes
             .zoom(zoom).build()
         val update=CameraUpdateFactory.newCameraPosition(target)
         if(animate) a.animateCamera(update,200,null) else a.moveCamera(update)
+        return true
     }
     fun cancelFollowingAnimation() {
         // A delayed first data render must not undo the person's manual camera choice.

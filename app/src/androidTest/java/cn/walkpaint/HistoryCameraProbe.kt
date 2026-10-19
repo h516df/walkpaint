@@ -79,23 +79,17 @@ internal object HistoryCameraProbe {
                 map.moveCamera(com.amap.api.maps.CameraUpdateFactory.scrollBy(180f,60f))
                 controller.zoomBy(-2)
             }
-            tap("定位当天")
+            tap("定位我")
             val locateDeadline=android.os.SystemClock.uptimeMillis()+15_000
             while(true) {
                 try {
             main {
                 val day=(field(activity,"selectedDay\$delegate") as State<*>).value as? String
-                check(day!=null) {"Day locate returned to live exploration"}
-                val state=(field(activity,"mapTrackState\$delegate") as State<*>).value as TrackState
-                val endpoint=state.realTracks.flatMap {it.points}.maxBy {it.time}
-                val controller=(field(activity,"amapController\$delegate") as Lazy<*>).value as AmapMapController
-                val target=(field(controller,"map") as AMap).cameraPosition
-                val expected=CoordinateConverter(i.targetContext).from(CoordinateConverter.CoordType.GPS)
-                    .coord(LatLng(endpoint.lat,endpoint.lon)).convert()
-                val error=kotlin.math.hypot((target.target.latitude-expected.latitude)*111194.9,
-                    (target.target.longitude-expected.longitude)*111194.9*kotlin.math.cos(Math.toRadians(expected.latitude)))
-                check(error<2 && kotlin.math.abs(target.zoom-17f)<.01f) {"Day locate did not return to the saved day endpoint: error=$error zoom=${target.zoom}"}
-                result.put("locate_keeps_day",true).put("locate_error_metres",error)
+                check(day==null) {"Locate did not leave historical exploration"}
+                val follow=field(activity,"follow") as MapFollowState
+                check(follow.mode==MapFollowState.Mode.FOLLOWING) {"Locate did not restore live following"}
+                result.put("locate_returns_to_live_follow",true)
+                // Real current-position/compass alignment is covered by follow and physical-device tests.
             }
                     break
                 } catch(e:IllegalStateException) {
@@ -104,6 +98,9 @@ internal object HistoryCameraProbe {
                 }
             }
             return "HISTORY_CAMERA_PASS: $result"
-        } finally { tap("返回全部探索",contains=true) }
+        } finally {
+            val stillHistory=main {(field(activity,"selectedDay\$delegate") as State<*>).value!=null}
+            if(stillHistory) tap("返回全部探索",contains=true)
+        }
     }
 }

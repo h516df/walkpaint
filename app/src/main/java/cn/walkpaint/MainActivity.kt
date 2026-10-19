@@ -136,14 +136,17 @@ class MainActivity : ComponentActivity() {
     private var showMapConsent by mutableStateOf(false)
     private val follow=MapFollowState()
     private var activityResumed=false
+    private val headingContinuity=HeadingContinuity()
     private var mapHeading=0f
+    private var mapViewReady by mutableStateOf(false)
     private var lastCameraPoint:TrackPoint?=null
     private var lastCameraBearing=0f
+    private val locateZoom=LocateZoomRequest()
     private val headingSensor by lazy { HeadingSensor(this,
         { @Suppress("DEPRECATION") windowManager.defaultDisplay.rotation },
-        { bearing -> mapHeading=bearing ?: 0f;syncFollowCamera() }) }
+        { bearing -> mapHeading=headingContinuity.resolve(bearing);syncFollowCamera() }) }
     private val amapController by lazy { AmapMapController(this,::pauseMapFollowing,
-        { refreshVeilForViewport(force=true) }, ::onMapCameraMoved, ::onMapCameraSettled) }
+        { mapViewReady=true;refreshVeilForViewport(force=true);syncFollowCamera(force=true) }, ::onMapCameraMoved, ::onMapCameraSettled) }
     private val amapSupported get() = AmapPlatform.supported(Build.SUPPORTED_ABIS.toList(), BuildConfig.ARM64_ONLY)
     private val amapActive get() = amapSupported && BuildConfig.AMAP_KEY.isNotBlank() && amapConsent
     private var showDiagnostics by mutableStateOf(false)
@@ -490,9 +493,8 @@ class MainActivity : ComponentActivity() {
                     roadAreaHint = roadAreaHint,
                     onShowAll = { clearDaySelection() },
                     onLocate = {
-                        val anchor=MapHistory.anchor(mapTrackState,selectedDay)
-                        if(anchor!=null) focusCoordinate(anchor.lat,anchor.lon,17.0)
-                        else { clearDaySelection(showExtent=false);centerUser() }
+                        clearDaySelection(showExtent=false)
+                        centerUser()
                     },
                     onZoom = { delta ->
                         pauseMapFollowing()
@@ -570,7 +572,17 @@ class MainActivity : ComponentActivity() {
                         { privateUpdater.download() },::installUpdate,{ privateUpdater.cancel() },
                         { privateUpdater.logout() },{ openUpdateBrowser(UpdateDestination.URL) },
                         { openUpdateBrowser("https://github.com/h516df/walkpaint#隐私与许可") }) },
-                    mapContent = { if (amapActive) AmapNativeView() else {
+                    mapContent = { if (amapActive) {
+                        androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+                            AmapNativeView()
+                            if(selectedDay==null && snapshot.realTracks.all {it.points.isEmpty()}) {
+                                InitialExplorationHint(mapViewReady,automatic=trackingEnabled,
+                                    hasFix=userFix?.let {follow.accepts(fixQuality(it))}==true,
+                                    onLocate={clearDaySelection(showExtent=false);centerUser()},
+                                    onStart={beginEnable()})
+                            }
+                        }
+                    } else {
                         androidx.compose.foundation.layout.Box(Modifier.fillMaxSize(),contentAlignment=androidx.compose.ui.Alignment.Center) {
                             Column(Modifier.padding(32.dp),horizontalAlignment=androidx.compose.ui.Alignment.CenterHorizontally) {
                                 Text("地图还没打开",color=MaterialTheme.colorScheme.onSurface,fontSize=24.sp)
@@ -948,6 +960,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun centerUser() {
+        locateZoom.request()
         if (!AmbientTracking.hasFineLocation(this)) {
             pendingCenter = true
             askLocation()
@@ -963,6 +976,7 @@ class MainActivity : ComponentActivity() {
             val savedPoint = snapshot.realTracks.lastOrNull()?.points?.lastOrNull()
             if (savedPoint != null) {
                 focusCoordinate(savedPoint.lat, savedPoint.lon, 16.0)
+                follow.locate();lastCameraPoint=null;syncHeadingLifecycle()
                 toast("暂时没有当前 GPS，已定位到最近足迹，正在继续寻找卫星信号")
             } else {
                 toast("正在获取当前定位，请检查系统 GPS 并到室外稍等")
@@ -1581,11 +1595,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun pauseMapFollowing() {
+        locateZoom.cancel()
         follow.gesture();amapController.cancelFollowingAnimation()
         syncHeadingLifecycle()
     }
 
     private fun syncFollowCamera(force:Boolean=false, streetZoom:Boolean=false) {
+        if(streetZoom) locateZoom.request()
         if(!follow.following) return
         val fix=userFix?.takeIf { follow.accepts(fixQuality(it)) } ?: return
         val point=TrackPoint(fix.latitude,fix.longitude,fix.elapsedRealtimeNanos/1_000_000L,fix.accuracy)
@@ -1594,11 +1610,12 @@ class MainActivity : ComponentActivity() {
             kotlin.math.abs(HeadingFilter.delta(lastCameraBearing,mapHeading))<1f) return
         val animate=Settings.Global.getFloat(contentResolver,Settings.Global.ANIMATOR_DURATION_SCALE,1f)>0f
         // Only an explicit "where am I" lifts a wide camera to street level.
-        val minZoom=if(streetZoom) StreetZoom else null
+        val minZoom=if(locateZoom.pending) StreetZoom else null
         if(amapActive) {
             if(amapController.view()==null) return
-            amapController.followCamera(fix,mapHeading,animate,minZoom)
-        }
+            if(!amapController.followCamera(fix,mapHeading,animate,minZoom)) return
+        } else return
+        locateZoom.delivered(true)
         lastCameraPoint=point;lastCameraBearing=mapHeading;firstMapCenter=false
     }
 
@@ -1623,6 +1640,7 @@ class MainActivity : ComponentActivity() {
             if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) view.onResume()
             onDispose {
                 lifecycle.removeObserver(observer)
+                mapViewReady=false
                 headingSensor.stop()
                 runCatching { controller.release(view) }
             }

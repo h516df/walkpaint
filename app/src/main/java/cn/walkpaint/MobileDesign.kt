@@ -122,7 +122,7 @@ internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolea
                 }
             }
             Surface(onClick=onLocate,color=skinPalette(LocalVisualSkin.current,false).brand,shape=RoundedCornerShape(14.dp),modifier=Modifier.size(48.dp)) {
-                Box(Modifier.semantics { contentDescription=if(day!=null) "定位当天" else "定位我" },contentAlignment=Alignment.Center) {
+                Box(Modifier.semantics { contentDescription="定位我" },contentAlignment=Alignment.Center) {
                     Icon(painterResource(R.drawable.ic_location),null,tint=Color.White,modifier=Modifier.size(22.dp))
                 }
             }
