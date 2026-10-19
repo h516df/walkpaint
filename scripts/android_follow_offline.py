@@ -35,7 +35,7 @@ def blue(name):
         if .1*h<y<.83*h:
             for x in range(int(.05*w),int(.95*w)):
                 r,g,b=row[x*channels:x*channels+3]
-                if abs(r-23)<=5 and abs(g-119)<=5 and abs(b-205)<=5:points.add((x,y))
+                if abs(r-48)<=5 and abs(g-139)<=5 and abs(b-211)<=5:points.add((x,y))
         previous=row
     groups=[]
     while points:
@@ -56,7 +56,10 @@ def privacy():
 changed=False
 try:
     shell('wm','size','810x1440');launch()
-    privacy();tap('撤回并用离线地图');changed=True;tap('地图',exact=True);time.sleep(3)
+    privacy();tap('撤回地图授权');changed=True;tap('地图',exact=True);time.sleep(2);shot('revoked-placeholder')
+    root=ui();assert any('地图还没打开' in n.attrib.get('text','') for n in root.iter('node')) and any('开启高德地图' in n.attrib.get('text','') for n in root.iter('node'))
+    checks['revoke_leaves_readable_recoverable_state']=True
+    tap('开启高德地图');tap('同意使用高德');changed=False;tap('地图',exact=True);time.sleep(3)
     shell('appops','set','2000','android:mock_location','allow');mock=True
     shell('cmd','location','providers','add-test-provider','gps','--requiresSatellite','--supportsSpeed','--supportsBearing');provider=True
     shell('cmd','location','providers','set-test-provider-enabled','gps','true')

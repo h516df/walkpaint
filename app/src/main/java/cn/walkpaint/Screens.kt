@@ -46,12 +46,13 @@ internal fun AppShell(
     onDemo: () -> Unit, onTrip: (Track) -> Unit, onExport: () -> Unit, onImport: () -> Unit,
     onBackgroundSettings: () -> Unit, onPowerSettings: () -> Unit, onRevoke: () -> Unit,
     onCopyDiagnostics: () -> Unit, internalBackupCount: Int, mapProviderLabel: String,
-    onChooseAmap: () -> Unit, onOnlineMap: () -> Unit, roadState: RoadState,
+    onChooseAmap: () -> Unit, roadState: RoadState,
     onRoadPack: () -> Unit, roadColor:Int, onRoadAppearance:()->Unit,
     appearanceMode:Int, onAppearanceMode:(Int)->Unit, onShowIntro:()->Unit,
     feedbackContent: @Composable (onBack:()->Unit)->Unit,
     updatesContent: @Composable (onBack:()->Unit)->Unit, mapContent: @Composable () -> Unit,
-    onBackupEntry:()->Unit={},onSkin:()->Unit={},onNotifications:()->Unit={},backupStatus:String?=null
+    onBackupEntry:()->Unit={},onSkin:()->Unit={},onNotifications:()->Unit={},backupStatus:String?=null,
+    replay: ReplayControls? = null
 ) {
     Box(Modifier.fillMaxSize().background(PageBackground)) {
         // Keep the SDK and GL surface alive across bottom-tab journeys. Only the controls/pages
@@ -68,7 +69,7 @@ internal fun AppShell(
             when(selectedTab) {
                 0 -> DesignMapOverlay(state,selectedDay,automatic,recordingTitle,recordingHealthy,mapNotice,
                     mapProviderLabel,onResolveTracking,onToggleTracking,onLocate,onShowAll,
-                    mapProviderLabel.contains("OpenFreeMap"),onZoom,{},regionContent={RegionExplorationCard(state,fix,placeName)})
+                    roadState.meters>0,onZoom,{},regionContent={RegionExplorationCard(state,fix,placeName)},replay=replay)
                 1 -> Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(bottom=76.dp)) {
                     DesignTripsPage(state,roadColor,onTrip,onExport,onSkin)
                 }
@@ -76,7 +77,7 @@ internal fun AppShell(
                     ProfilePage(state,appearanceMode,onAppearanceMode,onShowIntro,automatic,profileNotice,onResolveTracking,
                     onToggleTracking,onRevoke,onBackgroundSettings,onPowerSettings,onCopyDiagnostics,
                     roadState,roadAreaHint,onRoadPack,onExport,onImport,internalBackupCount,
-                    mapProviderLabel,onChooseAmap,onOnlineMap,roadColor,onRoadAppearance,feedbackContent,updatesContent,onBackupEntry,onSkin,onNotifications,backupStatus)
+                    mapProviderLabel,onChooseAmap,roadColor,onRoadAppearance,feedbackContent,updatesContent,onBackupEntry,onSkin,onNotifications,backupStatus)
                 }
             }
         }
@@ -532,7 +533,7 @@ private val ExploredRoadColor=androidx.compose.ui.graphics.Color(ExploredRoadArg
 private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(Int)->Unit,onShowIntro:()->Unit,automatic:Boolean,notice:String?,onResolve:()->Unit,
     onToggle:(Boolean)->Unit,onRevoke:()->Unit,onPermissions:()->Unit,onPower:()->Unit,onDiagnostics:()->Unit,
     roads:RoadState,areaHint:String,onRoadPack:()->Unit,onExport:()->Unit,onImport:()->Unit,backupCount:Int,
-    provider:String,onAmap:()->Unit,onOnline:()->Unit,roadColor:Int,onAppearance:()->Unit,
+    provider:String,onAmap:()->Unit,roadColor:Int,onAppearance:()->Unit,
     feedbackContent: @Composable (onBack:()->Unit)->Unit,
     updatesContent: @Composable (onBack:()->Unit)->Unit,onBackupEntry:()->Unit,onSkin:()->Unit,onNotifications:()->Unit,backupStatus:String?) {
     var page by rememberSaveable { mutableStateOf("我的") }

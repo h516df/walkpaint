@@ -18,7 +18,7 @@ internal enum class ProblemCode(val label:String, val hint:String, val critical:
     ROAD_DOWNLOAD_FAILED("地图数据下载失败","可稍后重试，或导入地图文件"),
     ROAD_IMPORT_FAILED("地图文件未导入","请检查文件格式，原道路与足迹保留"),
     BACKUP_FAILED("备份操作未完成","请检查目标文件和存储空间"),
-    MAP_UNAVAILABLE("地图暂不可用","可使用离线地图，记录仍独立保存");
+    MAP_UNAVAILABLE("地图暂不可用","底图未加载，记录仍独立保存");
 
     val problem get() = this !in setOf(RECORDING_STARTED,RECORDING_STOPPED,GPS_REGISTERED,RECOVERY)
     companion object {

@@ -11,7 +11,8 @@ import org.json.JSONObject
  * points are gone. The default map draws no line at all and lets the veil paint the walked ground,
  * so a long history cannot pile up as a braid of overlapping passes; this is only the route of the
  * one day someone asked to look at, with repeated ground collapsed by [TrailShape.dedupe].
- * MapLibre coordinates remain WGS84.
+ * Coordinates stay WGS84 here; the display-only conversion to GCJ-02 happens inside the AMap
+ * controller and never reaches this JSON or the database.
  */
 internal object TrackMapJson {
     fun encode(tracks: List<Track>): String =

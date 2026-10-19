@@ -71,7 +71,6 @@ android {
     testOptions { unitTests.isReturnDefaultValues = true }
 }
 dependencies {
-    implementation("org.maplibre.gl:android-sdk-opengl:13.5.2")
     // 2026 official AMap SDK; only initialized after separate user consent.
     implementation("com.amap.api:3dmap-location-search:11.3.100_loc11.3.000_sea9.8.1")
     implementation(platform("androidx.compose:compose-bom:2026.03.01"))
