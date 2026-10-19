@@ -1,7 +1,7 @@
 # Native landscape UI preview
 
 Base: `bfb27a1edf22caea7a874aebeebe3dd8f4a5a03d` (v0.63/code71).
-Status: native implementation and CI build/regressions passed; emulator acceptance is still pending. No device-rendering acceptance or release is claimed yet.
+Status: native implementation, CI build/regressions and supplemental rendering completed; exact-candidate API29 core interaction evidence is recorded alongside this document. Android16 acceptance is not passed.
 
 ## Scope
 
@@ -20,26 +20,24 @@ The public checkout has no AMap application key. AMap and real district-network 
 Do not overwrite a stable release, move an existing tag, or replace an existing asset. The existing official release guard remains intact.
 Official version defaults stay v0.63/code71 until a separately coordinated official release.
 
-## Required verification
+## Verification and limitations
 
-1. Run JVM and Python regressions, debug build, Android test build and lint.
-2. Install only on a dedicated test emulator; never clear a real user's application data.
-3. Run the instrumentation argument `landscapeProbe=true` on `cn.walkpaint.dev.test/cn.walkpaint.RoadAcceptanceInstrumentation`.
-4. Inspect the generated `landscape-*.png` native screenshots in normal and enlarged fonts, including a narrow viewport.
-5. Exercise repeated tabs, appearance/back, backup/back, revoke/cancel, journey explanation/dismiss, and exploration sheet/back.
-6. Record precise passed/failed/not-run stages, artifact SHA256, source commit and device limitations before publication.
+- CI source: `21a92b54496fe260868b953e62906a766b456156`, [run39216650812](https://github.com/h516df/walkpaint/actions/runs/39216650812).
+- APK SHA256: `e37c66fcc4cd198c4bb6415a293bcc5cf0b214645895f8ce2941f5ad011d0b62`.
+- Both candidate APKs have verified V2 signatures. The installed developer base.apk was hashed on the dedicated emulator and matched the candidate exactly.
+- Python: 23 + 23 regressions passed. Android: developer APK and test APK built, 431 JVM tests passed, lint zero errors (54 warnings and one informational finding). The CI build/package steps passed.
+- API29: dedicated AOSP x86_64 software emulator, synthetic/empty data, ordinary launcher and touch navigation. Exact-candidate results are recorded in `api29-acceptance.json`. No GPS, map consent, automatic recording, export or restore operation was authorized by the probe.
+- Local initial accessibility ACTION_CLICK probe did not navigate reliably. A coordinate touch on the semantic target successfully opened appearance settings; the diagnostic driver now uses touch injection and bounded state waits. This is a test-driver correction, not a business-navigation rewrite.
+- Supplemental JVM native Compose renders passed for light, dark and 320dp / 150% font. They are empty-state previews, not device interactions; enlarged-font/device and full dark-mode device flows are not claimed by the core API29 loop.
+- Android16/API36: emulator boot and APK installation succeeded, but instrumentation returned `Process crashed`. No crash stack was retained in that run; this does not establish whether the production app or instrumentation caused it. API36 acceptance is **not passed**. Its failed device step remains visible in CI and is explicitly disclosed in the prerelease.
+- The one separately approved ephemeral KVM ACL was restored on shell exit. The ACL-changing workflow code has since been removed; future tests do not inherit that permission.
+- Software emulation was slow (normal first frame about24 seconds) and MapLibre emitted `std::bad_alloc` renderer logs without an observed fatal process crash in the manual API29 core loop. Performance and full basemap operation are not accepted by this preview.
+- Physical phones, real AMap/district-network access, outdoor GPS and background recording were not verified. No formal signing key or AMap key was accessed. Official data/schema3 and stable releases remain unchanged.
 
-The new probe drives actual accessibility controls and takes native screenshots. It refuses the official package and an active recorder, does not consent to map services or grant GPS, and restores the original appearance mode.
+## Upstream compatibility
 
-## Current checks
+Read-only recheck before preview publication: main is `e6915b2df9b92e7be412f8c0847f6f2e930cbe30`; stable v0.64 was published while this UI task was in progress. It now has single-AMap rendering, explicit first-map consent and historical replay. PR104 proposes v0.65 with consolidated onboarding, per-day annotations/favorites/search and route postcards. This independently installed preview remains based on v0.63 and does not contain or replace those newer features. It is not the latest official app. PR103 integration/rebase and conflict resolution against those changes are outstanding and must be separately reviewed; no other PR was merged or overwritten.
 
-- Python regressions: 23 in `tests`, 23 in `scripts`, all passed locally and in GitHub Actions.
-- Static review: XML parses and `git diff --check` passes; no GPS/database/signing changes.
-- Android SDK terms approved by the requester; official SDK installed in the isolated cloud build environment.
-- JDK21 / Gradle9.1 / AGP9.0.1 developer debug APK, instrumentation APK, 431 JVM tests and lint passed locally and in [CI run39214455737](https://github.com/h516df/walkpaint/actions/runs/39214455737). Lint: zero errors; 54 warnings and one informational finding.
-- Accepted build candidate source: `f86b0e17468192f2ec771680052a7dfae5571427`.
-- Candidate APK SHA256: `51daba939f1407a37cff6b17c3e0dd8d4efb9692030924f354e23eeec0e9c8b3`. Package/version verified from APK metadata and signature verified; not yet accepted for publication.
-- Cloud API36 software emulator did not complete boot (system-server watchdog); no successful application interaction occurred. The GitHub API36 attempt stopped at inaccessible `/dev/kvm`; no KVM permissions were changed.
-- The API29 software-only CI attempt exited before Android launch because SDK tools and emulator resolved different AVD paths; no UI validation occurred. The next run explicitly shares AVD directories. A single ephemeral runner KVM ACL change was separately approved for API36 validation, limited to workflow run5 attempt1, with original ACL restoration on exit.
-- Native screenshots, visual review and interaction acceptance: pending.
-- Physical phone, full road basemap, AMap authorization and outdoor/background tracking: not verified by this preview task.
+## Publication
+
+A separate workflow verifies the source build/package steps, exact artifact digest and recorded API29 evidence before attempting a non-latest prerelease. It intentionally does not mislabel the failed API36 instrumentation as green. No stable update manifest is written, no existing tag/asset is overwritten, and a successful upload requires anonymous SHA256 read-back verification. Release availability is only claimed after that run succeeds.

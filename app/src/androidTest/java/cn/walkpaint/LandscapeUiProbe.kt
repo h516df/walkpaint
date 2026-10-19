@@ -3,6 +3,8 @@ package cn.walkpaint
 import android.accessibilityservice.AccessibilityService
 import android.app.Instrumentation
 import android.graphics.Bitmap
+import android.graphics.Rect
+import android.view.MotionEvent
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import java.io.File
@@ -30,7 +32,7 @@ internal object LandscapeUiProbe {
         fun find(label:String)=nodes().filter{it.text?.toString()==label || it.contentDescription?.toString()==label}
             .let{matches->matches.firstOrNull{it.isClickable} ?: matches.firstOrNull()}
         fun wait(label:String,scroll:Boolean=false):AccessibilityNodeInfo {
-            val until=SystemClock.elapsedRealtime()+25000
+            val until=SystemClock.elapsedRealtime()+60000
             while(SystemClock.elapsedRealtime()<until) {
                 find(label)?.let{return it}
                 if(scroll)nodes().firstOrNull{it.isScrollable}?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
@@ -41,8 +43,18 @@ internal object LandscapeUiProbe {
         fun tap(label:String,scroll:Boolean=false) {
             var node:AccessibilityNodeInfo?=wait(label,scroll)
             while(node!=null && !node.isClickable)node=node.parent
-            check(node?.performAction(AccessibilityNodeInfo.ACTION_CLICK)==true){"Click failed: $label"}
-            Thread.sleep(350)
+            val target=checkNotNull(node){"No clickable parent: $label"}
+            val bounds=Rect().also { target.getBoundsInScreen(it) }
+            check(!bounds.isEmpty){"Empty touch target: $label"}
+            // Drive the same touchscreen path as a person, using the semantic label only to locate it.
+            val time=SystemClock.uptimeMillis()
+            val down=MotionEvent.obtain(time,time,MotionEvent.ACTION_DOWN,bounds.exactCenterX(),bounds.exactCenterY(),0)
+            val up=MotionEvent.obtain(time,time+40,MotionEvent.ACTION_UP,bounds.exactCenterX(),bounds.exactCenterY(),0)
+            try {
+                check(i.uiAutomation.injectInputEvent(down,true)){"Touch down failed: $label"}
+                check(i.uiAutomation.injectInputEvent(up,true)){"Touch up failed: $label"}
+            } finally { down.recycle();up.recycle() }
+            Thread.sleep(500)
         }
         fun back(){check(i.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK));Thread.sleep(350)}
         fun shot(name:String) {

@@ -54,13 +54,15 @@ def main():
     if api('git/matching-refs/tags/' + tag):
         raise SystemExit('Tag already exists; inspect the existing release before retrying')
     latest = api('releases/latest')['id']
-    body = ('原生界面预览：山景行记卡、分组设置、原创徽章、自适应导航。\n\n'
+    body = ('基于v0.63的独立原生界面预览：山景行记卡、分组设置、原创徽章、自适应导航。\n\n'
+            '当前正式版已更新至v0.64；本预览不包含其历史回放、单高德引擎和新版首次地图授权，也不包含PR104的行记/明信片候选功能。它不是最新正式版。\n\n'
             '这是 cn.walkpaint.dev 独立开发调试包，与正式版并存，不覆盖正式版，也不读取正式版足迹。'
             '本次使用临时开发签名，不能承诺与其他开发包覆盖兼容。\n\n'
             '公开构建不含高德Key；高德地图与真实区县查询不可用。此包用于界面预览，不能代替完整正式版。'
+            'API29 模拟器已验证普通启动和核心界面交互。Android16/API36 的测试进程退出（Process crashed），尚未定位，不能视为Android16通过，也不能仅凭此断言主应用崩溃。'
             '实体手机、户外GPS与后台持续记录未在本次验收。\n\n'
             '源码：' + args.source_sha + '\n'
-            '界面验收与限制：docs/acceptance/ui-preview/README.md\n'
+            '界面验收与限制：https://github.com/h516df/walkpaint/pull/103\n'
             'APK SHA256：' + expected['walkpaint-ui-preview.apk'][1])
     api('git/refs', '--method', 'POST', '-f', 'ref=refs/tags/' + tag, '-f', 'sha=' + args.source_sha)
     created = api('releases', '--method', 'POST', '-f', 'tag_name=' + tag,

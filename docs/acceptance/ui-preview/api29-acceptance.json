@@ -1,0 +1,45 @@
+{
+  "source_sha": "21a92b54496fe260868b953e62906a766b456156",
+  "apk_sha256": "e37c66fcc4cd198c4bb6415a293bcc5cf0b214645895f8ce2941f5ad011d0b62",
+  "installed_apk_sha256": "e37c66fcc4cd198c4bb6415a293bcc5cf0b214645895f8ce2941f5ad011d0b62",
+  "package": "cn.walkpaint.dev",
+  "api_level": 29,
+  "device_serial": "emulator-5564",
+  "avd": "WalkPaint_UI_Preview_API29",
+  "cpu_acceleration": "off",
+  "display_size": "720x1600",
+  "font_scale_setting": null,
+  "core_interactions_passed": true,
+  "core_interactions": [
+    "Onboarding opt-out",
+    "Explore to My",
+    "My to Appearance (足迹颜色 visible)",
+    "Back to My",
+    "Profile scroll to Backup and Restore",
+    "Back to My",
+    "Bottom Footprints tab (calendar rendered)",
+    "Return to My"
+  ],
+  "api36_instrumentation": "failed_process_crashed",
+  "api29_crash_buffer_empty": true,
+  "apk_v2_signature_verified": true,
+  "screenshot_hashes": {
+    "onboarding.png": "c2683781d68f4367570198de5afbf53845299712628d6363e177ed3e641519fd",
+    "onboarding-optout.png": "8fa10847499c38021d57a25d2d2c2163f08df665c9eaa42cfdbd3159446f5039",
+    "explore-after-optout.png": "eba992e727bddda4f33036059fd45d44d9d912883b8241e58bb426e733c5a48e",
+    "profile.png": "239ba016110921659ccd06db6f6a39d35986841c98bee8dae15a57255594bc8d",
+    "appearance.png": "bfc5d94aef427fbc87985b9596bce579afc5104cc5ab08af763b5a06af9be7e1",
+    "backup.png": "80cd79cf265eb6612a44527f2b91835a96d1d82ca1e23668650a2275b7daa8b1",
+    "footprints.png": "0566920105f1dc87c966ed3f0d7215c6504c1fe2c3393163ae576f4dafac1eea",
+    "return-my.png": "32769890f86d6191da7acbf5bfb49ff9774d1405dbf11c1e4162d0399cd03e2c"
+  },
+  "limitations": [
+    "API29 software-emulator manual critical-loop acceptance only; API36 instrumentation failure remains unresolved.",
+    "No full automated acceptance or large-font run was performed on this candidate.",
+    "Normal first frame took approximately 24 seconds under software emulation; am start reported a launch wait timeout before the actual frame appeared.",
+    "One MapLibre renderer std::bad_alloc was logged during initial launch, without an observed fatal crash; it is not established as the cause of the separate API36 failure.",
+    "Location permission, network-map consent, automatic recording, backup export and backup restore were not exercised.",
+    "Only synthetic empty state on the dedicated task AVD was used."
+  ],
+  "completed_utc": "2026-10-19T08:08:43.808341+00:00"
+}
