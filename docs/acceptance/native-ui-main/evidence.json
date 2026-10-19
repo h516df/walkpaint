@@ -1,0 +1,149 @@
+{
+  "source_sha": "eec138168263dfdc08c3e4c4248fdaa84a7242d3",
+  "apk_sha256": "21735f94ddd9c4b2dea6790fe8d64c920d278e18db9386e4d18fe495f4bc7b94",
+  "installed_apk_sha256": "21735f94ddd9c4b2dea6790fe8d64c920d278e18db9386e4d18fe495f4bc7b94",
+  "package": "cn.walkpaint.dev",
+  "version_name": "0.64",
+  "version_code": 72,
+  "api_level": 29,
+  "avd": "WalkPaint_UI_Preview_API29",
+  "serial": "emulator-5564",
+  "acceleration": "software_only_no_KVM",
+  "scope": "Targeted native UI checks across explicitly identified integration candidates; not a full runtime regression suite.",
+  "final_light_system_bars_passed": true,
+  "final_dark_system_bars_passed": true,
+  "narrow_320dp_font_1_5_dock_passed_on_prior_candidate": true,
+  "narrow_more_settings_reachable_on_prior_candidate": true,
+  "crash_buffer_empty": true,
+  "crash_evidence": "final-crash.txt",
+  "app_fatal_exception_signal_or_anr_observed": false,
+  "candidate_checks": [
+    {
+      "source_sha": "bc86aedc2ddb9fb71fe26cd6ed8740744ce9c75d",
+      "apk_sha256": "ee8b7f1d85a911c4210429b836147504651e93b30030666845c5bb1e2a54c1f6",
+      "checks_passed": [
+        "Recording onboarding opt-out",
+        "Explore unsupported-device map explanation",
+        "My profile rendered",
+        "Appearance entry and return to My",
+        "Backup and Restore entry"
+      ],
+      "screenshots": {
+        "onboarding.png": {
+          "sha256": "be1ac6e70956a8b05b562cf0e3c5999d2d5bb0d4fc9d0f25106000659a4f5ce5",
+          "width_px": 720,
+          "height_px": 1600
+        },
+        "explore.png": {
+          "sha256": "2aa0d4bc914ca4a02be53e1a32e9d67f3618633631fd62a7ee097f2d2050274c",
+          "width_px": 720,
+          "height_px": 1600
+        },
+        "profile.png": {
+          "sha256": "bcf3fc9ed24d53104631b7137f64b48c8fcf265678526d721499be764f22df77",
+          "width_px": 720,
+          "height_px": 1600
+        },
+        "appearance.png": {
+          "sha256": "207f78e7f8f1e46482609d9f22eb9b8ddf76a1187bd3487bc66b27972d09cf4e",
+          "width_px": 720,
+          "height_px": 1600
+        },
+        "profile-bottom.png": {
+          "sha256": "a49d273d30c9d11d9aba8bf3593c5d757472cbc140e9ab7127c4d8c79a87a974",
+          "width_px": 720,
+          "height_px": 1600
+        },
+        "backup.png": {
+          "sha256": "e65efdfbb384693abf3d118f05a93f4eb42103eed18f1ce1b33d5c9a83ff7f4e",
+          "width_px": 720,
+          "height_px": 1600
+        }
+      }
+    },
+    {
+      "source_sha": "916adc7dbbc783070797317ac707f7cfcc2e324d",
+      "apk_sha256": "be9d81fc713fd772996df1de6cf9f07bb25a665f54bba200b78f8c4a64bab4eb",
+      "checks_passed": [
+        "Explore/My/Appearance theme-switch navigation",
+        "Light system-bar contrast",
+        "320dp wide / font scale 1.5 dock: all three labels and icons visible without overlap",
+        "More Settings row fully visible above dock after scrolling",
+        "More Settings entry rendered Privacy/Permissions, First-use Guide, About"
+      ],
+      "back_navigation": "Back key dispatched successfully after More Settings; destination not separately captured.",
+      "known_failure": "Dark system-bar backgrounds remained light; fixed and rechecked in final candidate.",
+      "screen_test_configuration": {
+        "width_px": 640,
+        "height_px": 1600,
+        "density_dpi": 320,
+        "font_scale": 1.5
+      },
+      "screenshots": {
+        "bars-explore-light.png": {
+          "sha256": "e9c86699e4b13f62f8232238e48744d4718eb24360606924e49ac1be8b23b3a0",
+          "width_px": 720,
+          "height_px": 1600
+        },
+        "bars-explore-dark.png": {
+          "sha256": "2c0c349b07a78d1c63b4aa6cb51726eb3dbec057db7a44114acbab589ea7cb5c",
+          "width_px": 720,
+          "height_px": 1600
+        },
+        "bars-narrow-font150-profile.png": {
+          "sha256": "0003a7c70680953712678840cd4f5f926061d73a5411321f3753e9436ae6cc45",
+          "width_px": 640,
+          "height_px": 1600
+        },
+        "bars-narrow-font150-more-row.png": {
+          "sha256": "8105c1e0546a9a5637e18a8b27c46bef1c5308acf5d211ab84ef1f6c6b7a3eed",
+          "width_px": 640,
+          "height_px": 1600
+        },
+        "bars-narrow-font150-more-settings.png": {
+          "sha256": "1c6cd5f07e5604b55054ebd5f9b2e0517a8ae8965312fdbba3f44c706c3d1f55",
+          "width_px": 640,
+          "height_px": 1600
+        }
+      }
+    },
+    {
+      "source_sha": "eec138168263dfdc08c3e4c4248fdaa84a7242d3",
+      "apk_sha256": "21735f94ddd9c4b2dea6790fe8d64c920d278e18db9386e4d18fe495f4bc7b94",
+      "checks_passed": [
+        "Same-signature installation update preserved onboarding opt-out",
+        "Explore/My/Appearance theme-switch navigation",
+        "Light Explore: dark icons on light status/navigation bars",
+        "Dark Explore: white icons on dark status/navigation bars"
+      ],
+      "screenshots": {
+        "legacy-bars-explore-light.png": {
+          "sha256": "9fb01d8da27f59fb16a632574b5400b6f96949d5ace230d3182ac22165a4878e",
+          "width_px": 720,
+          "height_px": 1600
+        },
+        "legacy-bars-explore-dark.png": {
+          "sha256": "718f546ba7163ad87c27ee4ffc6ee9125d29882f682f7236db2570d00ab56723",
+          "width_px": 720,
+          "height_px": 1600
+        }
+      },
+      "driver_exit_code": 0
+    }
+  ],
+  "first_map_consent_runtime": "not_exercised_on_unsupported_x86_64_emulator; developer build intentionally has no map key",
+  "first_map_consent_static": "MainActivity, app build config and manifest unchanged from main e6915b2df9b92e7be412f8c0847f6f2e930cbe30 to final source",
+  "environment_issue": "System UI ANR during boot and post-boot dex optimization held PackageManager lock for approximately 209 seconds; resolved before integration testing. See environment-delay-context.txt.",
+  "restored_environment": {
+    "display_size": "720x1600",
+    "font_scale": 1.0,
+    "appearance": "light"
+  },
+  "limitations": [
+    "API29 software-emulator evidence only; integrated-main API36 runtime not run.",
+    "Earlier core and narrow-layout checks were not rerun wholesale after the final system-bar-only patch; each candidate is attributed above.",
+    "No GPS, location permission, map-service consent, recording, real replay, backup export or restore was exercised.",
+    "Normal-font More Settings and Footprints tab were not separately rechecked in this final integration pass; scope was narrowed to theme bars and large-font More entry."
+  ],
+  "completed_utc": "2026-10-19T08:50:28.412870+00:00"
+}
