@@ -41,3 +41,9 @@ Read-only recheck before preview publication: main is `e6915b2df9b92e7be412f8c08
 ## Publication
 
 A separate workflow verifies the source build/package steps, exact artifact digest and recorded API29 evidence before attempting a non-latest prerelease. It intentionally does not mislabel the failed API36 instrumentation as green. No stable update manifest is written, no existing tag/asset is overwritten, and a successful upload requires anonymous SHA256 read-back verification. Release availability is only claimed after that run succeeds.
+
+### Observed delivery result
+
+[Publication run39220792080](https://github.com/h516df/walkpaint/actions/runs/39220792080) verified the evidence and downloaded APK checksum, then GitHub rejected creation of `refs/tags/ui-preview-21a92b54496f` with HTTP403 `Resource not accessible by integration`. No tag or prerelease was created. Stable `v0.64` release417021837 remains latest. No privilege expansion or alternate write route was attempted after that denial.
+
+The exact accepted APK is downloadable now in the [GitHub Actions artifact](https://github.com/h516df/walkpaint/actions/runs/39216650812/artifacts/12170471518); sign in to GitHub, download the ZIP, and use `walkpaint-ui-preview.apk` (not the `-test.apk`). Artifact retention currently ends2026-11-02. This is temporary GitHub delivery, not a permanent Release asset.
