@@ -378,7 +378,10 @@ class MainActivity : ComponentActivity() {
                 else if(pendingCenter) centerUser()
             } else {
                 RecordingDiagnostics.problem(this,ProblemCode.PERMISSION_DENIED)
-                if(pendingEnable) { pendingEnable=false; showFineSettings=true }
+                if(pendingEnable) {
+                    pendingEnable=false
+                    toast("定位尚未允许，记录未开启。需要时可在“我的”重新开启。")
+                }
                 else toast("需要允许精确定位，才能查看当前位置")
                 pendingCenter=false
             }
@@ -474,6 +477,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        currentTab=(savedInstanceState?.getInt("mobileTab",0) ?: 0).coerceIn(0,2)
         // Local-only snapshot: legacy authorization cleanup must be reachable before any network request.
         installPermissionRequestedAt=savedInstanceState?.getLong("updateInstallPermissionAt",0L) ?: 0L
         privateUpdater.bind(updateListener)
@@ -530,7 +534,7 @@ class MainActivity : ComponentActivity() {
                         if(amapActive) amapController.zoomBy(delta)
                     },
                     onToggleTracking = { requested ->
-                        if (requested) beginEnable()
+                        if (requested) beginEnable(deferBackground=true)
                         else {
                             pendingEnable=false;pendingSettingsEnable=false
                             AmbientTracking.stop(this)
@@ -707,26 +711,16 @@ class MainActivity : ComponentActivity() {
                         getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE).edit()
                             .putBoolean("amap_sdk_decision_seen", true).apply()
                     },
-                    title = { Text("是否使用高德地图？", fontWeight = FontWeight.Bold) },
+                    title = { Text("高德地图与隐私", fontWeight = FontWeight.Bold) },
                     text = { Column {
-                        Text("高德开放平台地图与搜索 SDK 由北京高德图强科技有限公司提供，用于地图展示和地名查询；" +
-                            "可能收集经纬度、IP/网络、GNSS、设备参数、系统和传感器信息。" +
-                            "足迹数据库仍保留本机；拒绝使用高德不影响自动记录。")
-                        TextButton(onClick = {
-                            startActivity(Intent(Intent.ACTION_VIEW,
-                                Uri.parse("https://lbs.amap.com/home/privacy/")))
-                        }) { Text("阅读高德隐私政策") }
+                        Text(AmapDisclosure.SUMMARY)
+                        Text("暂不使用地图也可以独立记录足迹。")
+                        TextButton(onClick = ::openAmapPrivacy) { Text("阅读高德隐私政策") }
                     } },
                     confirmButton = {
                         Button(onClick = {
-                            getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE).edit()
-                                .putBoolean("amap_sdk_consent", true)
-                                .putBoolean("amap_sdk_decision_seen", true).apply()
-                            amapConsent = true
-                            placeAnchor = null
-                            refreshPlaceName(userFix)
-                            showAmapConsent = false
-                        }) { Text("同意使用高德") }
+                            acceptAmap()
+                        }) { Text(if(amapConsent) "继续使用" else "同意并打开地图") }
                     },
                     dismissButton = {
                         TextButton(onClick = {
@@ -767,15 +761,25 @@ class MainActivity : ComponentActivity() {
                         Uri.parse("https://lbs.amap.com/home/privacy/"))) }
                 )
                 if (showIntro || confirmEnable) DesignOnboarding(
+                    mapConsentRequired = showIntro && amapSupported && BuildConfig.AMAP_KEY.isNotBlank() && !amapConsent,
+                    onPrivacy = ::openAmapPrivacy,
                     onEnable={
-                        showIntro=false;confirmEnable=false
+                        if(showIntro && amapSupported && BuildConfig.AMAP_KEY.isNotBlank() && !amapConsent) acceptAmap()
+                        showIntro=false;confirmEnable=false;showMapConsent=false
                         getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE).edit()
                             .putBoolean("mobile_intro_seen",true).putBoolean("auto_notice_v3_seen",true).apply()
-                        if(pendingEnable) continueEnable() else beginEnable()
+                        currentTab=0
+                        pendingCenter=true
+                        // A location foreground service can start with while-in-use permission.
+                        // Background access improves later recovery; it is not an entry gate.
+                        if(pendingEnable) {backgroundDeferred=true;continueEnable()}
+                        else beginEnable(deferBackground=true)
                     },
                     onSkip={
                         showIntro=false;confirmEnable=false;pendingEnable=false
-                        getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE).edit().putBoolean("mobile_intro_seen",true).apply()
+                        showAmapConsent=false;showMapConsent=false
+                        getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE).edit()
+                            .putBoolean("mobile_intro_seen",true).putBoolean("amap_sdk_decision_seen",true).apply()
                     })
                 if(showBackgroundPrompt) AlertDialog(
                     onDismissRequest={showBackgroundPrompt=false;pendingEnable=false},
@@ -938,9 +942,23 @@ class MainActivity : ComponentActivity() {
 
     private fun appSettingsIntent() = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:$packageName"))
 
-    private fun beginEnable() {
+    private fun openAmapPrivacy() {
+        runCatching { startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(AmapDisclosure.PRIVACY_URL))) }
+            .onFailure { toast("暂时无法打开浏览器，请稍后再试") }
+    }
+
+    private fun acceptAmap() {
+        getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE).edit()
+            .putBoolean("amap_sdk_consent",true).putBoolean("amap_sdk_decision_seen",true).apply()
+        amapConsent=true
+        showAmapConsent=false;showMapConsent=false
+        placeAnchor=null
+        refreshPlaceName(userFix)
+    }
+
+    private fun beginEnable(deferBackground: Boolean = false) {
         if(pendingEnable) return
-        pendingEnable=true;backgroundDeferred=false
+        pendingEnable=true;backgroundDeferred=deferBackground
         if(!AmbientTracking.hasFineLocation(this) &&
             !getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE).getBoolean("auto_notice_v3_seen",false)) {
             confirmEnable=true
@@ -966,18 +984,19 @@ class MainActivity : ComponentActivity() {
                 pendingEnable=false;pendingSettingsEnable=false
                 AmbientTracking.setEnabled(this,true)
                 AmbientTracking.start(this)
+                if(pendingCenter) centerUser()
                 updateUi()
             }
         }
     }
 
     private fun resolveTracking() {
-        if(!AmbientTracking.hasFineLocation(this)) beginEnable()
+        if(!AmbientTracking.enabled(this)) beginEnable(deferBackground=true)
+        else if(!AmbientTracking.hasFineLocation(this)) beginEnable(deferBackground=true)
         else if(!getSystemService(LocationManager::class.java).isProviderEnabled(LocationManager.GPS_PROVIDER))
             startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
         else if(recordingCode in setOf("SAVE_FAILED","REGISTER_FAILED","SERVICE_STOPPED")) openRecordingDiagnostics()
-        else if(!AmbientTracking.hasBackgroundLocation(this)) beginEnable()
-        else openRecordingDiagnostics()
+        else centerUser()
     }
 
     private fun openRecordingNotificationSettings() {
@@ -1716,6 +1735,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putInt("mobileTab",currentTab)
         outState.putBoolean("pendingEnable", pendingEnable)
         outState.putBoolean("pendingSettingsEnable", pendingSettingsEnable)
         outState.putBoolean("pendingBackgroundSettings",pendingBackgroundSettings)

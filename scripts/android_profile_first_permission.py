@@ -25,10 +25,12 @@ try:
         ET.SubElement(state,'boolean',{'name':name,'value':'false'})
     write_onboarding(ET.tostring(state,encoding='utf-8',xml_declaration=True))
     launch();tap('我的');assert not enabled()
-    toggle();assert '同意并继续' in labels();shot('first-recording-consent')
-    tap('暂不开启');assert not enabled() and not foreground()
-    toggle();tap('同意并继续');assert 'While using the app' in labels();shot('first-location-system')
-    tap("Don't allow",'不允许');tap('稍后');assert not enabled() and not foreground()
+    toggle();assert '同意并开始' in labels();shot('first-recording-consent')
+    tap('暂不开始');assert not enabled() and not foreground()
+    toggle();tap('同意并开始');assert 'While using the app' in labels();shot('first-location-system')
+    tap("Don't allow",'不允许')
+    assert '去设置' not in labels() and '去允许' not in labels()
+    tap('我的');assert not enabled() and not foreground()
     checks['first_consent_cancel_and_single_system_request']=True
     assert rows()==original_rows
     checks['first_permission_ui_changes_no_database_rows']=True

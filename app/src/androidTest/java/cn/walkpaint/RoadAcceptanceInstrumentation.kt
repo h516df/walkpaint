@@ -11,6 +11,8 @@ import java.util.UUID
 
 /** Isolated databases only. Never clears or replaces the installed footprint database. */
 class RoadAcceptanceInstrumentation : Instrumentation() {
+    private var journalProbe=false
+    private var journalRecreate=false
     private var administrativeProbe=false
     private var regionNetworkProbe=false
     private var recentsRecordingProbe=false
@@ -57,6 +59,11 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
         if(updateContinuityProbe) {
             try {result.putString("stream",UpdateContinuityProbe.run(this));finish(Activity.RESULT_OK,result)}
             catch(e:Throwable){result.putString("stream","UPDATE_CONTINUITY_FAIL: ${e.javaClass.simpleName}: ${e.message}");finish(Activity.RESULT_CANCELED,result)}
+            return
+        }
+        if(journalProbe) {
+            try {result.putString("stream",JournalJourneyProbe.run(this,journalRecreate));finish(Activity.RESULT_OK,result)}
+            catch(e:Throwable){result.putString("stream","JOURNAL_JOURNEY_FAIL: ${e.message}");finish(Activity.RESULT_CANCELED,result)}
             return
         }
         if(administrativeProbe || regionNetworkProbe || recentsRecordingProbe) {
@@ -463,6 +470,8 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
         finish(resultCode,result)
     }
     override fun onCreate(arguments:Bundle?) {
+        journalProbe=arguments?.getString("journalProbe")=="true"
+        journalRecreate=arguments?.getString("journalRecreate")=="true"
         automaticExportProbe=arguments?.getString("automaticExportProbe")=="true"
         fieldReportProbe=arguments?.getString("fieldReportProbe")=="true"
         updateContinuityProbe=arguments?.getString("updateContinuityProbe")=="true"

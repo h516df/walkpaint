@@ -1,0 +1,16 @@
+Integration attempt with original harness, source 619577d:
+JOURNAL_STAGE automation_connected
+JOURNAL_STAGE fixture_ready
+JOURNAL_STAGE day_opened
+JOURNAL_STAGE memo_persisted
+JOURNAL_STAGE postcard_preview
+JOURNAL_JOURNEY_FAIL: Missing 图片已保存: [Downloads, Files in Downloads, Downloads, walkpaint-card-3bf42190-edf4-4ee6-9c98-3a88ed22ae92.png, 50.18 kB, 9:53 AM, walkpaint-card-dff19a01-57ad-4743-a64f-cd78a58e5e85.png, SAVE]
+
+Acknowledged-click retry, source fa2d6cc:
+JOURNAL_STAGE automation_connected
+JOURNAL_STAGE fixture_ready
+JOURNAL_STAGE day_opened
+JOURNAL_STAGE memo_persisted
+JOURNAL_STAGE postcard_preview
+JOURNAL_STAGE picker_recreation_verified
+JOURNAL_JOURNEY_FAIL: Unexpected document name: walkpaint-card-a132f663-6830-4eb1-a52f-777e0b92dae8 (1).png

@@ -34,10 +34,11 @@ class FootprintDatabase(private val context: Context) :
         private set
     @Volatile var lastFilterReason: String = "NONE"
         private set
-    internal val landmarks=LandmarkStore(File(context.filesDir,"exploration-landmarks.json"))
     @Volatile var revision: Long = 0
         private set
     private var cached: TrackState? = null
+    internal val landmarks=LandmarkStore(File(context.filesDir,"exploration-landmarks.json"))
+    internal val journal=FootprintJournal(File(context.filesDir,"footprint-journal.json"))
     @Volatile internal var backupCountCached=0
         private set
     @Synchronized internal fun refreshBackupCount():Int {
@@ -440,18 +441,19 @@ class FootprintDatabase(private val context: Context) :
     }
 
     private fun backupSnapshot():BackupSnapshot {
+        val memos=journal.snapshot()
         val savedLandmarks=landmarks.snapshot()
         return synchronized(this) {
-        val state=snapshot()
-        val roads=catalog().roads.associateBy {it.stableId}
-        val groups=linkedMapOf<Pair<String,String>,MutableList<RoadSegment>>()
-        readableDatabase.rawQuery("SELECT id,name,source FROM roads ORDER BY id",null).use {c ->
-            while(c.moveToNext()) roads[c.getString(0)]?.let {road ->
-                groups.getOrPut(c.getString(1) to c.getString(2)) {mutableListOf()}.add(road)
+            val state=snapshot()
+            val roads=catalog().roads.associateBy {it.stableId}
+            val groups=linkedMapOf<Pair<String,String>,MutableList<RoadSegment>>()
+            readableDatabase.rawQuery("SELECT id,name,source FROM roads ORDER BY id",null).use {c ->
+                while(c.moveToNext()) roads[c.getString(0)]?.let {road ->
+                    groups.getOrPut(c.getString(1) to c.getString(2)) {mutableListOf()}.add(road)
+                }
             }
-        }
-        val packs=groups.flatMap {(name,items) -> items.chunked(2000).map {RoadPack(name.first,name.second,it)}}
-        BackupSnapshot(state,packs,savedLandmarks)
+            val packs=groups.flatMap {(name,items) -> items.chunked(2000).map {RoadPack(name.first,name.second,it)}}
+            BackupSnapshot(state=state,packs=packs,journal=memos,landmarks=savedLandmarks)
         }
     }
     fun exportBackup():String {
@@ -465,6 +467,8 @@ class FootprintDatabase(private val context: Context) :
         require(text.length <= 80 * 1024 * 1024) { "备份文件过大" }
         val imported = TrackCodec.decode(text)
         val root = org.json.JSONObject(text)
+        // Validate annotations before committing any imported GPS observations.
+        val memos=if(root.has("journal")) JournalCodec.decode(root.getJSONObject("journal")) else null
         val savedLandmarks=if(root.has("landmarks")) LandmarkCodec.decode(root.getJSONObject("landmarks")) else null
         val packs = root.optJSONArray("roadPacks")?.let { a ->
             require(root.getInt("roadBackupVersion") == 1 && a.length() <= 5000)
@@ -485,8 +489,9 @@ class FootprintDatabase(private val context: Context) :
         } finally { db.endTransaction(); roadCatalog = null }
         cached = null
         revision++
+        val journalPending=if(memos==null) false else try {journal.mergeMissing(memos);false} catch(_:Exception) {true}
         val landmarksPending=if(savedLandmarks==null) false else try {landmarks.mergeMissing(savedLandmarks);false} catch(_:Exception) {true}
-        return plan.result.copy(landmarksPending=landmarksPending)
+        return plan.result.copy(journalPending=journalPending,landmarksPending=landmarksPending)
     }
 
     @Synchronized fun backupFiles(): List<File> =

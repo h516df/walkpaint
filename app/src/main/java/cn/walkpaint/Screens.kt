@@ -72,7 +72,7 @@ internal fun AppShell(
         Box(body) {
             when(selectedTab) {
                 0 -> DesignMapOverlay(state,selectedDay,automatic,recordingTitle,recordingHealthy,mapNotice,
-                    mapProviderLabel,{onTab(2)},onToggleTracking,onLocate,onShowAll,
+                    mapProviderLabel,onResolveTracking,onToggleTracking,onLocate,onShowAll,
                     roadState.meters>0,onZoom,{},regionContent={RegionExplorationCard(state,fix,placeName)},
                     replay=replay,bottomControlsInset=dockHeight+32.dp)
                 1 -> Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(bottom=dockHeight+24.dp)) {
@@ -597,7 +597,7 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
                 } }
                 item { Section("地图与隐私") {
                     SettingRow("地图服务与隐私",provider,onAmap)
-                        Text("正式版使用高德地图，安装即有地图配置，无需注册开发者或填写密钥。有效定位后揭开周围 50 米范围，走动后连成已探索区域。原始足迹保存在本机，首次使用地图服务需同意其隐私说明。",color=Muted,fontSize=13.sp,lineHeight=20.sp)
+                        Text("默认使用高德地图。首次同意后即可使用，足迹保存在本机。",color=Muted,fontSize=13.sp,lineHeight=20.sp)
                 } }
             }
             "关于" -> item { Section("足迹涂色") {
