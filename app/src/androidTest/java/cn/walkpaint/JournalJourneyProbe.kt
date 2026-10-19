@@ -83,7 +83,7 @@ internal object JournalJourneyProbe {
         i.addMonitor(monitor)
         field.set(repo,fixture)
         try {
-            return MapJourneyFixture.withFixture(i,startupTimeoutSeconds=180,compact=true) {screen->
+            return MapJourneyFixture.withFixture(i,startupTimeoutSeconds=600,compact=true,freshTask=true) {screen->
                 activity=screen
                 stage("fixture_ready")
                 await("welcome or footprints"){find("暂不开始")!=null || find("足迹")!=null}

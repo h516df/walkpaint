@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit
 
 /** Bounded startup also works after singleTop returns from a system settings activity. */
 internal object UiEntry {
-    fun main(i:Instrumentation,timeoutSeconds:Long=20):MainActivity {
+    fun main(i:Instrumentation,timeoutSeconds:Long=20,freshTask:Boolean=false):MainActivity {
         val ready=CountDownLatch(1)
         var activity:MainActivity?=null
         val app=i.targetContext.applicationContext as Application
@@ -26,7 +26,7 @@ internal object UiEntry {
         try {
             i.runOnMainSync {
                 app.registerActivityLifecycleCallbacks(callback)
-                i.targetContext.startActivity(Intent(i.targetContext,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                i.targetContext.startActivity(Intent(i.targetContext,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or (if(freshTask)Intent.FLAG_ACTIVITY_CLEAR_TASK else 0)))
             }
             check(ready.await(timeoutSeconds,TimeUnit.SECONDS)) {"MainActivity did not resume within $timeoutSeconds seconds"}
             return activity!!
