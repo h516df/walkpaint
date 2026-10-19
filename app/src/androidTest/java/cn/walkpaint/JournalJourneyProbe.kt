@@ -101,9 +101,16 @@ internal object JournalJourneyProbe {
                 tap("制作路线明信片",scroll=true);wait("$day 的路线明信片预览");shot("card-paper")
                 tap("夜色");wait("$day 的路线明信片预览");shot("card-night")
                 stage("postcard_preview");tap("保存图片")
-                if(recreatePicker)i.runOnMainSync {screen.recreate()}
                 val name="walkpaint-card-${UUID.randomUUID()}.png"
                 setField(0,name)
+                if(recreatePicker) {
+                    var stopped=false
+                    await("document picker has backgrounded main") {
+                        i.runOnMainSync {stopped=screen.lifecycle.currentState==androidx.lifecycle.Lifecycle.State.CREATED}
+                        stopped
+                    }
+                    i.runOnMainSync {screen.recreate()}
+                }
                 fun saveAction():AccessibilityNodeInfo? {
                     var node=nodes().firstOrNull {it.viewIdResourceName?.endsWith("action_menu_select")==true || it.text?.toString()?.equals("save",true)==true || it.text?.toString()=="保存"}
                     while(node!=null && !node.isClickable)node=node.parent
