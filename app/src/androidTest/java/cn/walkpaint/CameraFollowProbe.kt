@@ -43,7 +43,9 @@ internal class CameraFollowProbe(private val test:Instrumentation) {
             main {
                 val field=AmapMapController::class.java.getDeclaredField("map").apply { isAccessible=true }
                 val candidate=field.get(controller) as? AMap
-                if(candidate?.projection!=null && controller!!.view()!!.width>0) map=candidate
+                val loaded=AmapMapController::class.java.getDeclaredField("mapLoaded").apply {isAccessible=true}.getBoolean(controller)
+                val initial=AmapMapController::class.java.getDeclaredField("initialFocusPending").apply {isAccessible=true}.getBoolean(controller)
+                if(loaded && !initial && candidate?.projection!=null && controller!!.view()!!.width>0) map=candidate
             }
             Thread.sleep(200)
         }
@@ -56,9 +58,28 @@ internal class CameraFollowProbe(private val test:Instrumentation) {
         try {
             var registered=false
             main {
-                val update=MainActivity::class.java.getDeclaredMethod("updatePosition",Location::class.java,Boolean::class.javaPrimitiveType).apply { isAccessible=true }
-                update.invoke(activity,fix,true)
+                val update=MainActivity::class.java.getDeclaredMethod("updatePosition",Location::class.java,Boolean::class.javaPrimitiveType,Boolean::class.javaPrimitiveType).apply { isAccessible=true }
+                update.invoke(activity,fix,true,false)
                 registered=sensor!!.listening
+                val loaded=AmapMapController::class.java.getDeclaredField("mapLoaded").apply {isAccessible=true}
+                val previous=loaded.getBoolean(controller)
+                val last=MainActivity::class.java.getDeclaredField("lastCameraPoint").apply {isAccessible=true}
+                val sync=MainActivity::class.java.getDeclaredMethod("syncFollowCamera",Boolean::class.javaPrimitiveType,Boolean::class.javaPrimitiveType).apply {isAccessible=true}
+                val follow=MainActivity::class.java.getDeclaredField("follow").apply {isAccessible=true}.get(activity) as MapFollowState
+                val visible=follow.visible
+                try {
+                    follow.visible=true;follow.locate();last.set(activity,null)
+                    loaded.setBoolean(controller,false)
+                    sync.invoke(activity,true,true)
+                    check(last.get(activity)==null) {"Unready camera request was acknowledged"}
+                    loaded.setBoolean(controller,true)
+                    follow.gesture();sync.invoke(activity,true,false)
+                    check(last.get(activity)==null) {"Ready retry overrode manual browsing"}
+                    follow.locate();follow.visible=false;sync.invoke(activity,true,false)
+                    check(last.get(activity)==null) {"Ready retry moved background map"}
+                    follow.visible=true;sync.invoke(activity,true,false)
+                    check(last.get(activity)!=null) {"Ready follow retry was not delivered"}
+                } finally { loaded.setBoolean(controller,previous);follow.visible=visible }
             }
             shell("input -d 0 keyevent KEYCODE_HOME");Thread.sleep(1500)
             main { check(!sensor!!.listening) { "background retained heading listener lifecycle=${activity.lifecycle.currentState} display=${activity.display?.displayId}" } }
