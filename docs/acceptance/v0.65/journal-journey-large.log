@@ -1,0 +1,9 @@
+JOURNAL_STAGE automation_connected
+JOURNAL_STAGE fixture_ready
+JOURNAL_STAGE day_opened
+JOURNAL_STAGE memo_persisted
+JOURNAL_STAGE postcard_preview
+JOURNAL_STAGE png_saved
+JOURNAL_STAGE chooser_ready
+JOURNAL_STAGE search_verified
+JOURNAL_JOURNEY_PASS controls=true persisted=true favorite_search=true postcard_png=true share_uri=true backup_annotations=true sqlite_unchanged=true fontScale=1.3 picker_recreation=false

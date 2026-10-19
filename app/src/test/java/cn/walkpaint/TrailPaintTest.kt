@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The veil's contract, restated for v0.39: unknown ground is opaque black, only a walked corridor
+ * The veil's contract, restated for v0.39: unknown ground has a readable themed veil, only a walked corridor
  * is cleared, and the frame is always wider than the view so its border can never be mistaken for
  * ground that has been explored.
  */
@@ -23,15 +23,15 @@ class TrailPaintTest {
     }
 
     @Test fun theEdgeOfTheBandIsASoftButNarrowRamp() {
-        // Narrow on purpose: the person asked for unknown ground to be unreadable, so the ramp must
+        // Narrow on purpose: the real explored radius must stay unchanged, so the ramp must
         // not turn into a translucent skirt tens of metres wide.
         assertTrue("feather ${TrailPaint.FEATHER_M} m", TrailPaint.FEATHER_M in 1.0..8.0)
     }
 
-    @Test fun unknownGroundIsOpaqueBlack() {
+    @Test fun unknownGroundKeepsGeographicContextVisible() {
         val alpha = TrailPaint.FOG_COLOR ushr 24
-        assertEquals("alpha $alpha", 0xFF, alpha)
-        assertEquals("colour", 0x000000, TrailPaint.FOG_COLOR and 0x00FFFFFF)
+        assertTrue("alpha $alpha", alpha in 1..200)
+        assertEquals(FogAppearance.DEFAULT, TrailPaint.FOG_COLOR)
     }
 
     @Test fun nothingRecordedMeansNothingToPaint() {

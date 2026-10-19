@@ -136,14 +136,35 @@ class MainActivity : ComponentActivity() {
     private var showMapConsent by mutableStateOf(false)
     private val follow=MapFollowState()
     private var activityResumed=false
+    private val headingContinuity=HeadingContinuity()
     private var mapHeading=0f
+    private var mapViewReady by mutableStateOf(false)
+    private var landmarkPoints by mutableStateOf<List<ExplorationLandmark>>(emptyList())
+    private var selectedLandmark by mutableStateOf<ExplorationLandmark?>(null)
+    private var showLandmarkList by mutableStateOf(false)
+    private var landmarkError by mutableStateOf<String?>(null)
+    private val landmarkArrival=LandmarkArrival()
+    private val landmarkExecutor=java.util.concurrent.Executors.newSingleThreadExecutor()
+    private fun changeLandmarks(onSuccess:()->Unit = {},change:()->Unit = {}) {
+        if(landmarkExecutor.isShutdown) return
+        landmarkExecutor.execute {
+            val result=runCatching {change();repository.landmarks.snapshot().values.filter {!it.deleted}}
+            runOnUiThread {
+                if(isDestroyed) return@runOnUiThread
+                result.onSuccess {landmarkPoints=it;landmarkError=null;if(amapActive)amapController.showLandmarks(it);onSuccess()}
+                    .onFailure {landmarkError="探索点暂时无法读取或保存，原文件已保留"}
+            }
+        }
+    }
     private var lastCameraPoint:TrackPoint?=null
     private var lastCameraBearing=0f
+    private val locateZoom=LocateZoomRequest()
     private val headingSensor by lazy { HeadingSensor(this,
         { @Suppress("DEPRECATION") windowManager.defaultDisplay.rotation },
-        { bearing -> mapHeading=bearing ?: 0f;syncFollowCamera() }) }
-    private val amapController by lazy { AmapMapController(this,::pauseMapFollowing,
-        { refreshVeilForViewport(force=true) }, ::onMapCameraMoved, ::onMapCameraSettled) }
+        { bearing -> mapHeading=headingContinuity.resolve(bearing);syncFollowCamera() }) }
+    private val amapController:AmapMapController by lazy { AmapMapController(this,::pauseMapFollowing,
+        { mapViewReady=true;amapController.showLandmarks(landmarkPoints);refreshVeilForViewport(force=true);syncFollowCamera(force=true) }, ::onMapCameraMoved, ::onMapCameraSettled,
+        {point -> selectedLandmark=landmarkPoints.firstOrNull {it.id==point.id} ?: point}) }
     private val amapSupported get() = AmapPlatform.supported(Build.SUPPORTED_ABIS.toList(), BuildConfig.ARM64_ONLY)
     private val amapActive get() = amapSupported && BuildConfig.AMAP_KEY.isNotBlank() && amapConsent
     private var showDiagnostics by mutableStateOf(false)
@@ -160,7 +181,19 @@ class MainActivity : ComponentActivity() {
     /** Recognized only by the separate developer debug build. */
     private val EXTRA_EXPORT_FIELD_REPORT = "cn.walkpaint.extra.EXPORT_FIELD_REPORT"
     private var privateUpdateState by mutableStateOf(PrivateUpdateState())
-    private val privateUpdater by lazy { PrivateUpdater(this) { privateUpdateState=it } }
+    private val privateUpdater by lazy { androidx.lifecycle.ViewModelProvider(this)[UpdateSession::class.java].updater }
+    private var installPermissionRequestedAt=0L
+    private val updateListener:(PrivateUpdateState)->Unit = {
+        privateUpdateState=it
+        if(activityResumed && it.installVerified) deliverVerifiedInstall()
+        else if(activityResumed && installPermissionRequestedAt>0 && !it.busy && it.ready!=null && packageManager.canRequestPackageInstalls()) {
+            continueInstallAfterPermission()
+        }
+    }
+    private val updateInstallPermission=registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        if(packageManager.canRequestPackageInstalls()) continueInstallAfterPermission()
+        else {installPermissionRequestedAt=0;privateUpdater.notice("未允许安装更新，原版本仍可使用；需要时可再次点击安装")}
+    }
     private val currentRelease by lazy {
         CurrentRelease.decode(assets.open("release-notes.json").bufferedReader().use { it.readText() })
     }
@@ -345,7 +378,10 @@ class MainActivity : ComponentActivity() {
                 else if(pendingCenter) centerUser()
             } else {
                 RecordingDiagnostics.problem(this,ProblemCode.PERMISSION_DENIED)
-                if(pendingEnable) { pendingEnable=false; showFineSettings=true }
+                if(pendingEnable) {
+                    pendingEnable=false
+                    toast("定位尚未允许，记录未开启。需要时可在“我的”重新开启。")
+                }
                 else toast("需要允许精确定位，才能查看当前位置")
                 pendingCenter=false
             }
@@ -433,7 +469,7 @@ class MainActivity : ComponentActivity() {
                 }.onSuccess { result ->
                     runOnUiThread {
                         updateUi()
-                        toast(result.message())
+                        toast(result.message());changeLandmarks()
                     }
                 }.onFailure { runOnUiThread { RecordingDiagnostics.problem(this,ProblemCode.BACKUP_FAILED);toast("无法导入，请确认是有效的足迹备份") } }
             }.start()
@@ -441,8 +477,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        currentTab=(savedInstanceState?.getInt("mobileTab",0) ?: 0).coerceIn(0,2)
         // Local-only snapshot: legacy authorization cleanup must be reachable before any network request.
-        privateUpdateState=privateUpdater.snapshot()
+        installPermissionRequestedAt=savedInstanceState?.getLong("updateInstallPermissionAt",0L) ?: 0L
+        privateUpdater.bind(updateListener)
         roadColor=roadAppearance.color
         pendingEnable = savedInstanceState?.getBoolean("pendingEnable") ?: false
         pendingSettingsEnable = savedInstanceState?.getBoolean("pendingSettingsEnable") ?: false
@@ -462,16 +500,14 @@ class MainActivity : ComponentActivity() {
         appearanceMode=getSharedPreferences("ui_appearance",Context.MODE_PRIVATE).getInt("mode",0).coerceIn(0,2)
         visualSkin=VisualSkin.stored(getSharedPreferences("ui_appearance",Context.MODE_PRIVATE).getString("skin",null))
         showIntro=!trackingEnabled && !mapPref.getBoolean("mobile_intro_seen",false)
+        changeLandmarks()
         setContent {
             WalkPaintTheme(appearanceMode,currentTab==0,visualSkin) {
                 AppShell(
                     selectedTab = currentTab,
                     onTab = {
-                        if(it!=2 && privateUpdateState.busy) privateUpdater.cancel()
-                        currentTab=it;syncHeadingLifecycle()
-                        // The veil is opaque now, so entering the map tab without one shows a map the
-                        // person has not explored. The camera may not move at all on this switch, so
-                        // nothing else would ask for a redraw.
+                        currentTab=it;landmarkArrival.reset();syncHeadingLifecycle()
+                        // Refresh the themed veil even if returning to a resting camera.
                         if(it==0) refreshVeilForViewport(force=true)
                     },
                     state = snapshot,
@@ -490,16 +526,15 @@ class MainActivity : ComponentActivity() {
                     roadAreaHint = roadAreaHint,
                     onShowAll = { clearDaySelection() },
                     onLocate = {
-                        val anchor=MapHistory.anchor(mapTrackState,selectedDay)
-                        if(anchor!=null) focusCoordinate(anchor.lat,anchor.lon,17.0)
-                        else { clearDaySelection(showExtent=false);centerUser() }
+                        clearDaySelection(showExtent=false)
+                        centerUser()
                     },
                     onZoom = { delta ->
                         pauseMapFollowing()
                         if(amapActive) amapController.zoomBy(delta)
                     },
                     onToggleTracking = { requested ->
-                        if (requested) beginEnable()
+                        if (requested) beginEnable(deferBackground=true)
                         else {
                             pendingEnable=false;pendingSettingsEnable=false
                             AmbientTracking.stop(this)
@@ -566,11 +601,23 @@ class MainActivity : ComponentActivity() {
                         onClear={RecordingDiagnostics.clearHistory(this)},gpsSurvey=shortGpsText,
                         gpsSurveyActive=shortGpsActive,onGpsSurvey=::startShortGps) },
                     updatesContent = { onBack -> UpdatesPage(currentRelease,privateUpdateState,
-                        { if(privateUpdateState.busy) privateUpdater.cancel();onBack() },::checkUpdates,
-                        { privateUpdater.download() },::installUpdate,{ privateUpdater.cancel() },
-                        { privateUpdater.logout() },{ openUpdateBrowser(UpdateDestination.URL) },
+                        { onBack() },::checkUpdates,
+                        { installPermissionRequestedAt=0;privateUpdater.download() },::installUpdate,{ installPermissionRequestedAt=0;privateUpdater.cancel() },
+                        { installPermissionRequestedAt=0;privateUpdater.logout() },{ openUpdateBrowser(UpdateDestination.URL) },
                         { openUpdateBrowser("https://github.com/h516df/walkpaint#隐私与许可") }) },
-                    mapContent = { if (amapActive) AmapNativeView() else {
+                    mapContent = {
+                        androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+                        if (amapActive) {
+                        androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+                            AmapNativeView()
+                            if(selectedDay==null && snapshot.realTracks.all {it.points.isEmpty()}) {
+                                InitialExplorationHint(mapViewReady,automatic=trackingEnabled,
+                                    hasFix=userFix?.let {follow.accepts(fixQuality(it))}==true,
+                                    onLocate={clearDaySelection(showExtent=false);centerUser()},
+                                    onStart={beginEnable()})
+                            }
+                        }
+                    } else {
                         androidx.compose.foundation.layout.Box(Modifier.fillMaxSize(),contentAlignment=androidx.compose.ui.Alignment.Center) {
                             Column(Modifier.padding(32.dp),horizontalAlignment=androidx.compose.ui.Alignment.CenterHorizontally) {
                                 Text("地图还没打开",color=MaterialTheme.colorScheme.onSurface,fontSize=24.sp)
@@ -578,7 +625,14 @@ class MainActivity : ComponentActivity() {
                                 if(amapSupported && BuildConfig.AMAP_KEY.isNotBlank()) Button(onClick={showAmapConsent=true}){Text("开启高德地图")}
                             }
                         }
-                    } },
+                    }
+                        Surface(modifier=Modifier.align(androidx.compose.ui.Alignment.CenterStart).padding(start=8.dp),
+                            shape=androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
+                            color=MaterialTheme.colorScheme.surface.copy(alpha=.95f),tonalElevation=2.dp) {
+                            TextButton(onClick={showLandmarkList=true;changeLandmarks()}) {Text("◇ 探索点")}
+                        }
+                        }
+                    },
                     replay = ReplayControls(replayActive,replayPlaying,{replayProgress},
                         ::startReplay,::toggleReplay,::stopReplay),
                     onSkin={showSkinPicker=true},
@@ -589,6 +643,12 @@ class MainActivity : ComponentActivity() {
                     } }
                 )
 
+                if(showLandmarkList) LandmarkList(landmarkPoints,landmarkError,amapActive,
+                    {selectedLandmark=it;showLandmarkList=false},{showLandmarkList=false})
+                selectedLandmark?.let {point -> LandmarkDetail(point,landmarkPoints.any {it.id==point.id},landmarkError,
+                    {changeLandmarks(onSuccess={selectedLandmark=null}) {repository.landmarks.save(point)}},
+                    {changeLandmarks(onSuccess={selectedLandmark=null}) {repository.landmarks.remove(point.id)}},
+                    {selectedLandmark=null}) }
                 if(showSkinPicker) SkinPicker(visualSkin,{ skin ->
                     visualSkin=skin
                     appearanceMode=if(skin==VisualSkin.NIGHT) 2 else 0
@@ -651,26 +711,16 @@ class MainActivity : ComponentActivity() {
                         getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE).edit()
                             .putBoolean("amap_sdk_decision_seen", true).apply()
                     },
-                    title = { Text("是否使用高德地图？", fontWeight = FontWeight.Bold) },
+                    title = { Text("高德地图与隐私", fontWeight = FontWeight.Bold) },
                     text = { Column {
-                        Text("高德开放平台地图与搜索 SDK 由北京高德图强科技有限公司提供，用于地图展示和地名查询；" +
-                            "可能收集经纬度、IP/网络、GNSS、设备参数、系统和传感器信息。" +
-                            "足迹数据库仍保留本机；拒绝使用高德不影响自动记录。")
-                        TextButton(onClick = {
-                            startActivity(Intent(Intent.ACTION_VIEW,
-                                Uri.parse("https://lbs.amap.com/home/privacy/")))
-                        }) { Text("阅读高德隐私政策") }
+                        Text(AmapDisclosure.SUMMARY)
+                        Text("暂不使用地图也可以独立记录足迹。")
+                        TextButton(onClick = ::openAmapPrivacy) { Text("阅读高德隐私政策") }
                     } },
                     confirmButton = {
                         Button(onClick = {
-                            getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE).edit()
-                                .putBoolean("amap_sdk_consent", true)
-                                .putBoolean("amap_sdk_decision_seen", true).apply()
-                            amapConsent = true
-                            placeAnchor = null
-                            refreshPlaceName(userFix)
-                            showAmapConsent = false
-                        }) { Text("同意使用高德") }
+                            acceptAmap()
+                        }) { Text(if(amapConsent) "继续使用" else "同意并打开地图") }
                     },
                     dismissButton = {
                         TextButton(onClick = {
@@ -711,15 +761,25 @@ class MainActivity : ComponentActivity() {
                         Uri.parse("https://lbs.amap.com/home/privacy/"))) }
                 )
                 if (showIntro || confirmEnable) DesignOnboarding(
+                    mapConsentRequired = showIntro && amapSupported && BuildConfig.AMAP_KEY.isNotBlank() && !amapConsent,
+                    onPrivacy = ::openAmapPrivacy,
                     onEnable={
-                        showIntro=false;confirmEnable=false
+                        if(showIntro && amapSupported && BuildConfig.AMAP_KEY.isNotBlank() && !amapConsent) acceptAmap()
+                        showIntro=false;confirmEnable=false;showMapConsent=false
                         getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE).edit()
                             .putBoolean("mobile_intro_seen",true).putBoolean("auto_notice_v3_seen",true).apply()
-                        if(pendingEnable) continueEnable() else beginEnable()
+                        currentTab=0
+                        pendingCenter=true
+                        // A location foreground service can start with while-in-use permission.
+                        // Background access improves later recovery; it is not an entry gate.
+                        if(pendingEnable) {backgroundDeferred=true;continueEnable()}
+                        else beginEnable(deferBackground=true)
                     },
                     onSkip={
                         showIntro=false;confirmEnable=false;pendingEnable=false
-                        getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE).edit().putBoolean("mobile_intro_seen",true).apply()
+                        showAmapConsent=false;showMapConsent=false
+                        getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE).edit()
+                            .putBoolean("mobile_intro_seen",true).putBoolean("amap_sdk_decision_seen",true).apply()
                     })
                 if(showBackgroundPrompt) AlertDialog(
                     onDismissRequest={showBackgroundPrompt=false;pendingEnable=false},
@@ -754,6 +814,7 @@ class MainActivity : ComponentActivity() {
     private fun updateUi() {
         val now = System.currentTimeMillis()
         trackingEnabled = AmbientTracking.enabled(this)
+        if(!trackingEnabled) landmarkArrival.reset()
         trackingRunning = AmbientTracking.running
         backgroundGranted = AmbientTracking.hasBackgroundLocation(this)
         userFix = if(AmbientTracking.hasFineLocation(this)) chooseMapFix(listOfNotNull(AmbientTracking.lastGps, AmbientTracking.lastFix,userFix)) else null
@@ -795,6 +856,7 @@ class MainActivity : ComponentActivity() {
             val generation=mapSceneGeneration
             // Read on the UI thread: the worker must not race a fix arriving while it paints.
             val fogColour = roadColor
+            val themedFogColor=FogAppearance.color(visualSkin)
             val fogAnchor = userFix?.let { TrackPoint(it.latitude, it.longitude, it.time, it.accuracy) }
             val fogViewport = currentViewport
             refreshExecutor.execute {
@@ -815,7 +877,7 @@ class MainActivity : ComponentActivity() {
                     val veilStart = System.nanoTime()
                     // The painter reuses its two buffers. A deferred handover and the SDK's GL
                     // thread can still be reading either one after the next paint starts.
-                    val fogImage = fogPainter.update(veilPaths, fogColour, MapHistory.anchor(displayedTrack,day) ?: fogAnchor, fogViewport)
+                    val fogImage = fogPainter.update(veilPaths, fogColour, MapHistory.anchor(displayedTrack,day) ?: fogAnchor, fogViewport,themedFogColor)
                         ?.copy(android.graphics.Bitmap.Config.ARGB_8888,false)
                     val veilNanos = System.nanoTime() - veilStart
                     if (BuildConfig.DEBUG) {
@@ -880,9 +942,23 @@ class MainActivity : ComponentActivity() {
 
     private fun appSettingsIntent() = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:$packageName"))
 
-    private fun beginEnable() {
+    private fun openAmapPrivacy() {
+        runCatching { startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(AmapDisclosure.PRIVACY_URL))) }
+            .onFailure { toast("暂时无法打开浏览器，请稍后再试") }
+    }
+
+    private fun acceptAmap() {
+        getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE).edit()
+            .putBoolean("amap_sdk_consent",true).putBoolean("amap_sdk_decision_seen",true).apply()
+        amapConsent=true
+        showAmapConsent=false;showMapConsent=false
+        placeAnchor=null
+        refreshPlaceName(userFix)
+    }
+
+    private fun beginEnable(deferBackground: Boolean = false) {
         if(pendingEnable) return
-        pendingEnable=true;backgroundDeferred=false
+        pendingEnable=true;backgroundDeferred=deferBackground
         if(!AmbientTracking.hasFineLocation(this) &&
             !getSharedPreferences("ui_onboarding",Context.MODE_PRIVATE).getBoolean("auto_notice_v3_seen",false)) {
             confirmEnable=true
@@ -908,18 +984,19 @@ class MainActivity : ComponentActivity() {
                 pendingEnable=false;pendingSettingsEnable=false
                 AmbientTracking.setEnabled(this,true)
                 AmbientTracking.start(this)
+                if(pendingCenter) centerUser()
                 updateUi()
             }
         }
     }
 
     private fun resolveTracking() {
-        if(!AmbientTracking.hasFineLocation(this)) beginEnable()
+        if(!AmbientTracking.enabled(this)) beginEnable(deferBackground=true)
+        else if(!AmbientTracking.hasFineLocation(this)) beginEnable(deferBackground=true)
         else if(!getSystemService(LocationManager::class.java).isProviderEnabled(LocationManager.GPS_PROVIDER))
             startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
         else if(recordingCode in setOf("SAVE_FAILED","REGISTER_FAILED","SERVICE_STOPPED")) openRecordingDiagnostics()
-        else if(!AmbientTracking.hasBackgroundLocation(this)) beginEnable()
-        else openRecordingDiagnostics()
+        else centerUser()
     }
 
     private fun openRecordingNotificationSettings() {
@@ -948,6 +1025,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun centerUser() {
+        locateZoom.request()
         if (!AmbientTracking.hasFineLocation(this)) {
             pendingCenter = true
             askLocation()
@@ -963,6 +1041,7 @@ class MainActivity : ComponentActivity() {
             val savedPoint = snapshot.realTracks.lastOrNull()?.points?.lastOrNull()
             if (savedPoint != null) {
                 focusCoordinate(savedPoint.lat, savedPoint.lon, 16.0)
+                follow.locate();lastCameraPoint=null;syncHeadingLifecycle()
                 toast("暂时没有当前 GPS，已定位到最近足迹，正在继续寻找卫星信号")
             } else {
                 toast("正在获取当前定位，请检查系统 GPS 并到室外稍等")
@@ -1043,6 +1122,13 @@ class MainActivity : ComponentActivity() {
         val chosen=chooseMapFix(listOfNotNull(fix,userFix,AmbientTracking.lastGps)) ?: return
         userFix = chosen
         AmbientTracking.lastFix = chosen
+        @Suppress("DEPRECATION")
+        val mock=chosen.isFromMockProvider
+        val arrivals=landmarkArrival.sample(landmarkPoints,chosen.latitude,chosen.longitude,chosen.accuracy,
+            chosen.elapsedRealtimeNanos/1_000_000L,fixQuality(chosen).ageMillis,
+            chosen.provider==LocationManager.GPS_PROVIDER,mock,
+            trackingEnabled && activityResumed && currentTab==0 && AmbientTracking.hasFineLocation(this))
+        if(arrivals.isNotEmpty()) changeLandmarks {arrivals.forEach {repository.landmarks.visit(it,System.currentTimeMillis())}}
         updateLocationLayer()
         refreshPlaceName(chosen)
         syncFollowCamera(force=center || firstMapCenter, streetZoom=streetZoom)
@@ -1319,6 +1405,7 @@ class MainActivity : ComponentActivity() {
         catch(_:android.content.ActivityNotFoundException) { toast("没有可用分享应用，可复制报告") }
     }
     private fun checkUpdates() {
+        installPermissionRequestedAt=0
         val connectivity=getSystemService(android.net.ConnectivityManager::class.java)
         val capabilities=connectivity.getNetworkCapabilities(connectivity.activeNetwork)
         val available=capabilities?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)==true &&
@@ -1330,20 +1417,31 @@ class MainActivity : ComponentActivity() {
         try { startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(url)).addCategory(Intent.CATEGORY_BROWSABLE)) }
         catch(_:android.content.ActivityNotFoundException) { privateUpdater.notice(UpdateDestination.NO_BROWSER) }
     }
-    private fun installUpdate() {
-        privateUpdater.prepareInstall { file ->
-            try {
-                if(!packageManager.canRequestPackageInstalls()) {
-                    privateUpdater.notice("请允许足迹涂色安装更新，返回后再点击安装；拒绝不会影响原版本")
-                    startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,Uri.parse("package:$packageName")))
-                } else {
-                    val uri=androidx.core.content.FileProvider.getUriForFile(this,"$packageName.updates",file)
-                    startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri,"application/vnd.android.package-archive")
-                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
-                    privateUpdater.notice("请在系统窗口确认覆盖安装；取消后仍可使用原版本")
-                }
-            } catch(_:Exception) { privateUpdater.notice("暂时无法打开系统安装，请重新下载后重试") }
+    private fun installUpdate() {installPermissionRequestedAt=0;privateUpdater.prepareInstall()}
+    private fun continueInstallAfterPermission() {
+        if(!UpdateInstallContinuation.allowed(installPermissionRequestedAt,SystemClock.elapsedRealtime())) {
+            installPermissionRequestedAt=0;return
         }
+        if(!UpdateInstallContinuation.ready(installPermissionRequestedAt,SystemClock.elapsedRealtime(),activityResumed,
+            packageManager.canRequestPackageInstalls(),privateUpdateState.busy,privateUpdateState.ready!=null)) return
+        installPermissionRequestedAt=0
+        privateUpdater.prepareInstall() // Recheck the exact file after returning from Settings.
+    }
+    private fun deliverVerifiedInstall() {
+        installPermissionRequestedAt=0 // Clear before the synchronous consumed-state notification.
+        val file=privateUpdater.takeVerifiedInstall() ?: return
+        try {
+            if(!packageManager.canRequestPackageInstalls()) {
+                installPermissionRequestedAt=SystemClock.elapsedRealtime()
+                privateUpdater.notice("请允许足迹涂色安装更新；返回后会继续，仍需在系统窗口确认。拒绝不影响原版本")
+                updateInstallPermission.launch(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,Uri.parse("package:$packageName")))
+            } else {
+                val uri=androidx.core.content.FileProvider.getUriForFile(this,"$packageName.updates",file)
+                startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri,"application/vnd.android.package-archive")
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                privateUpdater.notice("请在系统窗口确认覆盖安装；取消后仍可使用原版本")
+            }
+        } catch(_:Exception) {installPermissionRequestedAt=0;privateUpdater.notice("暂时无法打开系统安装，请返回后再次点击安装")}
     }
 
     private fun openAppSettings() {
@@ -1504,6 +1602,7 @@ class MainActivity : ComponentActivity() {
         }
         val viewport = currentViewport
         val colour = roadColor
+        val veilColor=FogAppearance.color(visualSkin)
         val handOver = true
         val day = selectedDay
         val generation=mapSceneGeneration
@@ -1512,7 +1611,7 @@ class MainActivity : ComponentActivity() {
         refreshExecutor.execute {
             try {
                 val start = System.nanoTime()
-                val paintedImage = fogPainter.update(paths, colour, anchor, viewport)
+                val paintedImage = fogPainter.update(paths, colour, anchor, viewport,veilColor)
                 val nanos = System.nanoTime() - start
                 if (BuildConfig.DEBUG) PerfTrace.pan(nanos)
                 val frame = fogPainter.frame()
@@ -1558,6 +1657,7 @@ class MainActivity : ComponentActivity() {
     private fun updateMapLayers() {
         if (!amapActive) return
         // 回放时画“长到一半”的那条线；停回放后自动回到当天完整足迹。
+        amapController.setFogColor(FogAppearance.color(visualSkin))
         amapController.render(mapTrackState,mapRoadState,if(replayActive) replayPaths else mapTrailPaths,fogBitmap,fogFrame,fogRevision)
     }
 
@@ -1581,11 +1681,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun pauseMapFollowing() {
+        locateZoom.cancel()
         follow.gesture();amapController.cancelFollowingAnimation()
         syncHeadingLifecycle()
     }
 
     private fun syncFollowCamera(force:Boolean=false, streetZoom:Boolean=false) {
+        if(streetZoom) locateZoom.request()
         if(!follow.following) return
         val fix=userFix?.takeIf { follow.accepts(fixQuality(it)) } ?: return
         val point=TrackPoint(fix.latitude,fix.longitude,fix.elapsedRealtimeNanos/1_000_000L,fix.accuracy)
@@ -1594,11 +1696,12 @@ class MainActivity : ComponentActivity() {
             kotlin.math.abs(HeadingFilter.delta(lastCameraBearing,mapHeading))<1f) return
         val animate=Settings.Global.getFloat(contentResolver,Settings.Global.ANIMATOR_DURATION_SCALE,1f)>0f
         // Only an explicit "where am I" lifts a wide camera to street level.
-        val minZoom=if(streetZoom) StreetZoom else null
+        val minZoom=if(locateZoom.pending) StreetZoom else null
         if(amapActive) {
             if(amapController.view()==null) return
-            amapController.followCamera(fix,mapHeading,animate,minZoom)
-        }
+            if(!amapController.followCamera(fix,mapHeading,animate,minZoom)) return
+        } else return
+        locateZoom.delivered(true)
         lastCameraPoint=point;lastCameraBearing=mapHeading;firstMapCenter=false
     }
 
@@ -1623,6 +1726,7 @@ class MainActivity : ComponentActivity() {
             if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) view.onResume()
             onDispose {
                 lifecycle.removeObserver(observer)
+                mapViewReady=false
                 headingSensor.stop()
                 runCatching { controller.release(view) }
             }
@@ -1631,11 +1735,13 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putInt("mobileTab",currentTab)
         outState.putBoolean("pendingEnable", pendingEnable)
         outState.putBoolean("pendingSettingsEnable", pendingSettingsEnable)
         outState.putBoolean("pendingBackgroundSettings",pendingBackgroundSettings)
         outState.putBoolean("backgroundDeferred",backgroundDeferred)
         outState.putBoolean("confirmEnable",confirmEnable)
+        outState.putLong("updateInstallPermissionAt",installPermissionRequestedAt)
         outState.putBoolean("showBackgroundPrompt",showBackgroundPrompt)
         outState.putBoolean("showFineSettings",showFineSettings)
         super.onSaveInstanceState(outState)
@@ -1644,6 +1750,8 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume();GrowthSession.resume(this)
         activityResumed=true;syncHeadingLifecycle()
+        if(privateUpdateState.installVerified) deliverVerifiedInstall()
+        else if(installPermissionRequestedAt>0) continueInstallAfterPermission()
         mainHandler.removeCallbacks(refreshTask)
         mainHandler.post(refreshTask)
         updateUi()
@@ -1659,12 +1767,13 @@ class MainActivity : ComponentActivity() {
         GrowthSession.pause()
         mainHandler.removeCallbacks(refreshTask)
         stopShortGps("离开前台，结束短测")
-        activityResumed=false;syncHeadingLifecycle()
+        activityResumed=false;landmarkArrival.reset();syncHeadingLifecycle()
         locationManager?.let { runCatching { it.removeUpdates(visibleLocationListener) } }
         super.onPause()
     }
     override fun onDestroy() {
-        privateUpdater.close()
+        landmarkExecutor.shutdown()
+        privateUpdater.unbind(updateListener)
         headingSensor.stop()
         roadDownload?.cancel()
         mainHandler.removeCallbacksAndMessages(null)

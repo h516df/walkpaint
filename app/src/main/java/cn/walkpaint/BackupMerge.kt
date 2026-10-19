@@ -1,9 +1,11 @@
 package cn.walkpaint
 
 internal data class RestoreResult(val addedTrips:Int,val addedPoints:Int,val duplicates:Int,
-                                  val conflicts:Int,val skippedPoints:Int) {
+                                  val conflicts:Int,val skippedPoints:Int,val journalPending:Boolean=false,val landmarksPending:Boolean=false) {
     fun message():String = "已恢复 $addedTrips 条新足迹，补入 $addedPoints 个点；重复 $duplicates 个" +
-        if(conflicts+skippedPoints>0) "。冲突 $conflicts 个，另有 $skippedPoints 个关联点未合并，原记录保留" else "，原记录保留"
+        (if(conflicts+skippedPoints>0) "。冲突 $conflicts 个，另有 $skippedPoints 个关联点未合并，原记录保留" else "，原记录保留") +
+        (if(journalPending) "。行记尚未恢复，请保留备份并重试" else "") +
+        (if(landmarksPending) "；探索点恢复未完成，原文件保留，可重试" else "")
 }
 
 /** A restore adds observations. Existing rows and segment labels are never rewritten. */
