@@ -21,7 +21,7 @@ jobs:
           echo "JAVA_HOME=$JAVA_HOME_21_X64" >> "$GITHUB_ENV"
           echo "$JAVA_HOME_21_X64/bin" >> "$GITHUB_PATH"
       - name: Install approved SDK components
-        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"'
       - name: Tests, lint and isolated developer APK
         run: |
           python3 -m unittest discover -s tests -v
@@ -102,6 +102,7 @@ jobs:
           r=json.load(open('run.json'))
           assert r['head_sha']==os.environ['SOURCE_SHA'] and r['conclusion']=='success'
           assert r['head_branch']=='dot/native-landscape-ui-20261019'
+          assert r['path']=='.github/workflows/ui-preview.yml' and r['event']=='push'
           PY
           echo "$APK_SHA  accepted-artifacts/walkpaint-ui-preview.apk" | sha256sum --check
           mkdir release-assets

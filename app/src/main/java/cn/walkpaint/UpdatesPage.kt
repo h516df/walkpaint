@@ -12,6 +12,21 @@ import androidx.compose.ui.unit.sp
 @Composable
 internal fun UpdatesPage(release:CurrentRelease,state:PrivateUpdateState,onBack:()->Unit,onCheck:()->Unit,
     onDownload:()->Unit,onInstall:()->Unit,onCancel:()->Unit,onLogout:()->Unit,onBrowser:()->Unit,onSource:()->Unit) {
+    if(BuildConfig.DEVELOPER_BUILD) {
+        BackHandler(onBack=onBack)
+        LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(20.dp),verticalArrangement=Arrangement.spacedBy(16.dp)) {
+            item {TrailHeader("检查更新","独立预览版 ${BuildConfig.VERSION_NAME}",onBack)}
+            item {TrailPanel {
+                Text("界面预览",color=Ink,fontSize=20.sp)
+                Text("这是与正式版并存的开发包，数据各自保存。公开构建不含高德地图配置，不能代替完整正式版。",color=Muted,fontSize=14.sp,lineHeight=22.sp)
+                Text("请在 GitHub 发布页下载后续预览。开发签名可能不同，不能保证覆盖其他开发包；安装前请先导出需要保留的测试足迹。",color=Muted,fontSize=14.sp,lineHeight=22.sp)
+                Button(onClick=onBrowser,modifier=Modifier.fillMaxWidth().heightIn(min=48.dp)){Text("打开发布页")}
+                TextButton(onClick=onSource){Text("查看源码与开源许可")}
+            }}
+            item {Text("基于正式版 ${release.version}，保留原有记录与数据处理规则。本轮只验证界面，未验证实体手机和户外记录。",color=Muted,fontSize=13.sp,lineHeight=21.sp)}
+        }
+        return
+    }
     var confirmLogout by remember { mutableStateOf(false) }
     BackHandler(onBack=onBack)
     if(confirmLogout) AlertDialog(onDismissRequest={confirmLogout=false},title={Text("清除旧更新授权？")},

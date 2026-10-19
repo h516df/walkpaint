@@ -16,6 +16,7 @@ def main():
     parser.add_argument('--apk', required=True, type=Path)
     parser.add_argument('--test-apk', required=True, type=Path)
     parser.add_argument('--out', required=True, type=Path)
+    parser.add_argument('--build-info', type=Path, help='CI build-info.json from the exact downloaded artifact')
     args = parser.parse_args()
     if not re.fullmatch(r'emulator-\d+', args.serial):
         raise SystemExit('Only a dedicated emulator serial is allowed')
@@ -31,7 +32,11 @@ def main():
     if not avd.startswith('WalkPaint_UI_Preview'):
         raise SystemExit('Refusing an emulator not owned by this preview task: ' + avd)
     args.out.mkdir(parents=True, exist_ok=False)
-    report = {'source_sha': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+    source = json.loads(args.build_info.read_text()) if args.build_info else None
+    if source and (source.get('package') != PACKAGE or not re.fullmatch('[a-f0-9]{40}', source.get('source_sha', ''))):
+        raise SystemExit('Invalid artifact build identity')
+    report = {'source_sha': source['source_sha'] if source else None,
+              'build_identity': 'CI artifact metadata' if source else 'local worktree build, source commit not established',
               'apk_sha256': hashlib.sha256(args.apk.read_bytes()).hexdigest(),
               'package': PACKAGE, 'avd': avd, 'serial': args.serial, 'cases': [],
               'physical_device': 'not_verified', 'amap_network': 'not_verified'}

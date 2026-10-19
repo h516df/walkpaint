@@ -65,7 +65,8 @@ def main():
     api('git/refs', '--method', 'POST', '-f', 'ref=refs/tags/' + tag, '-f', 'sha=' + args.source_sha)
     gh('release', 'create', tag, '--repo', REPOSITORY, '--target', args.source_sha,
        '--title', 'WalkPaint · 原生界面独立预览', '--notes', body, '--draft', '--prerelease', *files)
-    release = api('releases/tags/' + tag)
+    release_id = json.loads(gh('release', 'view', tag, '--repo', REPOSITORY, '--json', 'databaseId'))['databaseId']
+    release = api('releases/' + str(release_id))
     if not release['draft'] or not release['prerelease'] or release['target_commitish'] != args.source_sha:
         raise RuntimeError('Draft release identity does not match')
     validate_assets(release, expected)

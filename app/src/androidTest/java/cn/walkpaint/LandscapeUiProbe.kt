@@ -54,7 +54,13 @@ internal object LandscapeUiProbe {
             bitmap.recycle()
         }
         // Dismiss onboarding with the actual opt-out control, never granting location or map consent.
-        if(find("走过的路，\n在地图上慢慢涂满。")!=null)tap("先看看，暂不记录",true)
+        val startupDeadline=SystemClock.elapsedRealtime()+30000
+        while(find("我的")==null && SystemClock.elapsedRealtime()<startupDeadline) {
+            if(find("走过的路，\n在地图上慢慢涂满。")!=null || find("先看看，暂不记录")!=null) {
+                tap("先看看，暂不记录",true)
+            }
+            Thread.sleep(200)
+        }
         tap("我的")
         wait("山河行记");shot("profile")
         repeat(2) {
