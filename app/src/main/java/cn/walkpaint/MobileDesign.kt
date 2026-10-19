@@ -34,6 +34,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import java.time.LocalDate
 import kotlin.math.cos
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 internal fun DesignStat(value: String, label: String, modifier: Modifier = Modifier) {
@@ -199,45 +201,68 @@ internal fun RouteThumbnail(track: Track, modifier: Modifier = Modifier, color: 
 internal fun DesignTripsPage(state: TrackState, roadColor: Int, onTrip: (Track) -> Unit,
     onExport: () -> Unit,onSkin:()->Unit={}) {
     val days = remember(state) { DailyFootprints.days(state) }
+    val journal=rememberJournal()
+    var searching by rememberSaveable {mutableStateOf(false)}
+    var query by rememberSaveable {mutableStateOf("")}
+    var starredOnly by rememberSaveable {mutableStateOf(false)}
+    val filtered by produceState(days,days,journal.entries,query,starredOnly) {
+        value=withContext(Dispatchers.Default){JournalSearch.filter(days,journal.entries,query,starredOnly)}
+    }
+    val tags=remember(days,journal.entries) {days.flatMap {journal.entries[it.key]?.tags.orEmpty()}
+        .groupingBy {it}.eachCount().entries.sortedWith(compareByDescending<Map.Entry<String,Int>> {it.value}.thenBy {it.key}).take(8).map {it.key}}
     var detailKey by rememberSaveable { mutableStateOf<String?>(null) }
     var showStats by rememberSaveable { mutableStateOf(false) }
     val selected = days.firstOrNull { it.key == detailKey }
     if (selected != null) {
-        DesignTripDetail(selected, roadColor, { detailKey = null }, { onTrip(selected.focusTrack()) }, onExport)
+        DesignTripDetail(selected, roadColor, { detailKey = null }, { onTrip(selected.focusTrack()) }, onExport,journal)
         return
     }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal=20.dp,vertical=12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyColumn(Modifier.fillMaxSize().imePadding(), contentPadding = PaddingValues(horizontal=20.dp,vertical=12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { TrailHeader("足迹") {
             TextButton(onClick={showStats=!showStats}) { Text(if(showStats) "日历" else "统计") }
+            TextButton(onClick={searching=!searching;if(!searching)query=""}){Text(if(searching)"收起查找" else "查找")}
             IconButton(onClick=onExport) { Icon(painterResource(R.drawable.ic_export),"导出全部足迹",tint=Pigment) }
         } }
+        if(searching) item {OutlinedTextField(query,{query=it.take(200)},modifier=Modifier.fillMaxWidth(),
+            label={Text("日期、标题、备注或标签")},singleLine=true,
+            trailingIcon={if(query.isNotEmpty())TextButton(onClick={query=""}){Text("清空")}})}
+        item {Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected=!starredOnly,onClick={starredOnly=false},label={Text("全部")})
+            FilterChip(selected=starredOnly,onClick={starredOnly=true},label={Text("已收藏")})
+            if(searching) tags.forEach {tag->FilterChip(selected=query=="#$tag",onClick={query=if(query=="#$tag")"" else "#$tag"},label={Text(tag)})}
+        }}
+        journal.error?.let {message->item {Text(message,color=MaterialTheme.colorScheme.error,fontSize=13.sp)}}
+        if(journal.loading) item {LinearProgressIndicator(Modifier.fillMaxWidth())}
         item {
             val month=java.time.LocalDate.now().toString().take(7)
             val monthDays=remember(days,month) {days.filter {it.key.startsWith(month)}}
             Text("本月 ${monthDays.size} 天出发 · ${exploredDistance(monthDays.sumOf {it.meters})}",color=Muted,fontSize=14.sp,
                 modifier=Modifier.padding(bottom=8.dp))
         }
-        if (showStats) item { RecapCard(RecapMaker.of(days, java.time.LocalDate.now().toString().take(7)),
+        if (!searching && !starredOnly && showStats) item { RecapCard(RecapMaker.of(days, java.time.LocalDate.now().toString().take(7)),
             RecapMaker.of(days, java.time.LocalDate.now().toString().take(4))) }
-        else item { FootprintCalendar(days, DailyFootprints.key(System.currentTimeMillis())) { track ->
+        else if(!searching && !starredOnly) item { FootprintCalendar(days, DailyFootprints.key(System.currentTimeMillis())) { track ->
             detailKey = days.firstOrNull { it.tracks.any { original -> original.id == track.id } }?.key
                 ?: track.points.firstOrNull()?.let { DailyFootprints.key(it.time) }
         } }
         if(days.isNotEmpty()) {
-            item { TrailSectionLabel("最近探索") }
-            items(days.take(5),key={"recent:${it.key}"}) { day ->
+            item { TrailSectionLabel(if(searching)"查找结果 · ${filtered.size} 天" else if(starredOnly)"收藏的足迹 · ${filtered.size} 天" else "最近探索") }
+            items(if(searching || starredOnly)filtered else days.take(5),key={"recent:${it.key}"}) { day ->
+                val memo=journal.entries[day.key] ?: DayMemo()
                 Surface(onClick={detailKey=day.key},color=Canvas,shape=RoundedCornerShape(16.dp)) {
                     Row(Modifier.fillMaxWidth().padding(12.dp),verticalAlignment=Alignment.CenterVertically,
                         horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                         RouteThumbnail(day.focusTrack(),Modifier.size(56.dp),roadColor)
                         Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(5.dp)) {
-                            Text(day.key,color=Ink,fontSize=15.sp,fontWeight=FontWeight.Medium)
-                            Text(exploredDistance(day.meters),color=Muted,fontSize=13.sp)
+                            Text(memo.title.ifBlank {day.key},color=Ink,fontSize=15.sp,fontWeight=FontWeight.Medium,maxLines=1,
+                                overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                            Text((if(memo.title.isBlank())"" else "${day.key} · ")+exploredDistance(day.meters),color=Muted,fontSize=13.sp)
                         }
-                        Text("›",color=Faint,fontSize=22.sp)
+                        Text(if(memo.starred)"★" else "›",color=if(memo.starred)Pigment else Faint,fontSize=22.sp)
                     }
                 }
             }
+            if((searching || starredOnly) && filtered.isEmpty()) item {Text(if(starredOnly && query.isBlank())"还没有收藏。打开某一天的足迹，就可以收藏。" else "没有找到匹配的足迹，试试其他日期或标签。",color=Muted,fontSize=14.sp)}
         }
         if (days.isEmpty()) item {
             Text("第一段足迹，等你出发。开启自动记录后，已保存的路线会出现在日历里。", color = Muted, fontSize = 14.sp)
@@ -246,15 +271,17 @@ internal fun DesignTripsPage(state: TrackState, roadColor: Int, onTrip: (Track) 
 }
 
 @Composable
-private fun DesignTripDetail(day: DailyFootprint, color: Int, onBack: () -> Unit, onMap: () -> Unit, onExport: () -> Unit) {
+private fun DesignTripDetail(day: DailyFootprint, color: Int, onBack: () -> Unit, onMap: () -> Unit, onExport: () -> Unit,journal:JournalView) {
     BackHandler(onBack = onBack)
     val summary = remember(day) { TrailSummary.of(day.tracks) }
     val integrity=remember(day) { TrailIntegrity.of(day.tracks) }
     var showIntegrity by remember(day.key) { mutableStateOf(false) }
+    var postcard by rememberSaveable(day.key) {mutableStateOf(false)}
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal=20.dp,vertical=12.dp),
         verticalArrangement=Arrangement.spacedBy(14.dp)) {
         TrailHeader("当天足迹",day.key,onBack)
         RouteThumbnail(day.focusTrack(),Modifier.fillMaxWidth().height(180.dp),color)
+        DayJournalActions(day,journal){postcard=true}
         TrailPanel {
             Row(Modifier.fillMaxWidth()) {
                 DesignStat(exploredDistance(summary.meters),"里程",Modifier.weight(1f))
@@ -273,27 +300,37 @@ private fun DesignTripDetail(day: DailyFootprint, color: Int, onBack: () -> Unit
         if(showIntegrity) TrailPanel { Text("预览显示最长连续路线；定位断档保留分段。\n"+integrity.report(),color=Muted,fontSize=13.sp,lineHeight=21.sp) }
         OutlinedButton(onClick=onExport,modifier=Modifier.fillMaxWidth().heightIn(min=48.dp)) { Text("导出全部足迹备份") }
     }
-
+    if(postcard) PostcardDialog(day,journal.entries[day.key] ?: DayMemo(),color){postcard=false}
 }
 
 @Composable
-internal fun DesignOnboarding(onEnable: () -> Unit, onSkip: () -> Unit) {
-    Dialog(onDismissRequest = onSkip, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+internal fun DesignOnboarding(mapConsentRequired: Boolean = false, onPrivacy: () -> Unit = {},
+    onEnable: () -> Unit, onSkip: () -> Unit) {
+    Dialog(onDismissRequest = {if(!mapConsentRequired)onSkip()}, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(color = CanvasSoft, modifier = Modifier.fillMaxSize()) {
-            Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                Icon(painterResource(R.drawable.ic_route), null, tint = Pigment, modifier = Modifier.padding(top = 24.dp).size(42.dp))
-                Text("足迹涂色  ·  WalkPaint", color = Muted, fontSize = 13.sp)
-                Text("走过的路，\n在地图上慢慢涂满。", color = Ink, fontSize = 32.sp, lineHeight = 42.sp, fontWeight = FontWeight.Bold)
-                Text("定位后点亮周围 50 米，走动时逐步揭开地图。足迹由你自己保管。", color = Muted, fontSize = 15.sp, lineHeight = 24.sp)
-                OnboardingFeature(R.drawable.ic_route, "自动累积足迹", "你同意并授权精确定位后，前台服务会记录走过的路线。")
-                OnboardingFeature(R.drawable.ic_lock, "足迹只存本机", "原始足迹保存在本地，可导出 JSON 备份；联网地图服务另行征求同意。")
-                OnboardingFeature(R.drawable.ic_notification, "记录时保留通知", "后台定位需要系统授权与常驻通知，可能增加耗电。你随时可以暂停。")
-                Button(onClick = onEnable, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
-                    Text("同意并开启自动记录", fontWeight = FontWeight.SemiBold)
+            Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(24.dp)) {
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Icon(painterResource(R.drawable.ic_route), null, tint = Pigment, modifier = Modifier.padding(top = 8.dp).size(36.dp))
+                    Text("足迹涂色", color = Muted, fontSize = 13.sp)
+                    Text("走到哪里，\n就点亮哪里。", color = Ink, fontSize = 32.sp, lineHeight = 42.sp, fontWeight = FontWeight.Bold)
+                    Text("允许定位后，走过的地方会在地图上慢慢亮起来。", color = Muted, fontSize = 15.sp, lineHeight = 24.sp)
+                    Text(if(mapConsentRequired) "默认高德地图，无需注册。足迹保存在本机。" else "足迹保存在本机，随时可以暂停记录。",
+                        color = Ink, fontSize = 15.sp, lineHeight = 24.sp)
+                    Text("开启后，应用会在后台和锁屏时使用定位保存足迹，可能增加耗电。记录提示由系统管理，可随时暂停。",
+                        color = Muted, fontSize = 13.sp, lineHeight = 21.sp)
+                    if(mapConsentRequired) {
+                        Text(AmapDisclosure.SUMMARY, color = Muted, fontSize = 13.sp, lineHeight = 21.sp)
+                        TextButton(onClick = onPrivacy, contentPadding = PaddingValues(0.dp)) { Text("阅读高德隐私政策") }
+                    }
                 }
-                TextButton(onClick = onSkip, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("先看看，暂不记录") }
-                Text("下一步由 Android 系统请求权限。拒绝授权也能查看已有足迹；不会自动上传位置。", color = Muted, fontSize = 12.sp, lineHeight = 20.sp)
+                Spacer(Modifier.height(16.dp))
+                Text("下一步选择“精确位置”和“使用应用时允许”。后台增强设置可稍后再开。", color = Muted, fontSize = 12.sp, lineHeight = 20.sp)
+                Spacer(Modifier.height(12.dp))
+                Button(onClick = onEnable, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+                    Text("同意并开始", fontWeight = FontWeight.SemiBold)
+                }
+                TextButton(onClick = onSkip, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("暂不开始") }
             }
         }
     }
