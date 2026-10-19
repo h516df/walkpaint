@@ -31,20 +31,31 @@ internal object RegionService {
         val address=GeocodeSearch(context).getFromLocation(RegeocodeQuery(LatLonPoint(raw.lat,raw.lon),200f,GeocodeSearch.GPS)) ?: return null
         val code=address.adCode?.takeIf{it.isNotBlank()} ?: return null
         if(!allowed(context))return null
+        val boundary=boundary(context,code,address.district ?: code) ?: return null
+        if(!boundary.rings.any{RegionCoverage.contains(it,point)})return null
+        runCatching{file.writeText(encode(boundary).toString())}
+        return boundary
+    }
+
+    fun boundary(context:Context,code:String,name:String):RegionBoundary? {
+        if(!allowed(context) || !code.matches(Regex("[0-9]{6}")))return null
+        val cache=File(context.cacheDir,"district-$code.json")
+        runCatching{if(cache.length() in 1..4_000_000 && System.currentTimeMillis()-cache.lastModified()<7*86400_000L)decode(JSONObject(cache.readText())) else null}.getOrNull()?.let{return it}
+        ServiceSettings.updatePrivacyShow(context,true,true);ServiceSettings.updatePrivacyAgree(context,true)
+        ServiceSettings.getInstance().setApiKey(BuildConfig.AMAP_KEY)
         val query=DistrictSearchQuery().apply{setKeywords(code);setKeywordsLevel("district");setShowBoundary(true);setSubDistrict(0)}
         val result=DistrictSearch(context).apply{setQuery(query)}.searchDistrict()
-        if(result.aMapException?.errorCode!=1000)return null
+        if(!RegionJourneyRules.querySucceeded(result.aMapException?.errorCode,result.district.orEmpty().size))return null
         val item=result.district?.firstOrNull{it.adcode==code} ?: return null
-        val rings=item.districtBoundary().orEmpty().map{part->part.split(';').mapNotNull{pair->
+        val rings=item.districtBoundary().orEmpty().flatMap{it.split('|')}.map{part->part.split(';').mapNotNull{pair->
             val numbers=pair.split(',');if(numbers.size!=2)null else {
                 val lon=numbers[0].toDoubleOrNull();val lat=numbers[1].toDoubleOrNull()
                 if(lat!=null && lon!=null && lat in -85.0..85.0 && lon in -180.0..180.0)RegionPoint(lat,lon) else null
             }
         }}.filter{it.size>=3}
         if(rings.isEmpty() || rings.sumOf{it.size}>100_000)return null
-        val boundary=RegionBoundary(item.name,code,rings)
-        if(!boundary.rings.any{RegionCoverage.contains(it,point)})return null
-        runCatching{file.writeText(encode(boundary).toString())}
+        val boundary=RegionBoundary(item.name ?: name,code,rings)
+        runCatching{cache.writeText(encode(boundary).toString())}
         return boundary
     }
 

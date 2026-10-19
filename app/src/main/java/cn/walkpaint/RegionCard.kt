@@ -120,7 +120,7 @@ import java.util.Locale
                 FilterChip(selected=!county,onClick={regional=false},label={Text("附近 2 公里")})
                 FilterChip(selected=county,onClick={regional=true},label={Text(boundary!!.name)})
             }
-            Text(if(percent>0)"熟悉的小路，也有新的转角。" else "下一次出门，就从身边开始。",fontSize=16.sp,color=ink)
+            Text("长期地区成就，可在「我的 · 山河行记」查看。",fontSize=14.sp,color=muted)
             TextButton(onClick={rules=!rules},contentPadding=PaddingValues(0.dp)){Text(if(rules)"收起探索说明" else "探索范围与说明",color=muted)}
             AnimatedVisibility(rules) {Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
                 Text("每段足迹点亮周围50米，走过的地方只算一次。百分比按25米网格估算。",fontSize=14.sp,color=muted)

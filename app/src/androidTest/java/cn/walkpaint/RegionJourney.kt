@@ -24,7 +24,7 @@ internal object RegionJourney {
   var percent=waitFor{val text=it.text?.toString();text?.matches(Regex("[0-9]+\\.[0-9]+%"))==true && text.removeSuffix("%").toDouble()>0}.text.toString().removeSuffix("%").toDouble()
   check(percent>0 && percent<=100){"Saved trails did not contribute to exploration"}
   tap(waitFor{it.contentDescription?.toString()=="附近探索"})
-  waitFor{it.text?.toString()=="渐渐熟悉"}
+  waitFor{it.text?.toString()=="寻光"}
   percent=waitFor{it.text?.toString()=="13.7%"}.text.toString().removeSuffix("%").toDouble()
   waitFor{it.text?.toString()?.startsWith("已点亮 ")==true}
   tap(waitFor{it.text?.toString()=="探索范围与说明"})

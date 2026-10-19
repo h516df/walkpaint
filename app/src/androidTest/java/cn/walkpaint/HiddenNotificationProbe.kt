@@ -11,10 +11,12 @@ import android.os.SystemClock
 /** Real service/SQLite path with notifications denied by the dedicated AVD host. */
 internal object HiddenNotificationProbe {
     @Suppress("DEPRECATION")
-    fun run(i:Instrumentation):String {
+    fun run(i:Instrumentation,recents:Boolean=false):String {
         check(android.os.Build.PRODUCT=="sdk_gphone64_x86_64")
         val c=i.targetContext
-        check(!c.getSystemService(NotificationManager::class.java).areNotificationsEnabled())
+        val notifications=c.getSystemService(NotificationManager::class.java).areNotificationsEnabled()
+        if(!recents)check(!notifications)
+        val previousHidden=GrowthStore(c).hidden
         check(!AmbientTracking.enabled(c) && !AmbientTracking.running)
         val lm=c.getSystemService(LocationManager::class.java)
         var mock=false
@@ -31,6 +33,11 @@ internal object HiddenNotificationProbe {
             val deadline=SystemClock.elapsedRealtime()+10_000
             while(!AmbientTracking.running && SystemClock.elapsedRealtime()<deadline) SystemClock.sleep(100)
             check(AmbientTracking.running) {"Service did not start with notifications denied"}
+            if(recents) {
+                i.runOnMainSync{GrowthStore(c).hideRecents(true)}
+                check(c.getSystemService(NotificationManager::class.java).areNotificationsEnabled()==notifications)
+                check(i.uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME))
+            }
             for(n in 0..8) {
                 lm.setTestProviderLocation(LocationManager.GPS_PROVIDER,Location(LocationManager.GPS_PROVIDER).apply {
                     latitude=48.8566+n*.00004;longitude=2.3522;accuracy=8f
@@ -46,9 +53,16 @@ internal object HiddenNotificationProbe {
             check(AmbientTracking.running)
             check(TrackingSetup.notice("SAVED",true)==null)
             check(TrackingSetup.notice("CALLBACK_INTERRUPTED",true)=="很久没收到定位了")
+            if(recents) {
+                UiEntry.main(i)
+                check(GrowthStore(c).hidden)
+                check(c.getSystemService(android.app.ActivityManager::class.java).appTasks.any{it.taskInfo.baseIntent.flags and Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS!=0})
+                check(AmbientTracking.running)
+                return "RECENTS_RECORDING_PASS hidden=true launcher_reopen=true persisted_flag=true notifications_unchanged=true committed_points=$added"
+            }
             return "HIDDEN_NOTIFICATION_PASS denied=true service_running=true committed_points=$added actual_gps_failure_visible=true"
         } finally {
-            i.runOnMainSync {AmbientTracking.stop(c)}
+            i.runOnMainSync {AmbientTracking.stop(c);GrowthStore(c).hideRecents(previousHidden)}
             if(mock) runCatching {lm.removeTestProvider(LocationManager.GPS_PROVIDER)}
             val end=SystemClock.elapsedRealtime()+5000
             while(AmbientTracking.running && SystemClock.elapsedRealtime()<end) SystemClock.sleep(50)

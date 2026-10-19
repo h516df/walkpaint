@@ -28,11 +28,12 @@ import kotlinx.coroutines.delay
         Row(verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){Column(Modifier.weight(1f)){Text("开机后继续记录");Text("自动记录开启时生效",style=MaterialTheme.typography.bodySmall)};Switch(boot,{boot=it;prefs.edit().putBoolean("restore_after_boot",it).apply()})}
         OutlinedButton(onClick={context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,Uri.parse("package:${context.packageName}")))},modifier=Modifier.fillMaxWidth()){Text("打开系统设置")}
         RecentTasksPreference()
+        Text("默认关闭。隐藏不取消记录通知；系统省电或强制停止仍可能中断记录。",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         TextButton(onClick={help=true}){Text("后台记录帮助")}
     }
     if(help) AlertDialog(onDismissRequest={help=false},title={Text("后台记录帮助")},text={Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
         Text("在系统设置中，允许这个 App 自启动和后台运行。")
-        Text("如果记录总中断，先关闭隐藏任务卡片，再试试锁定后台。")
+        Text("如果记录总中断，先关闭后台隐藏，再试试锁定后台。")
         Text("强制停止或省电模式可能打断记录。重新打开 App 可恢复。")
     }},confirmButton={TextButton(onClick={help=false}){Text("知道了")}})
 }

@@ -600,7 +600,7 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
             "后台记录设置" -> item { TrailPanel {
                 BackgroundRecordingSettings(automatic,onPermissions,onPower)
                 HorizontalDivider(color=Line)
-                SettingRow("隐藏记录通知","在系统设置中管理显示",onNotifications)
+                SettingRow("通知设置","由系统管理记录提示",onNotifications)
             } }
             "隐私与权限" -> {
                 item { Section("记录授权") {

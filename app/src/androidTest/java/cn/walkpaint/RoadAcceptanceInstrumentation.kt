@@ -11,6 +11,9 @@ import java.util.UUID
 
 /** Isolated databases only. Never clears or replaces the installed footprint database. */
 class RoadAcceptanceInstrumentation : Instrumentation() {
+    private var administrativeProbe=false
+    private var regionNetworkProbe=false
+    private var recentsRecordingProbe=false
     private var growthProbe=false
     private var regionProbe=false
     private var automaticExportProbe=false
@@ -50,6 +53,11 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
     private var candidateSha:String?=null
     override fun onStart() {
         val result = Bundle()
+        if(administrativeProbe || regionNetworkProbe || recentsRecordingProbe) {
+            try {result.putString("stream",when {administrativeProbe->AdministrativeJourneyProbe.run(this);regionNetworkProbe->RegionNetworkProbe.run(this);else->HiddenNotificationProbe.run(this,true)});finish(Activity.RESULT_OK,result)}
+            catch(e:Throwable){result.putString("stream","REGIONAL_ACCEPTANCE_FAIL: ${e.message}");finish(Activity.RESULT_CANCELED,result)}
+            return
+        }
         if(automaticExportProbe || fieldReportProbe) {
             try {
                 result.putString("stream",if(automaticExportProbe) AutomaticExportProbe.run(this) else FieldReportProbe.run(this))
@@ -96,7 +104,7 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
             return
         }
         if(growthProbe) {
-            try {val answer=MapJourneyFixture.withFixture(this){activity->GrowthJourney.run(this,activity,"探索护照","我的","3 公里")};result.putString("stream",answer);finish(Activity.RESULT_OK,result)}
+            try {val answer=MapJourneyFixture.withFixture(this){activity->GrowthJourney.run(this,activity,"山河行记","我的","3 公里")};result.putString("stream",answer);finish(Activity.RESULT_OK,result)}
             catch(e:Throwable){result.putString("stream","GROWTH_FAIL: ${e.message}");finish(Activity.RESULT_CANCELED,result)}
             return
         }
@@ -452,5 +460,5 @@ class RoadAcceptanceInstrumentation : Instrumentation() {
         automaticExportProbe=arguments?.getString("automaticExportProbe")=="true"
         fieldReportProbe=arguments?.getString("fieldReportProbe")=="true"
         publicUpdateMode=arguments?.getString("publicUpdateMode"); mapFrameScale=arguments?.getString("mapFrameScale")?.toIntOrNull() ?: 1; mapFrameProbe=arguments?.getString("mapFrameProbe")=="true"; backupWorkerProbe=arguments?.getString("backupWorkerProbe")=="true"; backupRestoreProbe=arguments?.getString("backupRestoreProbe")=="true"; hiddenNotificationProbe=arguments?.getString("hiddenNotificationProbe")=="true"; installerSha=arguments?.getString("installerSha"); mapSceneProbe=arguments?.getString("mapSceneProbe")=="true"; mapReturnProbe=arguments?.getString("mapReturnProbe")=="true"; historyCameraProbe=arguments?.getString("historyCameraProbe")=="true";rapidZoomProbe=arguments?.getString("rapidZoomProbe")=="true"; placeNameProbe=arguments?.getString("placeNameProbe")=="true"; amapAlignmentProbe=arguments?.getString("amapAlignmentProbe")=="true"; uiStateProbe=arguments?.getString("uiStateProbe")=="true"; amapGesture=arguments?.getString("amapGesture"); amapRuntimeProbe=arguments?.getString("amapRuntimeProbe")=="true"; fogFixtureRegion=arguments?.getString("fogFixtureRegion") ?: "paris"; baselineCounts=arguments?.getString("baselineCounts");dataProbe=arguments?.getString("dataProbe")=="true"; recoveryProbe=arguments?.getString("recoveryProbe")=="true"; noticeProbe=arguments?.getString("noticeProbe")=="true"; fogPixelProbe=arguments?.getString("fogPixelProbe")=="true";fogTrailReset=arguments?.getString("fogTrailReset")=="true";fogTrailProbe=arguments?.getString("fogTrailProbe")=="true";directTrailProbe=arguments?.getString("directTrailProbe")=="true"; updateLogoutProbe=arguments?.getString("updateLogoutProbe")=="true";candidateSha=arguments?.getString("candidateSha");privateUpdateProbe=arguments?.getString("privateUpdateProbe")=="true";roadColorProbe=arguments?.getString("roadColorProbe")=="true"; cameraProbe=arguments?.getString("cameraProbe")=="true"; fixtureProbe=arguments?.getString("fixtureProbe")=="true"; catalogProbe=arguments?.getString("catalogProbe")=="true"; networkProbe=arguments?.getString("networkProbe")=="true"; super.onCreate(arguments)
-        growthProbe=arguments?.getString("growthProbe")=="true"; regionProbe=arguments?.getString("regionProbe")=="true"; start() }
+        administrativeProbe=arguments?.getString("administrativeProbe")=="true";regionNetworkProbe=arguments?.getString("regionNetworkProbe")=="true";recentsRecordingProbe=arguments?.getString("recentsRecordingProbe")=="true";growthProbe=arguments?.getString("growthProbe")=="true"; regionProbe=arguments?.getString("regionProbe")=="true"; start() }
 }
