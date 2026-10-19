@@ -1,6 +1,7 @@
 package cn.walkpaint
 
 import android.app.Instrumentation
+import android.app.UiAutomation
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -19,6 +20,16 @@ internal object JournalJourneyProbe {
         val context=i.targetContext
         // Instrumentation starts before Application.onCreate has necessarily returned.
         i.runOnMainSync { }
+        // A software AVD can exceed UiAutomation's initial connection deadline.
+        var connection:UiAutomation?=null
+        val connectionDeadline=SystemClock.uptimeMillis()+180000
+        while(connection==null && SystemClock.uptimeMillis()<connectionDeadline) {
+            connection=runCatching {i.uiAutomation}.getOrNull()
+            if(connection==null)Thread.sleep(1000)
+        }
+        val automation=checkNotNull(connection){"UI automation did not connect"}
+        fun stage(name:String){i.sendStatus(0,Bundle().apply {putString("stream","JOURNAL_STAGE $name\n")})}
+        stage("automation_connected")
         val repo=(context.applicationContext as WalkPaintApp).repository
         val journalFile=File(context.cacheDir,"journal-journey-${UUID.randomUUID()}.json")
         val fixture=FootprintJournal(journalFile)
@@ -32,9 +43,9 @@ internal object JournalJourneyProbe {
             }
         }
         fun nodes():List<AccessibilityNodeInfo> {
-            i.uiAutomation.clearCache();val result=mutableListOf<AccessibilityNodeInfo>()
+            automation.clearCache();val result=mutableListOf<AccessibilityNodeInfo>()
             fun walk(node:AccessibilityNodeInfo?) {if(node==null)return;if(node.isVisibleToUser)result+=node;repeat(node.childCount){walk(node.getChild(it))}}
-            walk(i.uiAutomation.rootInActiveWindow);return result
+            walk(automation.rootInActiveWindow);return result
         }
         fun find(text:String)=nodes().firstOrNull {it.text?.toString()==text || it.contentDescription?.toString()==text}
         fun await(description:String,block:()->Boolean) {
@@ -63,7 +74,7 @@ internal object JournalJourneyProbe {
         val suffix=if(context.resources.configuration.fontScale>1.1f)"-large" else ""
         fun shot(name:String) {
             i.waitForIdleSync();Thread.sleep(500)
-            val image=i.uiAutomation.takeScreenshot() ?: error("Screenshot unavailable")
+            val image=automation.takeScreenshot() ?: error("Screenshot unavailable")
             File(context.getExternalFilesDir(null),"experience-$name$suffix.png").outputStream().use {image.compress(Bitmap.CompressFormat.PNG,100,it)}
             image.recycle()
         }
@@ -74,21 +85,22 @@ internal object JournalJourneyProbe {
         try {
             return MapJourneyFixture.withFixture(i,startupTimeoutSeconds=180,compact=true) {screen->
                 activity=screen
+                stage("fixture_ready")
                 await("welcome or footprints"){find("暂不开始")!=null || find("足迹")!=null}
                 if(find("暂不开始")!=null){shot("welcome");tap("暂不开始")}
                 val before=DataPreservationProbe.run(i)
                 val day=java.time.LocalDate.now().toString()
-                tap("足迹");tap(day,scroll=true)
+                tap("足迹");tap(day,scroll=true);stage("day_opened")
                 tap("写备注",scroll=true);wait("记录这一天")
                 setField(0,"河畔散步");setField(1,"合成验收备注");setField(2,"散步，周末")
                 tap("保存");wait("河畔散步")
                 tap("收藏这天");wait("已收藏")
                 check(fixture.snapshot()[day]==DayMemo("河畔散步","合成验收备注",listOf("散步","周末"),true))
                 check(FootprintJournal(journalFile).snapshot()==fixture.snapshot()) {"Memo was not durable"}
-                top();shot("detail")
+                stage("memo_persisted");top();shot("detail")
                 tap("制作路线明信片",scroll=true);wait("$day 的路线明信片预览");shot("card-paper")
                 tap("夜色");wait("$day 的路线明信片预览");shot("card-night")
-                tap("保存图片")
+                stage("postcard_preview");tap("保存图片")
                 val name="walkpaint-card-${UUID.randomUUID()}.png"
                 setField(0,name)
                 await("system save button") {nodes().any {it.viewIdResourceName?.endsWith("action_menu_select")==true || it.text?.toString()?.equals("save",true)==true || it.text?.toString()=="保存"}}
@@ -96,13 +108,13 @@ internal object JournalJourneyProbe {
                 while(!saveNode.isClickable)saveNode=saveNode.parent ?: error("No save action")
                 check(saveNode.performAction(AccessibilityNodeInfo.ACTION_CLICK))
                 wait("图片已保存")
-                fun shell(command:String)=android.os.ParcelFileDescriptor.AutoCloseInputStream(i.uiAutomation.executeShellCommand(command)).bufferedReader().use {it.readText()}
+                fun shell(command:String)=android.os.ParcelFileDescriptor.AutoCloseInputStream(automation.executeShellCommand(command)).bufferedReader().use {it.readText()}
                 val path=shell("find /sdcard/Download /sdcard/Documents -name $name -type f 2>/dev/null").lineSequence().firstOrNull {it.endsWith(name)} ?: error("Saved image missing")
                 check(path.matches(Regex("[A-Za-z0-9/._-]+")));savedPath=path
-                val exported=android.os.ParcelFileDescriptor.AutoCloseInputStream(i.uiAutomation.executeShellCommand("cat $path")).use {BitmapFactory.decodeStream(it)} ?: error("Invalid saved PNG")
+                val exported=android.os.ParcelFileDescriptor.AutoCloseInputStream(automation.executeShellCommand("cat $path")).use {BitmapFactory.decodeStream(it)} ?: error("Invalid saved PNG")
                 check(exported.width==RoutePostcard.WIDTH && exported.height==RoutePostcard.HEIGHT)
                 check(exported.getPixel(5,5)==CardTheme.NIGHT.background);exported.recycle()
-                tap("分享图片");await("image share intent"){shared.get()!=null}
+                stage("png_saved");tap("分享图片");await("image share intent"){shared.get()!=null}
                 val intent=shared.get()!!
                 check(intent.action==Intent.ACTION_SEND && intent.type=="image/png")
                 check(intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION!=0)
@@ -111,13 +123,13 @@ internal object JournalJourneyProbe {
                 val image=context.contentResolver.openInputStream(uri).use {BitmapFactory.decodeStream(it)} ?: error("Shared URI unreadable")
                 check(image.width==RoutePostcard.WIDTH);image.recycle()
                 await("system share chooser"){nodes().any {it.packageName?.toString()=="com.android.intentresolver"}}
-                shot("share")
+                stage("chooser_ready");shot("share")
                 i.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);wait("路线明信片")
                 tap("返回");top();wait("当天足迹");tap("返回");top()
                 tap("已收藏");wait("收藏的足迹 · 1 天");wait("河畔散步");shot("collection")
                 tap("查找");setField(0,"没有这个合成内容");wait("没有找到匹配的足迹，试试其他日期或标签。")
                 setField(0,"#周末");wait("河畔散步");wait("查找结果 · 1 天");shot("search")
-                val encoded=org.json.JSONObject(repo.exportBackup()).getJSONObject("journal")
+                stage("search_verified");val encoded=org.json.JSONObject(repo.exportBackup()).getJSONObject("journal")
                 check(JournalCodec.decode(encoded)[day]?.note=="合成验收备注")
                 check(DataPreservationProbe.run(i)==before) {"Original SQLite rows changed"}
                 "JOURNAL_JOURNEY_PASS controls=true persisted=true favorite_search=true postcard_png=true share_uri=true backup_annotations=true sqlite_unchanged=true fontScale=${context.resources.configuration.fontScale}"
@@ -130,7 +142,7 @@ internal object JournalJourneyProbe {
             field.set(repo,original)
             i.runOnMainSync {activity?.finish()}
             journalFile.delete()
-            savedPath?.let {i.uiAutomation.executeShellCommand("rm $it").close()}
+            savedPath?.let {automation.executeShellCommand("rm $it").close()}
         }
     }
 }
