@@ -22,7 +22,11 @@ GPS 过滤、已保存坐标、真实分段、recording_cursor 和 SQLite schema
 
 ## 原生验收
 
-执行目标仅本任务专用 Google APIs API36 AVD `WalkPaint_Google_API36` / `emulator-5556`；无 KVM，使用软件仿真。实际结果在完成后补记，不以构建或静态截图代替交互验收。
+执行目标仅本任务专用 Google APIs API36 AVD `WalkPaint_Google_API36` / `emulator-5556`；无 KVM，使用软件仿真。软件仿真首次启动多次触发系统 Watchdog；只对本任务 AVD 临时将硬件超时倍率设为10，并将显示设为720×1600/density280。常规应用验收前仍通过专用 AVD 身份与 boot_completed=1 校验，不以此环境声明真机性能。
+
+已通过原生 `BackupRestoreProbe`：旧备份兼容/新备份行记往返、重复导入、本机编辑优先、坏行记原件保留且已恢复足迹不丢失、未来点整批拒绝、恢复期间继续记录与游标保持。只使用隔离数据库，见 [原生结果](backup-restore.log)。
+
+界面、系统保存/分享与大字体路径正在验收，尚不计为通过。
 
 ## 正式发布边界
 

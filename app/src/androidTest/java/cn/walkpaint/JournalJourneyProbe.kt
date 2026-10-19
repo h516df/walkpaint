@@ -17,6 +17,8 @@ internal object JournalJourneyProbe {
     fun run(i:Instrumentation):String {
         check(BuildConfig.DEVELOPER_BUILD && i.targetContext.packageName=="cn.walkpaint.dev")
         val context=i.targetContext
+        // Instrumentation starts before Application.onCreate has necessarily returned.
+        i.runOnMainSync { }
         val repo=(context.applicationContext as WalkPaintApp).repository
         val journalFile=File(context.cacheDir,"journal-journey-${UUID.randomUUID()}.json")
         val fixture=FootprintJournal(journalFile)
@@ -70,7 +72,7 @@ internal object JournalJourneyProbe {
         i.addMonitor(monitor)
         field.set(repo,fixture)
         try {
-            return MapJourneyFixture.withFixture(i) {screen->
+            return MapJourneyFixture.withFixture(i,startupTimeoutSeconds=180) {screen->
                 activity=screen
                 await("welcome or footprints"){find("暂不开始")!=null || find("足迹")!=null}
                 if(find("暂不开始")!=null){shot("welcome");tap("暂不开始")}

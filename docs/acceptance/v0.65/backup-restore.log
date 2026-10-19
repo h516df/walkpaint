@@ -1,0 +1,1 @@
+BACKUP_RESTORE_PASS old_new_idempotent=true recording_during_restore_and_reopen=true future_atomic_rejection=true journal_roundtrip_local_edits_partial_failure=true isolated=true
