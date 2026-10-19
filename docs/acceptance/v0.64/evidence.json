@@ -1,8 +1,23 @@
 {
   "versionName": "0.64",
   "versionCode": 72,
-  "apkSha256": "d939aa4f6ce6650580defefdaef61cdecd05b9ccfb26227d1f13dae47314e169",
-  "apkBytes": 54571294,
+  "apkSha256": "ad586a694c7bacda579492f3a9bf91eff19ad0183c7e3a48466f5b82868423c3",
+  "apkBytes": 54571289,
+  "apkSha256PrePublish": "d939aa4f6ce6650580defefdaef61cdecd05b9ccfb26227d1f13dae47314e169",
+  "apkBytesPrePublish": 54571294,
+  "packagingReproducible": false,
+  "release": {
+    "tag": "v0.64",
+    "target": "6672788535e6bda694fa15704a2c315c63ab9a6c",
+    "asset": "WalkPaint-v0.64-arm64.apk",
+    "assets": [
+      "WalkPaint-v0.64-arm64.apk",
+      "WalkPaint-v0.64-release-notes.json",
+      "WalkPaint-v0.64-SHA256.txt"
+    ],
+    "publishedAt": "2026-10-19T07:41:59Z",
+    "publicDownload": "HEAD /releases/download/v0.64/WalkPaint-v0.64-arm64.apk -> HTTP 200, Content-Length 54571289"
+  },
   "package": "cn.walkpaint",
   "architecture": "arm64-v8a",
   "debuggable": false,
@@ -30,7 +45,8 @@
   ],
   "deviceAcceptance": {
     "device": "emulator-5560 / WalkPaint_Google_API36_V044",
-    "replayRoutePixels": [91, 149, 270, 330, 421, 421, 836, 836, 836],
+    "replayRoutePixels": [91, 148, 268, 328, 420, 420, 836, 836, 836],
+    "replayPixelsMeasuredOn": "ad586a694c7bacda579492f3a9bf91eff19ad0183c7e3a48466f5b82868423c3",
     "replayRouteGrows": true,
     "replayPauseFreezes": true,
     "replayRestartsAfterFinish": true,
@@ -40,7 +56,7 @@
   },
   "notVerified": [
     "实体手机安装、户外、锁屏与长时间后台",
-    "高德底图瓦片渲染：x86_64 AVD 上经 ARM native bridge 加载成功但不绘制瓦片，须以真机为准",
+    "高德底图瓦片渲染表现不一致，原因未查明：相机落在自己的巴黎足迹上有真实出图（街道地名与道路配色），AVD 默认山景城为空，注入北京坐标并点定位后整片为黑；删 MapLibre 之前同样如此，非本版回归，通用观感须以真机为准",
     "android_follow_offline.py 的蓝点颜色常数改为 (48,139,211) 系照同类脚本推断，未单独实测",
     "android_direct_trail_acceptance.py 被本轮范围外的旧选择器（涂色颜色）挡住，未跑通"
   ],

@@ -7,6 +7,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.sp
@@ -32,9 +33,16 @@ internal fun WalkPaintTheme(mode:Int=0,immersiveMap:Boolean=false,skin:VisualSki
     }
     SideEffect {
         activity?.window?.let { window ->
+            // Older Android draws opaque decor bars outside Compose; update those as well.
+            if(android.os.Build.VERSION.SDK_INT < 35) {
+                @Suppress("DEPRECATION")
+                window.statusBarColor=p.paper.toArgb()
+                @Suppress("DEPRECATION")
+                window.navigationBarColor=p.paper.toArgb()
+            }
             WindowCompat.getInsetsController(window,view).apply {
-                isAppearanceLightStatusBars=!dark && !immersiveMap
-                isAppearanceLightNavigationBars=!dark && !immersiveMap
+                isAppearanceLightStatusBars=!dark
+                isAppearanceLightNavigationBars=!dark
             }
         }
     }

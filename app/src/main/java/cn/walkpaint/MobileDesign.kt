@@ -75,7 +75,7 @@ internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolea
     title: String, healthy: Boolean, notice: String?, provider: String, onSettings: () -> Unit,
     onToggle: (Boolean) -> Unit, onLocate: () -> Unit, onShowAll: () -> Unit,
     showOsmCredit: Boolean, onZoom: (Int) -> Unit, mapContent: @Composable () -> Unit, regionContent:@Composable ()->Unit={},
-    replay: ReplayControls? = null) {
+    replay: ReplayControls? = null,bottomControlsInset:androidx.compose.ui.unit.Dp=94.dp) {
     val uri = androidx.compose.ui.platform.LocalUriHandler.current
     Box(Modifier.fillMaxSize()) {
         mapContent()
@@ -109,7 +109,7 @@ internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolea
             }
         }
         }
-        Column(Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(end=16.dp,bottom=94.dp),
+        Column(Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(end=16.dp,bottom=bottomControlsInset),
             verticalArrangement=Arrangement.spacedBy(12.dp)) {
             Surface(color=Canvas,shape=RoundedCornerShape(14.dp)) {
                 Column {
@@ -133,21 +133,26 @@ internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolea
             val progress=replay.progress().coerceIn(0f,1f)
             Surface(color=chrome,shape=RoundedCornerShape(16.dp),
                 modifier=Modifier.align(Alignment.BottomStart).fillMaxWidth().navigationBarsPadding()
-                    .padding(start=16.dp,end=88.dp,bottom=94.dp)) {
-                Row(Modifier.padding(horizontal=14.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically,
-                    horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                    Surface(onClick=replay.onToggle,color=Color(0xFF2E4C7E),shape=RoundedCornerShape(10.dp)) {
-                        Text(if(replay.playing) "暂停" else "继续",color=Color(0xFFEAF1FF),fontSize=14.sp,
-                            modifier=Modifier.padding(horizontal=12.dp,vertical=8.dp))
+                    .padding(start=16.dp,end=88.dp,bottom=bottomControlsInset)) {
+                Column(Modifier.padding(horizontal=14.dp,vertical=10.dp),
+                    verticalArrangement=Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,
+                        horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                        Surface(onClick=replay.onToggle,color=Color(0xFF2E4C7E),shape=RoundedCornerShape(10.dp)) {
+                            Text(if(replay.playing) "暂停" else "继续",color=Color(0xFFEAF1FF),fontSize=14.sp,
+                                modifier=Modifier.padding(horizontal=12.dp,vertical=8.dp))
+                        }
+                        Spacer(Modifier.weight(1f))
+                        Text("${(progress*100).toInt()}%",color=chromeInk,fontSize=12.sp)
+                        Surface(onClick=replay.onClose,color=Color.Transparent,shape=RoundedCornerShape(10.dp)) {
+                            Text("关闭",color=Color(0xFFB8D3FF),fontSize=14.sp,
+                                modifier=Modifier.padding(horizontal=4.dp,vertical=8.dp))
+                        }
                     }
-                    Box(Modifier.weight(1f).height(6.dp).background(Color(0xFF31405A),RoundedCornerShape(3.dp))) {
+                    // A separate full-width track remains visible at 320dp and enlarged text.
+                    Box(Modifier.fillMaxWidth().height(6.dp).background(Color(0xFF31405A),RoundedCornerShape(3.dp))) {
                         if(progress>0f) Box(Modifier.fillMaxWidth(progress).height(6.dp)
                             .background(Color(0xFF9CC2FF),RoundedCornerShape(3.dp)))
-                    }
-                    Text("${(progress*100).toInt()}%",color=chromeInk,fontSize=12.sp)
-                    Surface(onClick=replay.onClose,color=Color.Transparent,shape=RoundedCornerShape(10.dp)) {
-                        Text("关闭",color=Color(0xFFB8D3FF),fontSize=14.sp,
-                            modifier=Modifier.padding(horizontal=4.dp,vertical=8.dp))
                     }
                 }
             }

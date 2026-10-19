@@ -12,6 +12,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -54,6 +56,8 @@ internal fun AppShell(
     onBackupEntry:()->Unit={},onSkin:()->Unit={},onNotifications:()->Unit={},backupStatus:String?=null,
     replay: ReplayControls? = null
 ) {
+    val density=LocalDensity.current
+    var dockHeight by remember { mutableStateOf(62.dp) }
     Box(Modifier.fillMaxSize().background(PageBackground)) {
         // Keep the SDK and GL surface alive across bottom-tab journeys. Only the controls/pages
         // change; disposing a map here recreated every texture, marker and history overlay.
@@ -69,11 +73,12 @@ internal fun AppShell(
             when(selectedTab) {
                 0 -> DesignMapOverlay(state,selectedDay,automatic,recordingTitle,recordingHealthy,mapNotice,
                     mapProviderLabel,onResolveTracking,onToggleTracking,onLocate,onShowAll,
-                    roadState.meters>0,onZoom,{},regionContent={RegionExplorationCard(state,fix,placeName)},replay=replay)
-                1 -> Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(bottom=76.dp)) {
+                    roadState.meters>0,onZoom,{},regionContent={RegionExplorationCard(state,fix,placeName)},
+                    replay=replay,bottomControlsInset=dockHeight+32.dp)
+                1 -> Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(bottom=dockHeight+24.dp)) {
                     DesignTripsPage(state,roadColor,onTrip,onExport,onSkin)
                 }
-                else -> Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(bottom=76.dp)) {
+                else -> Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(bottom=dockHeight+24.dp)) {
                     ProfilePage(state,appearanceMode,onAppearanceMode,onShowIntro,automatic,profileNotice,onResolveTracking,
                     onToggleTracking,onRevoke,onBackgroundSettings,onPowerSettings,onCopyDiagnostics,
                     roadState,roadAreaHint,onRoadPack,onExport,onImport,internalBackupCount,
@@ -81,34 +86,14 @@ internal fun AppShell(
                 }
             }
         }
-        val mapChrome=selectedTab==0
-        val dock=if(mapChrome) androidx.compose.ui.graphics.Color(0xFF151B26) else Canvas
-        val dockInk=if(mapChrome) androidx.compose.ui.graphics.Color(0xFFB7C1D0) else Muted
-        val selectedInk=if(mapChrome) skinPalette(LocalVisualSkin.current,true).brand else Pigment
-        Surface(color=dock,modifier=Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
-            Column(Modifier.navigationBarsPadding()) {
-                HorizontalDivider(color=if(mapChrome) androidx.compose.ui.graphics.Color(0xFF2A3342) else Line)
-                Row(Modifier.widthIn(max=520.dp).fillMaxWidth().align(Alignment.CenterHorizontally)
-                    .padding(horizontal=16.dp,vertical=10.dp),horizontalArrangement=Arrangement.spacedBy(6.dp)) {
-                    val labels=listOf("探索","足迹","我的")
-                    val icons=listOf(R.drawable.ic_map,R.drawable.ic_route,R.drawable.ic_person)
-                    labels.forEachIndexed { index,label ->
-                        val active=selectedTab==index
-                        Surface(onClick={onTab(index)},color=if(active) selectedInk.copy(alpha=.12f) else
-                            androidx.compose.ui.graphics.Color.Transparent,shape=RoundedCornerShape(14.dp),
-                            modifier=Modifier.weight(1f).heightIn(min=48.dp).semantics { selected=active }) {
-                            Row(Modifier.padding(horizontal=6.dp,vertical=12.dp),verticalAlignment=Alignment.CenterVertically,
-                                horizontalArrangement=Arrangement.spacedBy(7.dp,Alignment.CenterHorizontally)) {
-                                Icon(painterResource(icons[index]),null,tint=if(active) selectedInk else dockInk,
-                                    modifier=Modifier.size(20.dp))
-                                Text(label,color=if(active) selectedInk else dockInk,fontSize=14.sp,
-                                    fontWeight=if(active) FontWeight.SemiBold else FontWeight.Normal)
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        // Stable theme-colored system-bar areas keep icons legible over maps and empty placeholders.
+        Spacer(Modifier.align(Alignment.TopCenter).fillMaxWidth()
+            .windowInsetsTopHeight(WindowInsets.statusBars).background(PageBackground))
+        Spacer(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+            .windowInsetsBottomHeight(WindowInsets.navigationBars).background(PageBackground))
+        LandscapeDock(selectedTab,onTab,Modifier.align(Alignment.BottomCenter)
+            .navigationBarsPadding().padding(horizontal=20.dp,vertical=8.dp)
+            .onSizeChanged { dockHeight=with(density){it.height.toDp()} })
     }
 }
 
@@ -552,7 +537,7 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
                     Row(Modifier.fillMaxWidth().heightIn(min=64.dp),verticalAlignment=Alignment.CenterVertically) {
                         Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(4.dp)) {
                             Text("自动记录",color=Ink,fontSize=16.sp,fontWeight=FontWeight.Medium)
-                            Text(if(automatic) "已开启，外出时自动记录" else "已暂停，历史足迹保留",
+                            Text(if(automatic) "外出时留下足迹" else "已暂停，历史足迹保留",
                                 color=Muted,fontSize=13.sp,lineHeight=19.sp)
                         }
                         Switch(checked=automatic,onCheckedChange=onToggle,
@@ -563,19 +548,19 @@ private fun ProfilePage(state:TrackState,appearanceMode:Int,onAppearanceMode:(In
                         SettingRow(notice,"查看如何恢复记录",onResolve)
                         HorizontalDivider(color=Line)
                     }
-                    SettingRow("后台记录设置") {page="后台记录设置"}
+                    ProfileSettingRow("后台记录设置",R.drawable.ic_leaf) {page="后台记录设置"}
                 } }
                 item { TrailPanel(spacing=0.dp) {
-                    SettingRow("外观与配色",LocalVisualSkin.current.label) {page="外观与配色"}
+                    ProfileSettingRow("外观与配色",R.drawable.ic_paint,LocalVisualSkin.current.label) {page="外观与配色"}
                     HorizontalDivider(color=Line)
-                    SettingRow("备份与数据") { onBackupEntry();backupParent="我的";page="备份与恢复" }
+                    ProfileSettingRow("备份与数据",R.drawable.ic_archive) { onBackupEntry();backupParent="我的";page="备份与恢复" }
                 } }
                 item { TrailPanel(spacing=0.dp) {
-                    SettingRow("问题反馈") { page="问题反馈" }
+                    ProfileSettingRow("问题反馈",R.drawable.ic_message) { page="问题反馈" }
                     HorizontalDivider(color=Line)
-                    SettingRow("检查更新","当前版本 ${BuildConfig.VERSION_NAME}") { page="检查更新" }
+                    ProfileSettingRow("检查更新",R.drawable.ic_update,"当前版本 ${BuildConfig.VERSION_NAME}") { page="检查更新" }
                     HorizontalDivider(color=Line)
-                    SettingRow("更多设置") { page="更多设置" }
+                    ProfileSettingRow("更多设置",R.drawable.ic_settings) { page="更多设置" }
                 } }
                 item { Text("足迹涂色  ${BuildConfig.VERSION_NAME}",color=Muted,fontSize=12.sp,
                     modifier=Modifier.fillMaxWidth().padding(vertical=8.dp),textAlign=TextAlign.Center) }
