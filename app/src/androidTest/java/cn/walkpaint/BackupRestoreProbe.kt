@@ -63,8 +63,35 @@ internal object BackupRestoreProbe {
                 try {repo.importBackup(backup(listOf(future),"future"))} catch(_:IllegalArgumentException) {rejected=true}
                 check(rejected && repo.snapshot()==before) {"future import accepted or original data changed"}
             }
+            scenario("journal_roundtrip_and_local_edits") {
+                val source=db("journal-source");source.importBackup(backup(points))
+                val day=DailyFootprints.key(past)
+                val memo=DayMemo("合成散步","只用于验收",listOf("周末"),true)
+                source.journal.update(day){memo}
+                val text=source.exportBackup()
+                check(TrackCodec.decode(text).realPointCount==4) {"legacy GPS decoding changed"}
+                val target=db("journal-target")
+                check(!target.importBackup(text).journalPending)
+                check(target.journal.snapshot()[day]==memo)
+                target.journal.update(day){it.copy(note="本机编辑")}
+                target.importBackup(text)
+                check(target.journal.snapshot()[day]?.note=="本机编辑")
+                val before=target.snapshot()
+                val malformed=org.json.JSONObject(text).put("journal",org.json.JSONObject().put("version",99))
+                check(runCatching {target.importBackup(malformed.toString())}.isFailure)
+                check(target.snapshot()==before)
+            }
+            scenario("journal_failure_is_reported_without_discarding_tracks") {
+                val source=db("partial-source");source.importBackup(backup(points))
+                source.journal.update(DailyFootprints.key(past)){DayMemo("合成标题")}
+                val c=context("partial-target");val target=FootprintDatabase(c).also {databases+=it}
+                val journal=File(c.filesDir,"footprint-journal.json").apply {writeText("corrupt-original")}
+                val result=target.importBackup(source.exportBackup())
+                check(result.journalPending && result.message().contains("行记尚未恢复"))
+                check(target.snapshot().realPointCount==4 && journal.readText()=="corrupt-original")
+            }
             check(failures.isEmpty()) {failures.joinToString("; ")}
-            return "BACKUP_RESTORE_PASS old_new_idempotent=true recording_during_restore_and_reopen=true future_atomic_rejection=true isolated=true"
+            return "BACKUP_RESTORE_PASS old_new_idempotent=true recording_during_restore_and_reopen=true future_atomic_rejection=true journal_roundtrip_local_edits_partial_failure=true isolated=true"
         } finally {
             databases.forEach {runCatching {it.close()}}
             preferences.forEach {i.targetContext.deleteSharedPreferences(it)}
