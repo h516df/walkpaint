@@ -73,7 +73,7 @@ internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolea
     title: String, healthy: Boolean, notice: String?, provider: String, onSettings: () -> Unit,
     onToggle: (Boolean) -> Unit, onLocate: () -> Unit, onShowAll: () -> Unit,
     showOsmCredit: Boolean, onZoom: (Int) -> Unit, mapContent: @Composable () -> Unit, regionContent:@Composable ()->Unit={},
-    replay: ReplayControls? = null) {
+    replay: ReplayControls? = null,bottomControlsInset:androidx.compose.ui.unit.Dp=94.dp) {
     val uri = androidx.compose.ui.platform.LocalUriHandler.current
     Box(Modifier.fillMaxSize()) {
         mapContent()
@@ -107,7 +107,7 @@ internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolea
             }
         }
         }
-        Column(Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(end=16.dp,bottom=94.dp),
+        Column(Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(end=16.dp,bottom=bottomControlsInset),
             verticalArrangement=Arrangement.spacedBy(12.dp)) {
             Surface(color=Canvas,shape=RoundedCornerShape(14.dp)) {
                 Column {
@@ -131,7 +131,7 @@ internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolea
             val progress=replay.progress().coerceIn(0f,1f)
             Surface(color=chrome,shape=RoundedCornerShape(16.dp),
                 modifier=Modifier.align(Alignment.BottomStart).fillMaxWidth().navigationBarsPadding()
-                    .padding(start=16.dp,end=88.dp,bottom=94.dp)) {
+                    .padding(start=16.dp,end=88.dp,bottom=bottomControlsInset)) {
                 Row(Modifier.padding(horizontal=14.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically,
                     horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                     Surface(onClick=replay.onToggle,color=Color(0xFF2E4C7E),shape=RoundedCornerShape(10.dp)) {
