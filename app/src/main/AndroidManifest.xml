@@ -13,7 +13,7 @@
 
     <application
         android:name=".WalkPaintApp"
-        android:label="足迹涂色"
+        android:label="${APP_LABEL}"
         android:icon="@drawable/ic_footprint"
         android:theme="@style/AppTheme"
         android:allowBackup="false"

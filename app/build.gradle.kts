@@ -36,6 +36,7 @@ android {
         buildConfigField("String", "AMAP_KEY", "\"$amapKey\"")
         buildConfigField("String", "UPDATE_CLIENT_ID", "\"$updateClientId\"")
         manifestPlaceholders["AMAP_API_KEY"] = amapKey
+        manifestPlaceholders["APP_LABEL"] = if (developerBuild) "足迹涂色·预览" else "足迹涂色"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
@@ -60,7 +61,10 @@ android {
     }
     buildTypes {
         getByName("debug") {
-            if (developerBuild) applicationIdSuffix = ".dev"
+            if (developerBuild) {
+                applicationIdSuffix = ".dev"
+                versionNameSuffix = "-ui-preview.1"
+            }
         }
         getByName("release") {
             // Preserve the identity of every distributed version, without a debuggable release.

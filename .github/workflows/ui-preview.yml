@@ -1,0 +1,150 @@
+name: Native UI preview
+on:
+  push:
+    branches: [dot/native-landscape-ui-20261019]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: native-ui-preview
+  cancel-in-progress: false
+jobs:
+  build:
+    if: ${{ !contains(github.event.head_commit.message, '[publish-ui-preview]') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Select installed JDK 21
+        run: |
+          echo "JAVA_HOME=$JAVA_HOME_21_X64" >> "$GITHUB_ENV"
+          echo "$JAVA_HOME_21_X64/bin" >> "$GITHUB_PATH"
+      - name: Install approved SDK components
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        if: ${{ contains(github.event.head_commit.message, '[native-only]') }}
+        with:
+          name: walkpaint-ui-f86b0e17468192f2ec771680052a7dfae5571427
+          run-id: 39214455737
+          github-token: ${{ github.token }}
+          path: preview-artifacts
+      - name: Tests, lint and isolated developer APK
+        if: ${{ !contains(github.event.head_commit.message, '[native-only]') }}
+        run: |
+          python3 -m unittest discover -s tests -v
+          python3 -m unittest discover -s scripts -p 'test_*.py' -v
+          bash gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest -PwalkpaintDeveloperBuild=true --console=plain
+      - name: Verify and package artifacts
+        if: ${{ !contains(github.event.head_commit.message, '[native-only]') }}
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          mkdir preview-artifacts
+          cp app/build/outputs/apk/debug/app-debug.apk preview-artifacts/walkpaint-ui-preview.apk
+          cp app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk preview-artifacts/walkpaint-ui-preview-test.apk
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging preview-artifacts/walkpaint-ui-preview.apk > preview-artifacts/badging.txt
+          grep -F "package: name='cn.walkpaint.dev'" preview-artifacts/badging.txt
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose preview-artifacts/walkpaint-ui-preview.apk
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          root=Path('preview-artifacts')
+          apk=root/'walkpaint-ui-preview.apk'
+          (root/'SHA256SUMS').write_text(hashlib.sha256(apk.read_bytes()).hexdigest()+'  '+apk.name+'\n')
+          (root/'build-info.json').write_text(json.dumps({'package':'cn.walkpaint.dev','source_sha':os.environ['SOURCE_SHA'],'version':'0.63-ui-preview.1','amap_key_present':False},indent=2))
+          PY
+      - name: Native UI acceptance on dedicated emulator
+        timeout-minutes: 20
+        run: |
+          echo 'Software-only emulator: no KVM permission changes'
+          if [ "${{ contains(github.event.head_commit.message, '[native-only]') }}" = true ]; then
+            echo '51daba939f1407a37cff6b17c3e0dd8d4efb9692030924f354e23eeec0e9c8b3  preview-artifacts/walkpaint-ui-preview.apk' | sha256sum --check
+          fi
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'emulator' 'system-images;android-29;default;x86_64'
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --name WalkPaint_UI_Preview_CI --package 'system-images;android-29;default;x86_64' --device pixel_6
+          "$ANDROID_HOME/emulator/emulator" -avd WalkPaint_UI_Preview_CI -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -accel off -cores 1 -memory 2048 -port 5562 > emulator.log 2>&1 &
+          emulator_pid=$!
+          trap 'kill "$emulator_pid" || true' EXIT
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          timeout 300 adb -s emulator-5562 wait-for-device
+          for attempt in $(seq 1 120); do
+            if [ "$(adb -s emulator-5562 shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then break; fi
+            sleep 3
+          done
+          test "$(adb -s emulator-5562 shell getprop sys.boot_completed | tr -d '\r')" = 1
+          adb -s emulator-5562 shell input keyevent 82
+          python3 scripts/landscape_ui_acceptance.py --adb "$ANDROID_HOME/platform-tools/adb" --serial emulator-5562 --apk preview-artifacts/walkpaint-ui-preview.apk --test-apk preview-artifacts/walkpaint-ui-preview-test.apk --build-info preview-artifacts/build-info.json --out native-ui-evidence
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: native-ui-evidence-${{ github.sha }}
+          path: |
+            native-ui-evidence/
+            emulator.log
+          retention-days: 14
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: walkpaint-ui-${{ github.sha }}
+          path: preview-artifacts/
+          retention-days: 14
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: android-reports-${{ github.sha }}
+          path: |
+            app/build/reports/
+            app/build/test-results/
+          retention-days: 14
+  publish:
+    if: ${{ contains(github.event.head_commit.message, '[publish-ui-preview]') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Read verified publication request
+        id: request
+        run: |
+          python3 - <<'PY'
+          import json,os,re
+          from pathlib import Path
+          request=json.loads(Path('docs/acceptance/ui-preview/publish-request.json').read_text())
+          assert re.fullmatch('[a-f0-9]{40}',request['source_sha'])
+          assert re.fullmatch('[a-f0-9]{64}',request['apk_sha256'])
+          assert isinstance(request['run_id'],int) and request['run_id']>0
+          assert request['native_ui_passed'] is True
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+            f.write(f"source_sha={request['source_sha']}\nrun_id={request['run_id']}\napk_sha256={request['apk_sha256']}\n")
+          PY
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: walkpaint-ui-${{ steps.request.outputs.source_sha }}
+          run-id: ${{ steps.request.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: accepted-artifacts
+      - name: Verify exact accepted APK and publish non-latest prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.request.outputs.source_sha }}
+          APK_SHA: ${{ steps.request.outputs.apk_sha256 }}
+          SOURCE_RUN: ${{ steps.request.outputs.run_id }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN" > run.json
+          python3 - <<'PY'
+          import json,os
+          r=json.load(open('run.json'))
+          assert r['head_sha']==os.environ['SOURCE_SHA'] and r['conclusion']=='success'
+          assert r['head_branch']=='dot/native-landscape-ui-20261019'
+          assert r['path']=='.github/workflows/ui-preview.yml' and r['event']=='push'
+          PY
+          echo "$APK_SHA  accepted-artifacts/walkpaint-ui-preview.apk" | sha256sum --check
+          mkdir release-assets
+          cp accepted-artifacts/{walkpaint-ui-preview.apk,SHA256SUMS,build-info.json} release-assets/
+          python3 scripts/publish_ui_preview.py --source-sha "$SOURCE_SHA" --assets release-assets --public-release

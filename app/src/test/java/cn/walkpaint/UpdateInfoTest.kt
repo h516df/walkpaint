@@ -7,7 +7,10 @@ class UpdateInfoTest {
     private val text=File("src/main/assets/release-notes.json").readText()
     @Test fun notesMatchTheActualBuildAndRemainAvailableOffline() {
         val n=CurrentRelease.decode(text)
-        assertEquals(BuildConfig.VERSION_NAME,n.version);assertEquals(BuildConfig.VERSION_CODE,n.code)
+        // The isolated UI preview keeps the official base notes; its screen identifies the
+        // preview separately and never offers the official package as an in-place update.
+        val expected=if(BuildConfig.DEVELOPER_BUILD) BuildConfig.VERSION_NAME.removeSuffix("-ui-preview.1") else BuildConfig.VERSION_NAME
+        assertEquals(expected,n.version);assertEquals(BuildConfig.VERSION_CODE,n.code)
         assertEquals(listOf("新增","改进","修复","说明"),n.sections.map { it.first })
         val words=n.sections.flatMap { it.second }.joinToString()
         listOf("GPS_PROVIDER","schema","commit","SDK").forEach { assertFalse(words.contains(it)) }
