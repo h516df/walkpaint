@@ -45,7 +45,34 @@ jobs:
           (root/'SHA256SUMS').write_text(hashlib.sha256(apk.read_bytes()).hexdigest()+'  '+apk.name+'\n')
           (root/'build-info.json').write_text(json.dumps({'package':'cn.walkpaint.dev','source_sha':os.environ['SOURCE_SHA'],'version':'0.63-ui-preview.1','amap_key_present':False},indent=2))
           PY
+      - name: Native UI acceptance on dedicated emulator
+        timeout-minutes: 20
+        run: |
+          test -r /dev/kvm && test -w /dev/kvm || { ls -l /dev/kvm; echo 'KVM access is unavailable; no permissions changed'; exit 1; }
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'emulator' 'system-images;android-36;default;x86_64'
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --name WalkPaint_UI_Preview_CI --package 'system-images;android-36;default;x86_64' --device pixel_6
+          "$ANDROID_HOME/emulator/emulator" -avd WalkPaint_UI_Preview_CI -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -port 5562 > emulator.log 2>&1 &
+          emulator_pid=$!
+          trap 'kill "$emulator_pid" || true' EXIT
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          timeout 300 adb -s emulator-5562 wait-for-device
+          for attempt in $(seq 1 120); do
+            if [ "$(adb -s emulator-5562 shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then break; fi
+            sleep 3
+          done
+          test "$(adb -s emulator-5562 shell getprop sys.boot_completed | tr -d '\r')" = 1
+          adb -s emulator-5562 shell input keyevent 82
+          python3 scripts/landscape_ui_acceptance.py --adb "$ANDROID_HOME/platform-tools/adb" --serial emulator-5562 --apk preview-artifacts/walkpaint-ui-preview.apk --test-apk preview-artifacts/walkpaint-ui-preview-test.apk --build-info preview-artifacts/build-info.json --out native-ui-evidence
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: native-ui-evidence-${{ github.sha }}
+          path: |
+            native-ui-evidence/
+            emulator.log
+          retention-days: 14
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
         with:
           name: walkpaint-ui-${{ github.sha }}
           path: preview-artifacts/
