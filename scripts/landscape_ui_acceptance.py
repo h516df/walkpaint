@@ -1,0 +1,77 @@
+"""Native UI checks on the dedicated preview emulator only. Never uninstalls or clears data."""
+import argparse
+import hashlib
+import json
+import re
+import subprocess
+from pathlib import Path
+
+PACKAGE = 'cn.walkpaint.dev'
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--adb', required=True, type=Path)
+    parser.add_argument('--serial', required=True)
+    parser.add_argument('--apk', required=True, type=Path)
+    parser.add_argument('--test-apk', required=True, type=Path)
+    parser.add_argument('--out', required=True, type=Path)
+    args = parser.parse_args()
+    if not re.fullmatch(r'emulator-\d+', args.serial):
+        raise SystemExit('Only a dedicated emulator serial is allowed')
+
+    def adb(*parts, timeout=120):
+        result = subprocess.run([str(args.adb), '-s', args.serial, *map(str, parts)],
+                                capture_output=True, text=True, timeout=timeout)
+        if result.returncode:
+            raise RuntimeError(result.stderr[-2000:] or result.stdout[-2000:])
+        return result.stdout
+
+    avd = adb('emu', 'avd', 'name').splitlines()[0].strip()
+    if not avd.startswith('WalkPaint_UI_Preview'):
+        raise SystemExit('Refusing an emulator not owned by this preview task: ' + avd)
+    args.out.mkdir(parents=True, exist_ok=False)
+    report = {'source_sha': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+              'apk_sha256': hashlib.sha256(args.apk.read_bytes()).hexdigest(),
+              'package': PACKAGE, 'avd': avd, 'serial': args.serial, 'cases': [],
+              'physical_device': 'not_verified', 'amap_network': 'not_verified'}
+    original_size = adb('shell', 'wm', 'size')
+    original_density = adb('shell', 'wm', 'density')
+    original_font = adb('shell', 'settings', 'get', 'system', 'font_scale').strip()
+    try:
+        for path in (args.apk, args.test_apk):
+            if 'Success' not in adb('install', '-r', path, timeout=300):
+                raise RuntimeError('Install did not confirm success')
+        for name, size, density, font in [('normal', '1080x2400', '420', '1.0'),
+                                           ('narrow-large', '960x2160', '480', '1.5')]:
+            adb('shell', 'wm', 'size', size)
+            adb('shell', 'wm', 'density', density)
+            adb('shell', 'settings', 'put', 'system', 'font_scale', font)
+            adb('shell', 'am', 'force-stop', PACKAGE)
+            result = adb('shell', 'am', 'instrument', '-w', '-e', 'landscapeProbe', 'true',
+                         PACKAGE + '.test/cn.walkpaint.RoadAcceptanceInstrumentation', timeout=600)
+            (args.out / (name + '.txt')).write_text(result)
+            passed = 'LANDSCAPE_UI_PASS:' in result and 'LANDSCAPE_UI_FAIL:' not in result
+            case = {'name': name, 'viewport': size, 'density': density, 'font_scale': font,
+                    'passed': passed}
+            report['cases'].append(case)
+            screenshots = args.out / name
+            screenshots.mkdir()
+            adb('pull', '/sdcard/Android/data/' + PACKAGE + '/files/.', screenshots)
+            if not passed:
+                raise RuntimeError('Native acceptance failed: ' + name + '\n' + result[-3000:])
+    finally:
+        override = re.search(r'Override size: (\d+x\d+)', original_size)
+        adb('shell', 'wm', 'size', override.group(1) if override else 'reset')
+        override = re.search(r'Override density: (\d+)', original_density)
+        adb('shell', 'wm', 'density', override.group(1) if override else 'reset')
+        if original_font == 'null':
+            adb('shell', 'settings', 'delete', 'system', 'font_scale')
+        else:
+            adb('shell', 'settings', 'put', 'system', 'font_scale', original_font)
+        (args.out / 'report.json').write_text(json.dumps(report, indent=2))
+    print(json.dumps(report, indent=2))
+
+
+if __name__ == '__main__':
+    main()

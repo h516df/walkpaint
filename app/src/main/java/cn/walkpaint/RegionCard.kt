@@ -96,7 +96,13 @@ import java.util.Locale
                 Icon(painterResource(R.drawable.ic_back),null,Modifier.size(12.dp).rotate(180f),tint=muted)
             }
         }
-        AnimatedVisibility(newlyLit){Surface(shape=RoundedCornerShape(12.dp),color=paper){Text("又点亮了一小片",color=gold,fontSize=13.sp,modifier=Modifier.padding(horizontal=14.dp,vertical=8.dp))}}
+        AnimatedVisibility(newlyLit){Surface(shape=RoundedCornerShape(18.dp),color=paper){
+            Row(Modifier.padding(horizontal=14.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically,
+                horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                Icon(painterResource(R.drawable.ic_leaf),null,tint=gold,modifier=Modifier.size(16.dp))
+                Text("又点亮了一小片",color=gold,fontSize=13.sp)
+            }
+        }}
     }
     if(details) ModalBottomSheet(onDismissRequest={details=false},containerColor=paper,contentColor=ink) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal=24.dp).padding(bottom=28.dp),verticalArrangement=Arrangement.spacedBy(22.dp)) {

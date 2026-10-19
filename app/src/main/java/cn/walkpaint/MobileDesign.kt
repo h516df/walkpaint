@@ -59,7 +59,8 @@ internal fun DesignSummary(state: TrackState) {
 internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolean,
     title: String, healthy: Boolean, notice: String?, provider: String, onSettings: () -> Unit,
     onToggle: (Boolean) -> Unit, onLocate: () -> Unit, onShowAll: () -> Unit,
-    showOsmCredit: Boolean, onZoom: (Int) -> Unit, mapContent: @Composable () -> Unit, regionContent:@Composable ()->Unit={}) {
+    showOsmCredit: Boolean, onZoom: (Int) -> Unit, mapContent: @Composable () -> Unit, regionContent:@Composable ()->Unit={},
+    bottomControlsInset:androidx.compose.ui.unit.Dp=94.dp) {
     val uri = androidx.compose.ui.platform.LocalUriHandler.current
     Box(Modifier.fillMaxSize()) {
         mapContent()
@@ -88,7 +89,7 @@ internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolea
             }
         }
         }
-        Column(Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(end=16.dp,bottom=94.dp),
+        Column(Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(end=16.dp,bottom=bottomControlsInset),
             verticalArrangement=Arrangement.spacedBy(12.dp)) {
             Surface(color=Color.White,shape=RoundedCornerShape(14.dp)) {
                 Column {

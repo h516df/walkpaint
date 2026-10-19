@@ -34,8 +34,7 @@ internal fun TrailHeader(title:String, subtitle:String?=null, onBack:(()->Unit)?
 
 @Composable
 internal fun TrailPanel(modifier:Modifier=Modifier,spacing:Dp=12.dp,content:@Composable ColumnScope.()->Unit) {
-    Surface(modifier.fillMaxWidth(),color=Canvas,shape=RoundedCornerShape(16.dp),
-        border=BorderStroke(1.dp,Line)) {
+    Surface(modifier.fillMaxWidth(),color=Canvas,shape=RoundedCornerShape(22.dp)) {
         Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(spacing),content=content)
     }
 }
