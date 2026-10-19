@@ -33,8 +33,8 @@ internal fun WalkPaintTheme(mode:Int=0,immersiveMap:Boolean=false,skin:VisualSki
     SideEffect {
         activity?.window?.let { window ->
             WindowCompat.getInsetsController(window,view).apply {
-                isAppearanceLightStatusBars=!dark && !immersiveMap
-                isAppearanceLightNavigationBars=!dark && !immersiveMap
+                isAppearanceLightStatusBars=!dark
+                isAppearanceLightNavigationBars=!dark
             }
         }
     }

@@ -86,6 +86,11 @@ internal fun AppShell(
                 }
             }
         }
+        // Stable theme-colored system-bar areas keep icons legible over maps and empty placeholders.
+        Spacer(Modifier.align(Alignment.TopCenter).fillMaxWidth()
+            .windowInsetsTopHeight(WindowInsets.statusBars).background(PageBackground))
+        Spacer(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+            .windowInsetsBottomHeight(WindowInsets.navigationBars).background(PageBackground))
         LandscapeDock(selectedTab,onTab,Modifier.align(Alignment.BottomCenter)
             .navigationBarsPadding().padding(horizontal=20.dp,vertical=8.dp)
             .onSizeChanged { dockHeight=with(density){it.height.toDp()} })
