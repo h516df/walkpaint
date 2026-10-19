@@ -24,8 +24,8 @@ android {
         applicationId = "cn.walkpaint"
         minSdk = 26
         targetSdk = 36
-        versionCode = 71
-        versionName = "0.63"
+        versionCode = 72
+        versionName = "0.64"
         testInstrumentationRunner = "cn.walkpaint.RoadAcceptanceInstrumentation"
         // Optional phone-sized APK; the default universal debug APK remains emulator-compatible.
         if (arm64Only) {
@@ -71,7 +71,6 @@ android {
     testOptions { unitTests.isReturnDefaultValues = true }
 }
 dependencies {
-    implementation("org.maplibre.gl:android-sdk-opengl:13.5.2")
     // 2026 official AMap SDK; only initialized after separate user consent.
     implementation("com.amap.api:3dmap-location-search:11.3.100_loc11.3.000_sea9.8.1")
     implementation(platform("androidx.compose:compose-bom:2026.03.01"))

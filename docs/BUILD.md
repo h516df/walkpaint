@@ -9,7 +9,7 @@ JDK21、Android SDK36，使用Gradle Wrapper。SDK路径可由ANDROID_HOME指定
 
 Windows使用gradlew.bat。开发模式使用本机开发签名、独立包名cn.walkpaint.dev，无需正式私钥，与正式App并存；开发版从源码更新。开发模式的release未配置正式签名，不能用来正式发布。
 
-未配置高德Key时不初始化高德，备用地图的实际支持另验；需要高德时为自己的包名和签名申请合法Key，参见AMap_SETUP.md。
+未配置高德Key时不初始化高德，地图区显示「地图还没打开」与「开启高德地图」入口，App 没有离线底图或备用引擎；需要高德时为自己的包名和签名申请合法Key，参见AMap_SETUP.md。
 
 正式包cn.walkpaint保持原签名。私钥与备份放在公开Git之外，默认构建在原签名文件缺失时拒绝继续；发布工具核对实际原证书身份。
 

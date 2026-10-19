@@ -123,10 +123,10 @@ try:
     assert saved_color()=='#B56F77' and len(mask('custom-overwrite-installed','#B56F77'))>100
     checks['restart_and_same_signature_overwrite_keep_color']=True
     sdk_probe('AMap')
-    privacy();tap('撤回并用离线地图');privacy_changed=True;public_fix();tap('地图',exact=True);tap('定位我');time.sleep(3);shot('offline-custom')
-    assert len(mask('offline-custom','#B56F77'))>100 and saved_color()=='#B56F77'
-    sdk_probe('MapLibre')
-    privacy();tap('同意使用高德');privacy_changed=False;public_fix();tap('地图',exact=True);tap('定位我');time.sleep(3);shot('amap-custom-returned')
+    privacy();tap('撤回地图授权');privacy_changed=True;public_fix();tap('地图',exact=True);time.sleep(2);shot('revoked-placeholder')
+    root=ui();assert any('地图还没打开' in n.attrib.get('text','') for n in root.iter('node')) and any('开启高德地图' in n.attrib.get('text','') for n in root.iter('node'))
+    assert saved_color()=='#B56F77';checks['revoke_leaves_readable_recoverable_state']=True
+    tap('开启高德地图');tap('同意使用高德');privacy_changed=False;public_fix();tap('地图',exact=True);tap('定位我');time.sleep(3);shot('amap-custom-returned')
     assert len(mask('amap-custom-returned','#B56F77'))>100
     open_colors();tap('恢复青绿',exact=True);assert saved_color()=='#579B8C';close_colors();shot('default-restored')
     assert len(mask('default-restored','#579B8C'))>100

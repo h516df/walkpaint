@@ -9,7 +9,6 @@ Copyright (C) 2026 h516df and WalkPaint contributors.
 | 组件或数据 | 来源与条款 |
 |---|---|
 | Kotlin、AndroidX/Compose、Gradle | 各官方发行物随附许可，版本以Gradle文件和Wrapper为准 |
-| MapLibre Native Android | [官方源码与许可](https://github.com/maplibre/maplibre-native) |
 | 高德地图/定位/搜索SDK | 官方Maven依赖，遵循[开放平台服务协议](https://lbs.amap.com/home/terms/)及SDK条款；不将专有SDK本身声明为本项目开源代码 |
 | OSM测试道路数据 | © OpenStreetMap contributors，[ODbL 1.0](https://www.openstreetmap.org/copyright)，保留测试包来源字段 |
 | 在线底图服务 | 按实际服务告知和条款使用，公开客户端代码不代表获得地图数据再分发许可 |

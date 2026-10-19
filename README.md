@@ -19,7 +19,7 @@ python -m unittest discover -s tests -v
 python -m unittest discover -s scripts -p 'test_*.py' -v
 ```
 
-开发模式无需正式私钥，生成独立的 cn.walkpaint.dev 调试 App，不覆盖正式版；开发版从源码更新。没有高德 Key 时使用备用地图路径，见 [构建说明](docs/BUILD.md) 和 [地图配置](docs/AMap_SETUP.md)。正式发布保持原签名。
+开发模式无需正式私钥，生成独立的 cn.walkpaint.dev 调试 App，不覆盖正式版；开发版从源码更新。没有高德 Key 时地图不加载，地图区给「开启高德地图」入口，App 不提供离线底图或备用引擎，见 [构建说明](docs/BUILD.md) 和 [地图配置](docs/AMap_SETUP.md)。正式发布保持原签名。
 
 ## 隐私与许可
 

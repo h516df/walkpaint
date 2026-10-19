@@ -1,0 +1,50 @@
+{
+  "versionName": "0.64",
+  "versionCode": 72,
+  "apkSha256": "d939aa4f6ce6650580defefdaef61cdecd05b9ccfb26227d1f13dae47314e169",
+  "apkBytes": 54571294,
+  "package": "cn.walkpaint",
+  "architecture": "arm64-v8a",
+  "debuggable": false,
+  "signerSha256": "21b74e3e2a10e12da8284d4e6bd7d99e55b00a385215902e94d7896f7a46c967",
+  "signatureSchemesVerified": [
+    "v1",
+    "v2",
+    "v3"
+  ],
+  "baseline": "bfb27a1",
+  "jvmSuites": 72,
+  "jvmTests": 435,
+  "jvmFailures": 0,
+  "pythonTests": 41,
+  "nativeLibraries": [
+    "libAMapSDK_MAP_v11_3_100.so",
+    "libandroidx.graphics.path.so",
+    "libapssdk.so"
+  ],
+  "maplibrePresent": false,
+  "delivered": [
+    "删除 MapLibre/OpenFreeMap 备用瓦片引擎，只保留高德一套引擎",
+    "首启地图授权改为必过整屏，未启用时给可读可恢复的占位页，不再黑屏",
+    "新增历史轨迹回放，按天从起点播到终点，可暂停/继续/重播"
+  ],
+  "deviceAcceptance": {
+    "device": "emulator-5560 / WalkPaint_Google_API36_V044",
+    "replayRoutePixels": [91, 149, 270, 330, 421, 421, 836, 836, 836],
+    "replayRouteGrows": true,
+    "replayPauseFreezes": true,
+    "replayRestartsAfterFinish": true,
+    "revokeLeavesReadableRecoverablePlaceholder": true,
+    "databaseRowsBefore": [10, 4893, 0, 0, 24],
+    "databaseRowsAfter": [10, 4893, 0, 0, 24]
+  },
+  "notVerified": [
+    "实体手机安装、户外、锁屏与长时间后台",
+    "高德底图瓦片渲染：x86_64 AVD 上经 ARM native bridge 加载成功但不绘制瓦片，须以真机为准",
+    "android_follow_offline.py 的蓝点颜色常数改为 (48,139,211) 系照同类脚本推断，未单独实测",
+    "android_direct_trail_acceptance.py 被本轮范围外的旧选择器（涂色颜色）挡住，未跑通"
+  ],
+  "externalReview": "tools/codex-consult 两次返回 RPC account/read rejected (-32603)，本轮无外部评审；走过次数的数据库迁移设计由本人完成（下一版）",
+  "schema": 3,
+  "rollback": "同签名、schema3 兼容、versionCode 不降低；不得卸载清库"
+}

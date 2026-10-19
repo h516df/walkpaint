@@ -11,7 +11,8 @@ again on the same scene:
 Everything is fail-closed. A missing measurement, a zero frame count, a changed old row or an
 installed package that is not the file we built all end the run with a non-zero exit, and the
 reason is written into acceptance.json. The engine that actually ran is read back from the running
-app and recorded: a pass on the fallback map is never reported as a pass on AMap.
+app and recorded: the app is AMap-only, so a run where the app reports no enabled map engine fails
+instead of passing.
 
 Never targets a phone or the personal MuMu; refuses anything but emulator-5556 running the
 dedicated WalkPaint_Google_API36 AVD. Restores the app-op and viewport it changed.
@@ -37,7 +38,7 @@ TABLES = {
     'road_matches': ('point_id',),
     'coverage': ('road_id', 'start'),
 }
-PROVIDERS = ('高德联网地图', 'OpenFreeMap 联网备用地图', '离线足迹视图')
+PROVIDERS = ('高德联网地图', '高德地图 · 待启用')
 # Bounds come from the product requirement, not from whatever the emulator happened to report:
 # * UI thread: a dropped frame at 60 Hz is 16.7 ms, so the median must stay well under that and even
 #   the worst update must not block a drag for long. This is the jank criterion.
@@ -68,7 +69,7 @@ WALK_SPACING_S = 3.0
 # A veiled map pixel is opaque black as of 0.39: the fog no longer lets the basemap through, so
 # "veiled" means every channel is essentially zero rather than the old dark-navy test (blue above
 # red and green), which now matches nothing because the veil carries no tint at all. A bare
-# OpenFreeMap street pixel is light. The gate below stays low on purpose: it asks "is the fog on
+# street pixel is light. The gate below stays low on purpose: it asks "is the fog on
 # screen", and the exact opacity is asserted by FogPixelProbe instead of inferred from a screenshot.
 #
 # The predicate itself lives in veil_measure.py because the phone lane has to ask the same question
@@ -84,14 +85,12 @@ parser.add_argument('--apk', default='app/build/outputs/apk/debug/app-debug.apk'
 parser.add_argument('--label', required=True, help='evidence folder, e.g. before / after')
 parser.add_argument('--skip-install', action='store_true')
 parser.add_argument('--skip-walk', action='store_true', help='do not inject extra fixes on top of the fixture')
-parser.add_argument('--require-engine', choices=('amap', 'fallback'), help='fail if the actual engine differs')
+parser.add_argument('--require-engine', choices=('amap',), help='fail if the actual engine differs')
 parser.add_argument('--fixture-region', choices=('paris', 'china'), default='paris')
 parser.add_argument('--allow-missing-perf', action='store_true',
                     help='baseline runs only: the build being replaced has no counters at all')
-parser.add_argument('--online-basemap', action='store_true',
-                    help='turn the fallback basemap on so the veil is judged over real streets')
 args = parser.parse_args()
-if args.require_engine == 'amap' and (args.fixture_region != 'china' or args.online_basemap):
+if args.require_engine == 'amap' and args.fixture_region != 'china':
     parser.error('AMap acceptance requires --fixture-region china and must preserve AMap consent')
 
 require_walkpaint_google_avd(ADB, SERIAL)
@@ -593,26 +592,6 @@ original_mock = re.search(
     sh('appops', 'get', '2000', 'android:mock_location')).group(1)
 size = sh('wm', 'size')
 density = sh('wm', 'density')
-PREFS = 'shared_prefs/ui_onboarding.xml'
-original_prefs = None
-if args.online_basemap:
-    try:
-        original_prefs = run('exec-out', 'run-as', PKG, 'cat', PREFS, binary=True)
-    except RuntimeError:
-        original_prefs = None
-
-
-def set_basemap_consent(enabled):
-    """The fallback basemap consent, set from the test host; restored in the finally block."""
-    payload = ('<?xml version=\'1.0\' encoding=\'utf-8\' standalone=\'yes\' ?>\n'
-               '<map>\n    <boolean name="openfreemap_basemap_consent" value="%s" />\n</map>\n'
-               % ('true' if enabled else 'false')).encode()
-    local = out / 'ui_onboarding.xml'
-    local.write_bytes(payload)
-    run('push', str(local), '/data/local/tmp/wp-fog-prefs.xml')
-    sh('run-as', PKG, 'cp', '/data/local/tmp/wp-fog-prefs.xml', PREFS)
-    sh('rm', '-f', '/data/local/tmp/wp-fog-prefs.xml')
-
 try:
     checks['device_model'] = sh('getprop', 'ro.product.model').strip()
     checks['device_abilist'] = sh('getprop', 'ro.product.cpu.abilist').strip()
@@ -668,7 +647,7 @@ try:
                      TEST_PKG + '/' + RUNNER, timeout=150)
         runtime_match = re.search(r'AMAP_RUNTIME_PASS: (\{[^\r\n]+\})', runtime)
         if not runtime_match:
-            fail('required AMap renderer did not load; no fallback evidence accepted')
+            fail('required AMap renderer did not load; the app is AMap-only and has no fallback engine')
         checks['amap_runtime'] = verify_runtime(apk, json.loads(runtime_match.group(1)))
 
     # Installing over the previous build must not touch a single stored row. With the install
@@ -732,10 +711,7 @@ try:
 
     before_rows = row_map()
     checks['rows_before'] = {t: len(v) for t, v in before_rows.items()}
-    checks['basemap'] = 'online-fallback' if args.online_basemap else 'offline-fallback'
-    if args.online_basemap:
-        sh('am', 'force-stop', PKG)
-        set_basemap_consent(True)
+    checks['basemap'] = 'amap-online'
 
     launches = [launch() for _ in range(3)]
     launches.sort()
@@ -767,10 +743,13 @@ try:
     if engine is None:
         fail('the app reported no map provider; visible=' + str(profile))
     checks['engine_label'] = engine
-    checks['engine'] = 'amap' if '高德' in engine else 'fallback'
+    checks['engine'] = 'amap' if engine == '高德联网地图' else 'disabled'
+    if checks['engine'] != 'amap':
+        fail('no map engine is enabled: the app reports %r, so no map is loaded; '
+             'enable the 高德 consent and rerun' % engine)
     if args.require_engine and checks['engine'] != args.require_engine:
         fail('actual engine differs from --require-engine; downgrade is not acceptance')
-    checks['amap_path_verified'] = checks['engine'] == 'amap'
+    checks['amap_path_verified'] = True
     if not checks['amap_supported_on_this_device'] and checks['amap_path_verified']:
         fail('engine claims AMap on an ABI that cannot load it')
     for _ in range(4):
@@ -1059,15 +1038,6 @@ except Exception as exc:  # noqa: BLE001 - the point is to fail loudly and keep 
         pass
 finally:
     sh('am', 'force-stop', PKG)
-    if args.online_basemap:
-        if original_prefs is None:
-            sh('run-as', PKG, 'rm', '-f', PREFS)
-        else:
-            local = out / 'ui_onboarding-restore.xml'
-            local.write_bytes(original_prefs)
-            run('push', str(local), '/data/local/tmp/wp-fog-prefs.xml')
-            sh('run-as', PKG, 'cp', '/data/local/tmp/wp-fog-prefs.xml', PREFS)
-            sh('rm', '-f', '/data/local/tmp/wp-fog-prefs.xml')
     sh('appops', 'set', '2000', 'android:mock_location', original_mock)
     for what, original in (('size', size), ('density', density)):
         keep = re.search(r'Override (?:size|density): (\S+)', original)

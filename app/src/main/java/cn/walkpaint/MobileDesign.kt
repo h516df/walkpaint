@@ -55,11 +55,25 @@ internal fun DesignSummary(state: TrackState) {
     }
 }
 
+/**
+ * 历史回放的界面状态。进度用取值函数而不是数值，这样 25fps 的推进只会重画进度条本身，
+ * 不会带着整张地图和整页界面一起重组。
+ */
+internal class ReplayControls(
+    val active: Boolean,
+    val playing: Boolean,
+    val progress: () -> Float,
+    val onStart: () -> Unit,
+    val onToggle: () -> Unit,
+    val onClose: () -> Unit
+)
+
 @Composable
 internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolean,
     title: String, healthy: Boolean, notice: String?, provider: String, onSettings: () -> Unit,
     onToggle: (Boolean) -> Unit, onLocate: () -> Unit, onShowAll: () -> Unit,
-    showOsmCredit: Boolean, onZoom: (Int) -> Unit, mapContent: @Composable () -> Unit, regionContent:@Composable ()->Unit={}) {
+    showOsmCredit: Boolean, onZoom: (Int) -> Unit, mapContent: @Composable () -> Unit, regionContent:@Composable ()->Unit={},
+    replay: ReplayControls? = null) {
     val uri = androidx.compose.ui.platform.LocalUriHandler.current
     Box(Modifier.fillMaxSize()) {
         mapContent()
@@ -72,6 +86,11 @@ internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolea
                 Column(Modifier.weight(1f)) {
                     Text(day,color=chromeInk,fontSize=16.sp,fontWeight=FontWeight.SemiBold)
                     Text("当天足迹与迷雾",color=chromeInk.copy(alpha=.8f),fontSize=12.sp)
+                }
+                if(replay?.active==false) Surface(onClick=replay.onStart,color=Color(0xFF2E4C7E),
+                    shape=RoundedCornerShape(10.dp)) {
+                    Text("回放",color=Color(0xFFEAF1FF),fontSize=13.sp,fontWeight=FontWeight.Medium,
+                        modifier=Modifier.padding(horizontal=10.dp,vertical=6.dp))
                 }
                 Text("返回全部探索",color=Color(0xFFB8D3FF),fontSize=13.sp)
             }
@@ -90,13 +109,13 @@ internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolea
         }
         Column(Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(end=16.dp,bottom=94.dp),
             verticalArrangement=Arrangement.spacedBy(12.dp)) {
-            Surface(color=Color.White,shape=RoundedCornerShape(14.dp)) {
+            Surface(color=Canvas,shape=RoundedCornerShape(14.dp)) {
                 Column {
                     listOf("放大地图" to 1,"缩小地图" to -1).forEachIndexed { index,(label,delta) ->
-                        if(index>0) HorizontalDivider(Modifier.width(48.dp).padding(horizontal=10.dp),color=Color(0xFFE5EAF2))
+                        if(index>0) HorizontalDivider(Modifier.width(48.dp).padding(horizontal=10.dp),color=Line)
                         Surface(onClick={onZoom(delta)},color=Color.Transparent,modifier=Modifier.size(48.dp)) {
                             Box(Modifier.semantics { contentDescription=label },contentAlignment=Alignment.Center) {
-                                Text(if(delta>0) "+" else "−",color=Color(0xFF26374F),fontSize=26.sp)
+                                Text(if(delta>0) "+" else "−",color=Ink,fontSize=26.sp)
                             }
                         }
                     }
@@ -105,6 +124,29 @@ internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolea
             Surface(onClick=onLocate,color=skinPalette(LocalVisualSkin.current,false).brand,shape=RoundedCornerShape(14.dp),modifier=Modifier.size(48.dp)) {
                 Box(Modifier.semantics { contentDescription=if(day!=null) "定位当天" else "定位我" },contentAlignment=Alignment.Center) {
                     Icon(painterResource(R.drawable.ic_location),null,tint=Color.White,modifier=Modifier.size(22.dp))
+                }
+            }
+        }
+        if(replay!=null && replay.active) {
+            val progress=replay.progress().coerceIn(0f,1f)
+            Surface(color=chrome,shape=RoundedCornerShape(16.dp),
+                modifier=Modifier.align(Alignment.BottomStart).fillMaxWidth().navigationBarsPadding()
+                    .padding(start=16.dp,end=88.dp,bottom=94.dp)) {
+                Row(Modifier.padding(horizontal=14.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically,
+                    horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                    Surface(onClick=replay.onToggle,color=Color(0xFF2E4C7E),shape=RoundedCornerShape(10.dp)) {
+                        Text(if(replay.playing) "暂停" else "继续",color=Color(0xFFEAF1FF),fontSize=14.sp,
+                            modifier=Modifier.padding(horizontal=12.dp,vertical=8.dp))
+                    }
+                    Box(Modifier.weight(1f).height(6.dp).background(Color(0xFF31405A),RoundedCornerShape(3.dp))) {
+                        if(progress>0f) Box(Modifier.fillMaxWidth(progress).height(6.dp)
+                            .background(Color(0xFF9CC2FF),RoundedCornerShape(3.dp)))
+                    }
+                    Text("${(progress*100).toInt()}%",color=chromeInk,fontSize=12.sp)
+                    Surface(onClick=replay.onClose,color=Color.Transparent,shape=RoundedCornerShape(10.dp)) {
+                        Text("关闭",color=Color(0xFFB8D3FF),fontSize=14.sp,
+                            modifier=Modifier.padding(horizontal=4.dp,vertical=8.dp))
+                    }
                 }
             }
         }
@@ -247,6 +289,35 @@ internal fun DesignOnboarding(onEnable: () -> Unit, onSkip: () -> Unit) {
                 }
                 TextButton(onClick = onSkip, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("先看看，暂不记录") }
                 Text("下一步由 Android 系统请求权限。拒绝授权也能查看已有足迹；不会自动上传位置。", color = Muted, fontSize = 12.sp, lineHeight = 20.sp)
+            }
+        }
+    }
+}
+
+/**
+ * First-run map disclosure. Deliberately a full screen with two explicit buttons rather than a
+ * dismissible dialog: a first-time user who taps outside a dialog, or presses back, used to be
+ * left with a permanently empty map area and no explanation. Here a decision is always recorded
+ * by a button press, and the "no map" choice states what will happen instead.
+ */
+@Composable
+internal fun DesignMapConsent(onAgree: () -> Unit, onDecline: () -> Unit, onOpenPolicy: () -> Unit) {
+    Dialog(onDismissRequest = {}, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(color = CanvasSoft, modifier = Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                Icon(painterResource(R.drawable.ic_route), null, tint = Pigment, modifier = Modifier.padding(top = 24.dp).size(42.dp))
+                Text("还差一步", color = Muted, fontSize = 13.sp)
+                Text("地图需要联网，\n这件事由你决定。", color = Ink, fontSize = 28.sp, lineHeight = 38.sp, fontWeight = FontWeight.Bold)
+                OnboardingFeature(R.drawable.ic_lock, "用什么地图", "使用高德开放平台地图与搜索 SDK（北京高德图强科技有限公司）显示底图和地名。")
+                OnboardingFeature(R.drawable.ic_notification, "它会看到什么", "地图服务可能收到经纬度、IP/网络、GNSS、设备参数、系统和传感器信息。")
+                OnboardingFeature(R.drawable.ic_route, "你的足迹在哪", "足迹数据库始终只保存在本机，地图服务看不到你的足迹记录，也不会因为拒绝而停止记录。")
+                Button(onClick = onAgree, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+                    Text("同意并启用地图", fontWeight = FontWeight.SemiBold)
+                }
+                TextButton(onClick = onDecline, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("暂不用地图") }
+                Text("选“暂不用地图”后，地图页会显示文字提示，你随时可以在设置里开启；自动记录不受影响。", color = Muted, fontSize = 12.sp, lineHeight = 20.sp)
+                TextButton(onClick = onOpenPolicy, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("阅读高德隐私政策") }
             }
         }
     }
