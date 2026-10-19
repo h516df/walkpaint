@@ -144,6 +144,8 @@ class MainActivity : ComponentActivity() {
     private var backgroundGranted by mutableStateOf(false)
     private var amapConsent by mutableStateOf(false)
     private var showAmapConsent by mutableStateOf(false)
+    /** First-run map disclosure, shown as a full screen so it cannot be dismissed by accident. */
+    private var showMapConsent by mutableStateOf(false)
     private val follow=MapFollowState()
     private val fallbackZoomSteps=StepZoomTarget()
     private var activityResumed=false
@@ -415,7 +417,10 @@ class MainActivity : ComponentActivity() {
         val mapPref = getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE)
         onlineMap = BuildConfig.DEVELOPER_BUILD && mapPref.getBoolean("openfreemap_basemap_consent", false)
         amapConsent = mapPref.getBoolean("amap_sdk_consent", false)
-        showAmapConsent = amapSupported && BuildConfig.AMAP_KEY.isNotBlank() &&
+        // The first map decision is asked on a dedicated screen after the intro. It used to be a
+        // dismissible dialog, and tapping outside it (or pressing back) recorded the decision
+        // without any map, leaving a first-time user in front of an empty map area for good.
+        showMapConsent = amapSupported && BuildConfig.AMAP_KEY.isNotBlank() &&
             !amapConsent && !mapPref.getBoolean("amap_sdk_decision_seen", false)
         updateUi()
         appearanceMode=getSharedPreferences("ui_appearance",Context.MODE_PRIVATE).getInt("mode",0).coerceIn(0,2)
@@ -537,9 +542,9 @@ class MainActivity : ComponentActivity() {
                     mapContent = { if (amapActive) AmapNativeView() else if(BuildConfig.DEVELOPER_BUILD) NativeMapView() else {
                         androidx.compose.foundation.layout.Box(Modifier.fillMaxSize(),contentAlignment=androidx.compose.ui.Alignment.Center) {
                             Column(Modifier.padding(32.dp),horizontalAlignment=androidx.compose.ui.Alignment.CenterHorizontally) {
-                                Text("高德地图",color=androidx.compose.ui.graphics.Color.White,fontSize=24.sp)
-                                Text(if(!amapSupported) "此设备暂不支持当前地图版本，已有足迹仍保留。" else if(BuildConfig.AMAP_KEY.isBlank()) "地图配置暂不可用，请检查更新。" else "首次使用需同意地图隐私说明。无需注册或填写密钥。",color=androidx.compose.ui.graphics.Color.White,modifier=Modifier.padding(vertical=16.dp))
-                                if(amapSupported && BuildConfig.AMAP_KEY.isNotBlank()) Button(onClick={showAmapConsent=true}){Text("启用高德地图")}
+                                Text("地图还没打开",color=MaterialTheme.colorScheme.onSurface,fontSize=24.sp)
+                                Text(if(!amapSupported) "此设备暂不支持当前地图版本，已有足迹仍保留。" else if(BuildConfig.AMAP_KEY.isBlank()) "地图配置暂不可用，请检查更新。" else "开启后会显示道路底图和地名。足迹照常记录，无需注册或填写密钥。",color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(vertical=16.dp))
+                                if(amapSupported && BuildConfig.AMAP_KEY.isNotBlank()) Button(onClick={showAmapConsent=true}){Text("开启高德地图")}
                             }
                         }
                     } },
@@ -623,7 +628,9 @@ class MainActivity : ComponentActivity() {
 
                 if (showDiagnostics) RecordingDiagnosisSheet(diagnosticFacts,diagnosticText,
                     { copyTrackingDiagnostics() },{ showDiagnostics=false })
-                if (showAmapConsent && !showIntro && !confirmEnable && !pendingEnable && !showBackgroundPrompt && !showFineSettings) AlertDialog(
+                // Reachable from settings and from the "地图还没打开" screen. Not gated on the intro,
+                // so the explicit "开启高德地图" button always works.
+                if (showAmapConsent && !showMapConsent && !confirmEnable && !pendingEnable && !showBackgroundPrompt && !showFineSettings) AlertDialog(
                     onDismissRequest = {
                         showAmapConsent = false
                         getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE).edit()
@@ -664,6 +671,30 @@ class MainActivity : ComponentActivity() {
                                 .putBoolean("openfreemap_basemap_consent", false).apply()
                         }) { Text(if(amapConsent) "撤回地图授权" else "暂不用") }
                     }
+                )
+                if (showMapConsent && !showIntro) DesignMapConsent(
+                    onAgree = {
+                        getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE).edit()
+                            .putBoolean("amap_sdk_consent", true)
+                            .putBoolean("amap_sdk_decision_seen", true).apply()
+                        amapConsent = true
+                        showMapConsent = false
+                        placeAnchor = null
+                        refreshPlaceName(userFix)
+                    },
+                    onDecline = {
+                        getSharedPreferences("ui_onboarding", Context.MODE_PRIVATE).edit()
+                            .putBoolean("amap_sdk_consent", false)
+                            .putBoolean("amap_sdk_decision_seen", true).apply()
+                        amapConsent = false; onlineMap = false
+                        placeRequestRevision++
+                        placeAnchor = null; placeName = null
+                        com.amap.api.maps.MapsInitializer.updatePrivacyAgree(applicationContext, false)
+                        com.amap.api.services.core.ServiceSettings.updatePrivacyAgree(applicationContext, false)
+                        showMapConsent = false
+                    },
+                    onOpenPolicy = { startActivity(Intent(Intent.ACTION_VIEW,
+                        Uri.parse("https://lbs.amap.com/home/privacy/"))) }
                 )
                 if (showIntro || confirmEnable) DesignOnboarding(
                     onEnable={
