@@ -82,10 +82,10 @@ try:
     checks['recolored_line_pixels']=painted_pixels('recolored-direct',((value>>16)&255,(value>>8)&255,value&255))
     tap('我的');ensure('涂色颜色');tap('恢复青绿');tap('完成');ensure('更多设置');no_preparation();shot('settings-direct')
     assert '地图数据' not in labels()
-    ensure('隐私与权限');ensure('联网地图授权');tap('同意联网并记住')
+    ensure('隐私与权限');ensure('地图服务与隐私');tap('同意使用高德')
     tap('地图');time.sleep(12);no_preparation();shot('online-direct')
     checks['online_line_pixels']=painted_pixels('online-direct')
-    checks['online_fallback_consent_and_direct_paint']=True
+    checks['amap_consent_and_direct_paint']=True
     print('REAL_UI_DIRECT_HISTORY_COLOR_ONLINE_PASS',flush=True)
     sh('am','force-stop','cn.walkpaint');launch();time.sleep(12);shot('restart-direct')
     checks['restart_line_pixels']=painted_pixels('restart-direct')

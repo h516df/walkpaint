@@ -151,7 +151,7 @@ def main():
         checks['diagnostics_page']=True;tap('返回')
         # The actual map provider, read from the running app rather than source defaults.
         tap('返回');tap('地图');visible=labels()
-        report['engine']='OpenFreeMap/MapLibre' if 'OpenFreeMap' in visible else 'offline' if '离线地图' in visible else 'AMap'
+        report['engine']='AMap' if any('高德' in t for t in visible) else 'not_verified'
         density=int(re.findall(r'\d+',shell('wm','density'))[-1])
         shell('wm','size',f'{320*density//160}x{720*density//160}')
         time.sleep(2);shot('small-map');assert '有效记录时长' in labels()

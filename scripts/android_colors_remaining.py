@@ -90,10 +90,10 @@ try:
     assert all(initial[t]<=data_rows()[t] for t in tables);initial=data_rows();initial_points=count()
     open_colors();field('B56F77');ensure_control('应用自定义颜色');tap('应用自定义颜色',exact=True);close_colors()
     sdk_probe('AMap')
-    privacy();tap('撤回并用离线地图');privacy_changed=True;public_fix();tap('地图',exact=True);tap('定位我');time.sleep(3);shot('offline-custom')
-    assert len(mask('offline-custom','#B56F77'))>100 and saved_color()=='#B56F77'
-    sdk_probe('MapLibre')
-    privacy();tap('同意使用高德');privacy_changed=False;public_fix();tap('地图',exact=True);tap('定位我');time.sleep(3);shot('amap-custom-returned')
+    privacy();tap('撤回地图授权');privacy_changed=True;public_fix();tap('地图',exact=True);time.sleep(2);shot('revoked-placeholder')
+    root=ui();assert any('地图还没打开' in n.attrib.get('text','') for n in root.iter('node')) and any('开启高德地图' in n.attrib.get('text','') for n in root.iter('node'))
+    assert saved_color()=='#B56F77';checks['revoke_leaves_readable_recoverable_state']=True
+    tap('开启高德地图');tap('同意使用高德');privacy_changed=False;public_fix();tap('地图',exact=True);tap('定位我');time.sleep(3);shot('amap-custom-returned')
     assert len(mask('amap-custom-returned','#B56F77'))>100
     tap('足迹',exact=True);ensure_control('查看今天走过的道路');tap('查看今天走过的道路');time.sleep(3);shot('history-custom')
     hist=mask('history-custom','#B56F77');assert len(hist)>100
