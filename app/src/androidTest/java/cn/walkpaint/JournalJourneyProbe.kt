@@ -120,7 +120,18 @@ internal object JournalJourneyProbe {
                     return node?.takeIf {it.isEnabled}
                 }
                 await("enabled system save action") {find("图片已保存")!=null || saveAction()?.performAction(AccessibilityNodeInfo.ACTION_CLICK)==true}
-                wait("图片已保存")
+                // A11y may acknowledge a click while DocumentsUI is still loading its provider.
+                // Retry only its visible, enabled save control; an acknowledged action is not a save.
+                var retrySaveAt=SystemClock.uptimeMillis()+3000
+                await("图片已保存") {
+                    if(find("图片已保存")!=null) true else {
+                        if(SystemClock.uptimeMillis()>=retrySaveAt) {
+                            saveAction()?.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                            retrySaveAt=SystemClock.uptimeMillis()+3000
+                        }
+                        false
+                    }
+                }
                 if(recreatePicker){await("activity recreated during picker"){screen.isDestroyed};stage("picker_recreation_verified")}
                 val saved=checkNotNull(documentResult.get()){"Document result was not observed"}
                 val actualName=context.contentResolver.query(saved,arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),null,null,null)?.use {cursor->
