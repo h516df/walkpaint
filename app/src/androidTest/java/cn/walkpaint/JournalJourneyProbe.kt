@@ -70,11 +70,11 @@ internal object JournalJourneyProbe {
         i.addMonitor(monitor)
         field.set(repo,fixture)
         try {
-            activity=UiEntry.main(i)
-            if(find("暂不开始")!=null)tap("暂不开始")
-            val before=DataPreservationProbe.run(i)
             return MapJourneyFixture.withFixture(i) {screen->
                 activity=screen
+                await("welcome or footprints"){find("暂不开始")!=null || find("足迹")!=null}
+                if(find("暂不开始")!=null){shot("welcome");tap("暂不开始")}
+                val before=DataPreservationProbe.run(i)
                 val day=java.time.LocalDate.now().toString()
                 tap("足迹");tap(day,scroll=true)
                 tap("写备注",scroll=true);wait("记录这一天")
