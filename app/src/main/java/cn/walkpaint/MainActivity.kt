@@ -444,6 +444,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        currentTab=(savedInstanceState?.getInt("mobileTab",0) ?: 0).coerceIn(0,2)
         // Local-only snapshot: legacy authorization cleanup must be reachable before any network request.
         privateUpdateState=privateUpdater.snapshot()
         roadColor=roadAppearance.color
@@ -1649,6 +1650,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putInt("mobileTab",currentTab)
         outState.putBoolean("pendingEnable", pendingEnable)
         outState.putBoolean("pendingSettingsEnable", pendingSettingsEnable)
         outState.putBoolean("pendingBackgroundSettings",pendingBackgroundSettings)

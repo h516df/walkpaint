@@ -31,7 +31,7 @@ internal object MapJourneyFixture {
         i.runOnMainSync {update.invoke(activity)}
         try {return block(activity)} finally {
             synchronized(repo) {cache.set(repo,original);revision.setLong(repo,stamp+2)}
-            i.runOnMainSync {update.invoke(activity)}
+            i.runOnMainSync {if(!activity.isDestroyed)update.invoke(activity)}
         }
     }
 }

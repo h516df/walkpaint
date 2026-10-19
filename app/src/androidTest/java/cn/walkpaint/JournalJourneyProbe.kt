@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 /** Real Compose controls and real Android document/share UIs, using display-only GPS fixtures. */
 internal object JournalJourneyProbe {
-    fun run(i:Instrumentation):String {
+    fun run(i:Instrumentation,recreatePicker:Boolean=false):String {
         check(BuildConfig.DEVELOPER_BUILD && i.targetContext.packageName=="cn.walkpaint.dev")
         val context=i.targetContext
         // Instrumentation starts before Application.onCreate has necessarily returned.
@@ -101,19 +101,23 @@ internal object JournalJourneyProbe {
                 tap("制作路线明信片",scroll=true);wait("$day 的路线明信片预览");shot("card-paper")
                 tap("夜色");wait("$day 的路线明信片预览");shot("card-night")
                 stage("postcard_preview");tap("保存图片")
+                if(recreatePicker)i.runOnMainSync {screen.recreate()}
                 val name="walkpaint-card-${UUID.randomUUID()}.png"
                 setField(0,name)
-                await("system save button") {nodes().any {it.viewIdResourceName?.endsWith("action_menu_select")==true || it.text?.toString()?.equals("save",true)==true || it.text?.toString()=="保存"}}
-                var saveNode=nodes().first {it.viewIdResourceName?.endsWith("action_menu_select")==true || it.text?.toString()?.equals("save",true)==true || it.text?.toString()=="保存"}
-                while(!saveNode.isClickable)saveNode=saveNode.parent ?: error("No save action")
-                check(saveNode.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                fun saveAction():AccessibilityNodeInfo? {
+                    var node=nodes().firstOrNull {it.viewIdResourceName?.endsWith("action_menu_select")==true || it.text?.toString()?.equals("save",true)==true || it.text?.toString()=="保存"}
+                    while(node!=null && !node.isClickable)node=node.parent
+                    return node?.takeIf {it.isEnabled}
+                }
+                await("enabled system save action") {find("图片已保存")!=null || saveAction()?.performAction(AccessibilityNodeInfo.ACTION_CLICK)==true}
                 wait("图片已保存")
+                if(recreatePicker){await("activity recreated during picker"){screen.isDestroyed};stage("picker_recreation_verified")}
                 fun shell(command:String)=android.os.ParcelFileDescriptor.AutoCloseInputStream(automation.executeShellCommand(command)).bufferedReader().use {it.readText()}
                 val path=shell("find /sdcard/Download /sdcard/Documents -name $name -type f 2>/dev/null").lineSequence().firstOrNull {it.endsWith(name)} ?: error("Saved image missing")
                 check(path.matches(Regex("[A-Za-z0-9/._-]+")));savedPath=path
                 val exported=android.os.ParcelFileDescriptor.AutoCloseInputStream(automation.executeShellCommand("cat $path")).use {BitmapFactory.decodeStream(it)} ?: error("Invalid saved PNG")
-                check(exported.width==RoutePostcard.WIDTH && exported.height==RoutePostcard.HEIGHT)
-                check(exported.getPixel(5,5)==CardTheme.NIGHT.background);exported.recycle()
+                check(exported.width==RoutePostcard.WIDTH && exported.height==RoutePostcard.HEIGHT){"Unexpected saved PNG dimensions"}
+                check(exported.getPixel(5,5)==CardTheme.NIGHT.background){"Saved PNG was not the selected night theme"};exported.recycle()
                 stage("png_saved");tap("分享图片");await("image share intent"){shared.get()!=null}
                 val intent=shared.get()!!
                 check(intent.action==Intent.ACTION_SEND && intent.type=="image/png")
@@ -132,7 +136,7 @@ internal object JournalJourneyProbe {
                 stage("search_verified");val encoded=org.json.JSONObject(repo.exportBackup()).getJSONObject("journal")
                 check(JournalCodec.decode(encoded)[day]?.note=="合成验收备注")
                 check(DataPreservationProbe.run(i)==before) {"Original SQLite rows changed"}
-                "JOURNAL_JOURNEY_PASS controls=true persisted=true favorite_search=true postcard_png=true share_uri=true backup_annotations=true sqlite_unchanged=true fontScale=${context.resources.configuration.fontScale}"
+                "JOURNAL_JOURNEY_PASS controls=true persisted=true favorite_search=true postcard_png=true share_uri=true backup_annotations=true sqlite_unchanged=true fontScale=${context.resources.configuration.fontScale} picker_recreation=$recreatePicker"
             }
         } catch(e:Throwable) {
             runCatching {shot("failure")}
@@ -140,7 +144,7 @@ internal object JournalJourneyProbe {
         } finally {
             i.removeMonitor(monitor)
             field.set(repo,original)
-            i.runOnMainSync {activity?.finish()}
+            i.runOnMainSync {if(activity?.isDestroyed==false)activity?.finish()}
             journalFile.delete()
             savedPath?.let {automation.executeShellCommand("rm $it").close()}
         }

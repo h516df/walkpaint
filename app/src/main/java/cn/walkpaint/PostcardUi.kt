@@ -91,7 +91,7 @@ import kotlinx.coroutines.withContext
                 Row(Modifier.horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                     CardTheme.entries.forEach {theme->FilterChip(selected=theme.name==themeName,onClick={if(!busy)themeName=theme.name},label={Text(theme.label)})}
                 }
-                Text("图片包含这天的路线形状和日期，确认预览后再保存或分享。备注不会写入图片。",style=MaterialTheme.typography.bodySmall)
+                Text("图片包含路线形状、日期和标题。确认预览后再保存或分享，备注正文不会写入图片。",style=MaterialTheme.typography.bodySmall)
                 error?.let {Text(it,style=MaterialTheme.typography.bodySmall)}
                 Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                     OutlinedButton(enabled=bitmap!=null && !busy,onClick={export(false)},modifier=Modifier.weight(1f)){Text("保存图片")}
