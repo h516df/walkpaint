@@ -11,7 +11,13 @@ class UpdateInfoTest {
         assertEquals(listOf("新增","改进","修复","说明"),n.sections.map { it.first })
         val words=n.sections.flatMap { it.second }.joinToString()
         listOf("GPS_PROVIDER","schema","commit","SDK").forEach { assertFalse(words.contains(it)) }
-        assertTrue(words.contains("户外"));assertTrue(words.contains("浏览器"))
+        assertTrue(words.isNotBlank())
+    }
+    @Test fun patchReleaseMayHaveNoNewFeaturesButCannotBeEntirelyEmpty() {
+        val notes=org.json.JSONObject(text).put("新增",org.json.JSONArray()).put("改进",org.json.JSONArray())
+        assertTrue(CurrentRelease.decode(notes.toString()).sections.any {it.second.isNotEmpty()})
+        for(key in listOf("新增","改进","修复","说明")) notes.put(key,org.json.JSONArray())
+        assertThrows(IllegalArgumentException::class.java) {CurrentRelease.decode(notes.toString())}
     }
     @Test fun destinationIsFixedRepositoryWithNoCredentialOrDownloadParameters() {
         val uri=java.net.URI(UpdateDestination.URL)

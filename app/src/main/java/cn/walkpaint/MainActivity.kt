@@ -524,7 +524,7 @@ class MainActivity : ComponentActivity() {
                         if(it==0) refreshVeilForViewport(force=true)
                     },
                     state = snapshot,
-                    fix = userFix,
+                    fix = userFix?.takeIf {follow.accepts(fixQuality(it))},
                     placeName = placeName,
                     automatic = trackingEnabled,
                     running = trackingRunning,
@@ -597,6 +597,7 @@ class MainActivity : ComponentActivity() {
                     onAppearanceMode={ mode ->
                         appearanceMode=mode
                         getSharedPreferences("ui_appearance",Context.MODE_PRIVATE).edit().putInt("mode",mode).apply()
+                        refreshAppearance()
                     },
                     onShowIntro={showIntro=true},
                     roadColor = roadColor,
@@ -639,15 +640,12 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
-                        Surface(modifier=Modifier.align(androidx.compose.ui.Alignment.CenterStart).padding(start=8.dp),
-                            shape=androidx.compose.foundation.shape.RoundedCornerShape(18.dp),
-                            color=MaterialTheme.colorScheme.surface.copy(alpha=.95f),tonalElevation=2.dp) {
-                            TextButton(onClick={showLandmarkList=true;changeLandmarks()}) {Text("◇ 探索点")}
-                        }
+
                         }
                     },
                     replay = ReplayControls(replayActive,replayPlaying,{replayProgress},
                         ::startReplay,::toggleReplay,::stopReplay),
+                    onExploreLandmarks={showLandmarkList=true;changeLandmarks()},
                     onSkin={showSkinPicker=true},
                     onNotifications=::openRecordingNotificationSettings,
                     onBackupEntry={ refreshExecutor.execute {
@@ -657,6 +655,9 @@ class MainActivity : ComponentActivity() {
                 )
 
                 if(showLandmarkList) LandmarkList(landmarkPoints,landmarkError,amapActive,
+                    userFix?.takeIf {follow.accepts(fixQuality(it))}?.let {RegionPoint(it.latitude,it.longitude)}
+                        ?: snapshot.realTracks.lastOrNull()?.points?.lastOrNull()?.let {RegionPoint(it.lat,it.lon)},
+                    userFix?.let {follow.accepts(fixQuality(it))}!=true,
                     {selectedLandmark=it;showLandmarkList=false},{showLandmarkList=false})
                 selectedLandmark?.let {point -> LandmarkDetail(point,landmarkPoints.any {it.id==point.id},landmarkError,
                     {changeLandmarks(onSuccess={selectedLandmark=null}) {repository.landmarks.save(point)}},
@@ -870,7 +871,7 @@ class MainActivity : ComponentActivity() {
             val generation=mapSceneGeneration
             // Read on the UI thread: the worker must not race a fix arriving while it paints.
             val fogColour = roadColor
-            val themedFogColor=FogAppearance.color(visualSkin)
+            val themedFogColor=FogAppearance.color(visualSkin,isNightAppearance())
             val fogAnchor = userFix?.let { TrackPoint(it.latitude, it.longitude, it.time, it.accuracy) }
             val fogViewport = currentViewport
             refreshExecutor.execute {
@@ -940,6 +941,7 @@ class MainActivity : ComponentActivity() {
                             // Released after the handover, so the painter never draws into the bitmap
                             // while the map is uploading it.
                             refreshing.set(false)
+                            if(generation!=mapSceneGeneration) mainHandler.post {updateUi()}
                         }
                     }
                 } catch (error: Throwable) {
@@ -1623,7 +1625,7 @@ class MainActivity : ComponentActivity() {
         }
         val viewport = currentViewport
         val colour = roadColor
-        val veilColor=FogAppearance.color(visualSkin)
+        val veilColor=FogAppearance.color(visualSkin,isNightAppearance())
         val handOver = true
         val day = selectedDay
         val generation=mapSceneGeneration
@@ -1654,6 +1656,7 @@ class MainActivity : ComponentActivity() {
                         // Released here, not before the handover: the painter must not be drawing
                         // into the same bitmap while the map is reading it.
                         refreshing.set(false)
+                        if(generation!=mapSceneGeneration) mainHandler.post {updateUi()}
                     }
                 }
             } catch (error: Throwable) {
@@ -1671,14 +1674,25 @@ class MainActivity : ComponentActivity() {
         // single-threaded worker as the refresh, so the two can never overlap.
         refreshExecutor.execute { fogPainter.clear() }
         // Nothing else changed, so the refresh would not run; ask for it explicitly.
-        lastRevision = -1
+        refreshAppearance()
+    }
+
+    private fun refreshAppearance() {
+        mapSceneGeneration++
+        pendingVeil=null
+        lastRevision=-1
+        updateMapLayers()
         updateUi()
     }
+
+    private fun isNightAppearance():Boolean = appearanceMode==2 || (appearanceMode==0 &&
+        resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES)
 
     private fun updateMapLayers() {
         if (!amapActive) return
         // 回放时画“长到一半”的那条线；停回放后自动回到当天完整足迹。
-        amapController.setFogColor(FogAppearance.color(visualSkin))
+        amapController.setNightAppearance(isNightAppearance())
+        amapController.setFogColor(FogAppearance.color(visualSkin,isNightAppearance()))
         amapController.render(mapTrackState,mapRoadState,if(replayActive) replayPaths else mapTrailPaths,fogBitmap,fogFrame,fogRevision)
     }
 

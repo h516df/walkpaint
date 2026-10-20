@@ -7,7 +7,7 @@ import java.nio.file.StandardCopyOption
 import org.json.JSONObject
 import org.json.JSONArray
 
-/** User-selected map POI, in source WGS84 coordinates. Never an inferred recommendation. */
+/** Named map POI in source WGS84 coordinates. Saving is explicit; discovery never records visits. */
 internal data class ExplorationLandmark(val id:String,val name:String,val lat:Double,val lon:Double,
     val visitedAt:Long?=null,val deleted:Boolean=false)
 

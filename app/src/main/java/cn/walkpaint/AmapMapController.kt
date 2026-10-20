@@ -27,6 +27,7 @@ internal class AmapMapController(private val context: Context, private val onGes
                                  private val onLandmark:(ExplorationLandmark)->Unit = {}) {
     private var currentView: MapView? = null
     private var map: AMap? = null
+    private var nightAppearance=false
     private var latestPosition: Location? = null
     private var latestState=TrackState()
     private var initialFocusPending = true
@@ -182,6 +183,7 @@ internal class AmapMapController(private val context: Context, private val onGes
         currentView = view
         landmarkMarkers.clear();landmarkSnapshot=emptyList()
         map = view.map
+        map?.mapType=if(nightAppearance) AMap.MAP_TYPE_NIGHT else AMap.MAP_TYPE_NORMAL
         map?.setOnPOIClickListener { poi ->
             runCatching {
                 val coordinate=poi.coordinate
@@ -372,6 +374,11 @@ internal class AmapMapController(private val context: Context, private val onGes
 
     private val landmarkMarkers=mutableListOf<com.amap.api.maps.model.Marker>()
     private var landmarkSnapshot:List<ExplorationLandmark> = emptyList()
+    fun setNightAppearance(dark:Boolean) {
+        if(nightAppearance==dark) return
+        nightAppearance=dark
+        map?.mapType=if(dark) AMap.MAP_TYPE_NIGHT else AMap.MAP_TYPE_NORMAL
+    }
     fun setFogColor(color:Int) {guardPaint.color=color;updateCoverageGuard()}
     fun showLandmarks(points:List<ExplorationLandmark>) {
         if(points==landmarkSnapshot && landmarkMarkers.isNotEmpty()) return

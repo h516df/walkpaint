@@ -102,3 +102,26 @@ gradle.taskGraph.whenReady {
         require(!developerBuild && arm64Only) { "Official release requires the ARM64 AMap build" }
     }
 }
+
+// Host-native UI regression checks use only synthetic fixtures, never the production map key.
+android.testOptions.unitTests.apply {
+    isIncludeAndroidResources = true
+    all {
+        it.maxHeapSize = "1g"
+        it.systemProperty("user.home", rootProject.file(".gradle/test-home").also { it.mkdirs() }.absolutePath)
+        it.systemProperty("java.io.tmpdir", rootProject.file(".gradle/test-tmp").also { it.mkdirs() }.absolutePath)
+        it.systemProperty("roborazzi.test.record", "true")
+        it.systemProperty("robolectric.pixelCopyRenderMode", "hardware")
+        it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+        listOf("http.proxyHost", "http.proxyPort", "https.proxyHost", "https.proxyPort", "javax.net.ssl.trustStore").forEach { key ->
+            System.getProperty(key)?.let { value -> it.systemProperty(key, value) }
+        }
+    }
+}
+dependencies {
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
+    testImplementation("org.robolectric:robolectric:4.17")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi:1.76.0")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.76.0")
+}

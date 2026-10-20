@@ -103,7 +103,7 @@ internal fun LandscapeDock(selectedTab:Int,onTab:(Int)->Unit,modifier:Modifier=M
     val surface=Canvas
     val inactive=Muted
     val active=Pigment
-    Surface(color=surface,shadowElevation=5.dp,shape=RoundedCornerShape(26.dp),
+    Surface(color=surface,shadowElevation=2.dp,shape=RoundedCornerShape(20.dp),
         modifier=modifier.widthIn(max=480.dp).fillMaxWidth()) {
         Row(Modifier.selectableGroup().padding(6.dp),horizontalArrangement=Arrangement.spacedBy(4.dp)) {
             val labels=listOf("探索","足迹","我的")
@@ -112,10 +112,10 @@ internal fun LandscapeDock(selectedTab:Int,onTab:(Int)->Unit,modifier:Modifier=M
                 val selected=selectedTab==index
                 val tint by animateColorAsState(if(selected) active else inactive,label="dock ink")
                 val labelInk=if(selected) Ink else tint
-                val fill by animateColorAsState(if(selected) active.copy(alpha=.13f) else Color.Transparent,label="dock selection")
-                Box(Modifier.weight(1f).heightIn(min=50.dp).background(fill,RoundedCornerShape(20.dp))
+                val fill by animateColorAsState(if(selected) PigmentSoft else Color.Transparent,label="dock selection")
+                Box(Modifier.weight(1f).heightIn(min=48.dp).background(fill,RoundedCornerShape(14.dp))
                     .selectable(selected=selected,role=Role.Tab,onClick={if(!selected)onTab(index)})
-                    .padding(horizontal=6.dp,vertical=12.dp),contentAlignment=Alignment.Center) {
+                    .padding(horizontal=6.dp,vertical=8.dp),contentAlignment=Alignment.Center) {
                     if(stacked) Column(horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(4.dp)) {
                         Icon(painterResource(icons[index]),null,tint=tint,modifier=Modifier.size(21.dp))
                         Text(label,color=labelInk,fontSize=13.sp,fontWeight=if(selected)FontWeight.SemiBold else FontWeight.Normal)

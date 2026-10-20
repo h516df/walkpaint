@@ -9,9 +9,10 @@ internal data class CurrentRelease(val version:String,val code:Int,val sections:
             val version=j.getString("versionName");val code=j.getInt("versionCode")
             require(version.matches(Regex("[0-9]+\\.[0-9]+")) && code>0)
             val sections=listOf("新增","改进","修复","说明").map { heading ->
-                val a=j.getJSONArray(heading);require(a.length() in 1..10)
+                val a=j.getJSONArray(heading);require(a.length() in 0..10)
                 heading to (0 until a.length()).map { i -> a.getString(i).also { require(it.length in 1..400) } }
             }
+            require(sections.any {it.second.isNotEmpty()})
             return CurrentRelease(version,code,sections)
         }
     }
