@@ -74,7 +74,7 @@ internal object TrailPaint {
     /** The ramp over which the veil comes back outside that band, so there is no hard edge. */
     const val FEATHER_M = 5.0
     /**
-     * Default soft veil keeps geographical context visible. Exploration geometry is unchanged.
+     * Opaque, muted veil conceals unexplored roads and labels. Exploration geometry is unchanged.
      */
     const val FOG_COLOR = FogAppearance.DEFAULT
     /** How strongly cleared ground takes the person's own colour. */

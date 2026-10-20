@@ -85,8 +85,13 @@ class ExplorationLandmarksTest {
             assertTrue(alphas.zipWithNext().all {(a,b)->b>=a})
         }
     }
-    @Test fun themesKeepBasemapVisibleAndDifferWithoutGeometryChanges() {
+    @Test fun themesConcealUnvisitedBasemapAndDifferWithoutGeometryChanges() {
         assertEquals(3,VisualSkin.entries.map {FogAppearance.color(it)}.toSet().size)
-        VisualSkin.entries.forEach {assertTrue((FogAppearance.color(it) ushr 24) in 1..200)}
+        VisualSkin.entries.forEach {
+            val color=FogAppearance.color(it)
+            assertEquals("$it must conceal roads and labels",255,color ushr 24)
+            assertTrue("$it must not revert to black",(color and 0x00FFFFFF)!=0)
+        }
+        assertEquals(50.0,TrailPaint.REVEAL_RADIUS_M,0.0)
     }
 }

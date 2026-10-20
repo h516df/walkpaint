@@ -1,0 +1,13 @@
+{
+  "commit": "08826df17869165d5029b38b32a6599631df814f",
+  "suite_count": 81,
+  "tests": 497,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "native_probe": "FOG_PIXEL_PROBE_PASS",
+  "graphics": "Robolectric 4.17 native, Android SDK35",
+  "compileSdk": 36,
+  "java": "Temurin 21.0.12.1",
+  "gradle": "9.1.0"
+}

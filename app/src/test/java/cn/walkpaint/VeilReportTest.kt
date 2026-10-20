@@ -21,10 +21,11 @@ class VeilReportTest {
         assertEquals(0.0, stats.openShare, 0.0001)
     }
 
-    @Test fun themedFogReportsTransparencyWithoutClaimingExploration() {
+    @Test fun themedFogReportsConcealmentWithoutClaimingExploration() {
         val stats=VeilReport.of(IntArray(100){TrailPaint.FOG_COLOR})
-        assertEquals(1.0,stats.openShare,0.0001)
-        assertEquals(0.0,stats.hiddenShare,0.0001)
+        assertEquals(0.0,stats.openShare,0.0001)
+        assertEquals(1.0,stats.hiddenShare,0.0001)
+        assertEquals(0.0,stats.blackShare,0.0001)
         assertTrue(VeilReport.image(stats,1).contains("不代表已探索"))
     }
     @Test fun anOpaqueVeilThatIsNotBlackHidesButIsNotTheAgreedColour() {
