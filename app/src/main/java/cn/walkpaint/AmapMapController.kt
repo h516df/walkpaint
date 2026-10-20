@@ -38,6 +38,7 @@ internal class AmapMapController(private val context: Context, private val onGes
     private var renderedPaths: List<List<TrackPoint>>?=null
     private var groundImage:Bitmap?=null
     private val fogTransform=android.graphics.Matrix()
+    private var drawnFogCorners:List<android.graphics.Point> = emptyList()
     private val fogImagePaint=Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val routePixels=android.graphics.Path()
     private val routeOnScreen=android.graphics.Path()
@@ -93,6 +94,7 @@ internal class AmapMapController(private val context: Context, private val onGes
                     fogTransform.setPolyToPoly(
                         floatArrayOf(0f,0f,image.width.toFloat(),0f,image.width.toFloat(),image.height.toFloat(),0f,image.height.toFloat()),0,
                         corners.flatMap {listOf(it.x.toFloat(),it.y.toFloat())}.toFloatArray(),0,4)
+                drawnFogCorners=if(drawable) corners else emptyList()
                 guardPath.reset()
                 guardPath.fillType = android.graphics.Path.FillType.EVEN_ODD
                 guardPath.addRect(0f,0f,view.width.toFloat(),view.height.toFloat(),android.graphics.Path.Direction.CW)
@@ -115,6 +117,7 @@ internal class AmapMapController(private val context: Context, private val onGes
                         routePaint.color=(exploredColor and 0x00FFFFFF) or (0xB0 shl 24);routePaint.strokeWidth=minOf(2.5f*density,corridorPixels)
                         canvas.drawPath(routeOnScreen,routePaint)
                 }
+                drawExplorationHints(canvas)
                 latestPosition?.let { fix ->
                     projection?.toScreenLocation(toAmap(fix.latitude,fix.longitude))?.let { point ->
                         val marker=if(fix.provider==LocationManager.NETWORK_PROVIDER) networkDotImage else blueDotImage
@@ -181,26 +184,22 @@ internal class AmapMapController(private val context: Context, private val onGes
         val view = MapView(context)
         view.onCreate(null)
         currentView = view
-        landmarkMarkers.clear();landmarkSnapshot=emptyList()
+        landmarkSnapshot=emptyList();nearbySnapshot=emptyList()
         map = view.map
         map?.mapType=if(nightAppearance) AMap.MAP_TYPE_NIGHT else AMap.MAP_TYPE_NORMAL
-        map?.setOnPOIClickListener { poi ->
-            runCatching {
-                val coordinate=poi.coordinate
+        map?.setOnPOIClickListener {poi ->
+            val coordinate=poi.coordinate
+            if(nativePoiVisible(coordinate)) runCatching {
                 val source=fromAmap(coordinate.latitude,coordinate.longitude)
                 val id=poi.poiId?.takeIf {it.isNotBlank()} ?: "${poi.name}:${coordinate.latitude}:${coordinate.longitude}"
                 ExplorationLandmark(id.take(200),poi.name.orEmpty().take(120),source.latitude,source.longitude)
                     .also {LandmarkCodec.validate(it)}
             }.getOrNull()?.let(onLandmark)
         }
-        map?.setOnMarkerClickListener { marker ->
-            val point=marker.`object` as? ExplorationLandmark
-            if(point!=null) {onLandmark(point);true} else false
-        }
         groundFrame = null
         installCoverageGuard(view)
         renderedPaths=null
-        groundImage=null;routeFrame=null;routePixels.reset()
+        groundImage=null;drawnFogCorners=emptyList();routeFrame=null;routePixels.reset()
         paintedRevision = -1
         groundPixels = null
         mapLoaded = false
@@ -215,6 +214,7 @@ internal class AmapMapController(private val context: Context, private val onGes
             override fun onDown(e:android.view.MotionEvent)=true
             override fun onDoubleTap(e:android.view.MotionEvent):Boolean { nativeGesture();return false }
             override fun onSingleTapConfirmed(e:android.view.MotionEvent):Boolean {
+                ExplorationHints.hit(projectedHints(),e.x,e.y,density)?.let {onLandmark(it);return true}
                 val fix=latestPosition ?: return false
                 if(fix.provider!=LocationManager.NETWORK_PROVIDER) return false
                 val p=map?.projection?.toScreenLocation(toAmap(fix.latitude,fix.longitude)) ?: return false
@@ -310,7 +310,7 @@ internal class AmapMapController(private val context: Context, private val onGes
     /** One immutable raster + geographic frame, consumed atomically by the existing coverage view. */
     private fun syncGround(a:AMap,fog:Bitmap?,frame:PaintFrame?,revision:Int) {
         if(fog==null || frame==null || revision<0 || revision==paintedRevision) return
-        groundImage=fog;groundFrame=frame;paintedRevision=revision
+        groundImage=fog;groundFrame=frame;paintedRevision=revision;drawnFogCorners=emptyList()
         groundPixels="${fog.width}x${fog.height}"
         updateCoverageGuard()
     }
@@ -372,8 +372,21 @@ internal class AmapMapController(private val context: Context, private val onGes
         map?.stopAnimation()
     }
 
-    private val landmarkMarkers=mutableListOf<com.amap.api.maps.model.Marker>()
+    private fun nativePoiVisible(coordinate:LatLng):Boolean {
+        val frame=groundFrame ?: return false
+        val projection=map?.projection ?: return false
+        val corners=listOf(toAmap(frame.latMax,frame.lonMin),toAmap(frame.latMax,frame.lonMax),
+            toAmap(frame.latMin,frame.lonMax),toAmap(frame.latMin,frame.lonMin)).map {projection.toScreenLocation(it)}
+        val pixel=projection.toScreenLocation(coordinate)
+        // Curated hints win over any native POI underneath their visible touch target.
+        if(ExplorationHints.hit(projectedHints(),pixel.x.toFloat(),pixel.y.toFloat(),density)!=null) return false
+        return FogPoiVisibility.visible(groundImage,fogTransform,pixel.x.toFloat(),pixel.y.toFloat(),
+            corners==drawnFogCorners && drawnFogCorners.size==4)
+    }
+
     private var landmarkSnapshot:List<ExplorationLandmark> = emptyList()
+    private var nearbySnapshot:List<NearbyCandidate> = emptyList()
+    private val hintPaint=Paint(Paint.ANTI_ALIAS_FLAG)
     fun setNightAppearance(dark:Boolean) {
         if(nightAppearance==dark) return
         nightAppearance=dark
@@ -381,21 +394,25 @@ internal class AmapMapController(private val context: Context, private val onGes
     }
     fun setFogColor(color:Int) {guardPaint.color=color;updateCoverageGuard()}
     fun showLandmarks(points:List<ExplorationLandmark>) {
-        if(points==landmarkSnapshot && landmarkMarkers.isNotEmpty()) return
-        val a=map ?: return
-        landmarkMarkers.forEach {it.remove()};landmarkMarkers.clear();landmarkSnapshot=points.toList()
-        points.filter {!it.deleted}.forEach {point ->
-            val bitmap=Bitmap.createBitmap(48,56,Bitmap.Config.ARGB_8888)
-            val canvas=Canvas(bitmap);val paint=Paint(Paint.ANTI_ALIAS_FLAG)
-            paint.color=if(point.visitedAt!=null) Color.rgb(44,133,103) else Color.rgb(83,104,150)
-            val path=android.graphics.Path().apply {moveTo(24f,3f);lineTo(43f,24f);lineTo(24f,51f);lineTo(5f,24f);close()}
-            canvas.drawPath(path,paint);paint.color=Color.WHITE;paint.style=Paint.Style.STROKE;paint.strokeWidth=3f
-            canvas.drawCircle(24f,24f,7f,paint)
-            a.addMarker(com.amap.api.maps.model.MarkerOptions().position(toAmap(point.lat,point.lon))
-                .title(point.name).anchor(.5f,1f).icon(com.amap.api.maps.model.BitmapDescriptorFactory.fromBitmap(bitmap)))?.let {
-                    it.`object`=point;landmarkMarkers+=it
-                }
-        }
+        landmarkSnapshot=points.filter {!it.deleted}.toList();updateCoverageGuard()
+    }
+    fun showNearby(points:List<NearbyCandidate>) {
+        nearbySnapshot=points.toList();updateCoverageGuard()
+    }
+    private fun projectedHints():List<ExplorationHint> {
+        val a=map ?: return emptyList()
+        val view=currentView ?: return emptyList()
+        val projection=a.projection
+        val saved=landmarkSnapshot.associateBy {it.id}
+        // Prefer nearby discoveries, resolving local saved/visited state without inventing visits.
+        val points=(nearbySnapshot.map {saved[it.point.id] ?: it.point}+landmarkSnapshot).distinctBy {it.id}
+        return ExplorationHints.select(points.map {p ->
+            val pixel=projection.toScreenLocation(toAmap(p.lat,p.lon))
+            ExplorationHint(p,pixel.x.toFloat(),pixel.y.toFloat(),saved.containsKey(p.id))
+        },view.width.toFloat(),view.height.toFloat(),density,a.cameraPosition.zoom)
+    }
+    private fun drawExplorationHints(canvas:Canvas) {
+        ExplorationHintPainter.draw(canvas,projectedHints(),density,nightAppearance,hintPaint)
     }
 
     fun view(): MapView? = currentView
@@ -472,12 +489,12 @@ internal class AmapMapController(private val context: Context, private val onGes
         latestState=TrackState()
         coverageGuard?.let {coverageHost?.overlay?.remove(it)}
         coverageGuard=null;coverageHost=null
-        groundImage=null;routeFrame=null;routePixels.reset()
+        groundImage=null;drawnFogCorners=emptyList();routeFrame=null;routePixels.reset()
         groundPixels = null
         groundFrame = null
         mapLoaded = false
         paintedRevision = -1
-        landmarkMarkers.clear();landmarkSnapshot=emptyList()
+        landmarkSnapshot=emptyList();nearbySnapshot=emptyList()
         map = null
         currentView = null
         view.onPause()

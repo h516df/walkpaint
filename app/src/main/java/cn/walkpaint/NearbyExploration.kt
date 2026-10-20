@@ -26,6 +26,13 @@ internal object NearbyCandidates {
     }
 }
 internal object NearbyExplorationService {
+    private val cache=NearbyDiscoveryCache {android.os.SystemClock.elapsedRealtime()}
+    suspend fun nearby(context:Context,center:RegionPoint):List<NearbyCandidate> {
+        check(RegionService.allowed(context)) {"地图授权已撤回"}
+        return cache.get(center) {search(context,center)}.also {
+            check(RegionService.allowed(context)) {"地图授权已撤回"}
+        }
+    }
     /** Existing AMap consent/key only. No web-service key, remote proxy, or new provider. */
     fun search(context:Context,center:RegionPoint):List<NearbyCandidate> {
         check(RegionService.allowed(context)) {"地图授权已撤回"}
@@ -54,5 +61,6 @@ internal object NearbyExplorationService {
             ExplorationLandmark(id.take(200),name.take(120),source.first,source.second) to p.typeDes.orEmpty()
         })
     }
-    fun message(error:Throwable):String=NearbyCandidates.failure((error as? AMapException)?.errorCode)
+    fun message(error:Throwable):String=if(error is NearbyRefreshDeferred) error.message!!
+        else NearbyCandidates.failure((error as? AMapException)?.errorCode)
 }

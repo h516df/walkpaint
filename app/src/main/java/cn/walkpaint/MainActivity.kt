@@ -135,13 +135,14 @@ class MainActivity : ComponentActivity() {
     /** First-run map disclosure, shown as a full screen so it cannot be dismissed by accident. */
     private var showMapConsent by mutableStateOf(false)
     private val follow=MapFollowState()
-    private var activityResumed=false
+    private var activityResumed by mutableStateOf(false)
     private val headingContinuity=HeadingContinuity()
     private var mapHeading=0f
     private var mapViewReady by mutableStateOf(false)
     private var landmarkPoints by mutableStateOf<List<ExplorationLandmark>>(emptyList())
     private var selectedLandmark by mutableStateOf<ExplorationLandmark?>(null)
     private var showLandmarkList by mutableStateOf(false)
+    private var nearbyMapMessage by mutableStateOf<String?>(null)
     private var landmarkError by mutableStateOf<String?>(null)
     private val landmarkArrival=LandmarkArrival()
     private val landmarkExecutor=java.util.concurrent.Executors.newSingleThreadExecutor()
@@ -624,6 +625,10 @@ class MainActivity : ComponentActivity() {
                         if (amapActive) {
                         androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
                             AmapNativeView()
+                            if(activityResumed && currentTab==0 && selectedDay==null && !replayActive) {
+                                NearbyMapHints(userFix?.takeIf {follow.accepts(fixQuality(it))}?.let {RegionPoint(it.latitude,it.longitude)},
+                                    {amapController.showNearby(it)},{nearbyMapMessage=it})
+                            }
                             if(selectedDay==null && snapshot.realTracks.all {it.points.isEmpty()}) {
                                 InitialExplorationHint(mapViewReady,automatic=trackingEnabled,
                                     hasFix=userFix?.let {follow.accepts(fixQuality(it))}==true,
@@ -645,6 +650,7 @@ class MainActivity : ComponentActivity() {
                     },
                     replay = ReplayControls(replayActive,replayPlaying,{replayProgress},
                         ::startReplay,::toggleReplay,::stopReplay),
+                    explorationNotice=nearbyMapMessage,
                     onExploreLandmarks={showLandmarkList=true;changeLandmarks()},
                     onSkin={showSkinPicker=true},
                     onNotifications=::openRecordingNotificationSettings,
@@ -662,7 +668,8 @@ class MainActivity : ComponentActivity() {
                 selectedLandmark?.let {point -> LandmarkDetail(point,landmarkPoints.any {it.id==point.id},landmarkError,
                     {changeLandmarks(onSuccess={selectedLandmark=null}) {repository.landmarks.save(point)}},
                     {changeLandmarks(onSuccess={selectedLandmark=null}) {repository.landmarks.remove(point.id)}},
-                    {selectedLandmark=null}) }
+                    {selectedLandmark=null},
+                    userFix?.takeIf {follow.accepts(fixQuality(it))}?.let {RegionPoint(it.latitude,it.longitude)}) }
                 if(showSkinPicker) SkinPicker(visualSkin,{ skin ->
                     visualSkin=skin
                     appearanceMode=if(skin==VisualSkin.NIGHT) 2 else 0

@@ -54,7 +54,7 @@ internal fun AppShell(
     feedbackContent: @Composable (onBack:()->Unit)->Unit,
     updatesContent: @Composable (onBack:()->Unit)->Unit, mapContent: @Composable () -> Unit,
     onBackupEntry:()->Unit={},onSkin:()->Unit={},onNotifications:()->Unit={},backupStatus:String?=null,
-    replay: ReplayControls? = null,onExploreLandmarks:()->Unit={}
+    replay: ReplayControls? = null,onExploreLandmarks:()->Unit={},explorationNotice:String?=null
 ) {
     val uri=LocalUriHandler.current
     Column(Modifier.fillMaxSize().background(PageBackground)
@@ -76,7 +76,7 @@ internal fun AppShell(
                 0 -> DesignMapOverlay(state,selectedDay,automatic,recordingTitle,recordingHealthy,mapNotice,
                     mapProviderLabel,onResolveTracking,onToggleTracking,onLocate,onShowAll,
                     false,onZoom,{},regionContent={RegionExplorationCard(state,fix,placeName)},
-                    replay=replay,bottomControlsInset=24.dp,onExploreLandmarks=onExploreLandmarks)
+                    replay=replay,bottomControlsInset=24.dp,onExploreLandmarks=onExploreLandmarks,explorationNotice=explorationNotice)
                 1 -> Box(Modifier.fillMaxSize().statusBarsPadding()) {
                     DesignTripsPage(state,roadColor,onTrip,onExport,onSkin)
                 }
