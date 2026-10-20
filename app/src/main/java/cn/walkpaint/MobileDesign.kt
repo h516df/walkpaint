@@ -75,7 +75,7 @@ internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolea
     title: String, healthy: Boolean, notice: String?, provider: String, onSettings: () -> Unit,
     onToggle: (Boolean) -> Unit, onLocate: () -> Unit, onShowAll: () -> Unit,
     showOsmCredit: Boolean, onZoom: (Int) -> Unit, mapContent: @Composable () -> Unit, regionContent:@Composable ()->Unit={},
-    replay: ReplayControls? = null,bottomControlsInset:androidx.compose.ui.unit.Dp=94.dp,onExploreLandmarks:()->Unit={}) {
+    replay: ReplayControls? = null,bottomControlsInset:androidx.compose.ui.unit.Dp=94.dp,onExploreLandmarks:()->Unit={},explorationNotice:String?=null) {
     val uri = androidx.compose.ui.platform.LocalUriHandler.current
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val compactControls=maxHeight<600.dp && LocalDensity.current.fontScale>1.3f
@@ -100,6 +100,10 @@ internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolea
         }
         if(day==null) Column(Modifier.align(Alignment.TopStart).statusBarsPadding().padding(top=12.dp,start=16.dp,end=16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
         regionContent()
+        if(explorationNotice!=null) Surface(onClick=onExploreLandmarks,color=chrome,shape=RoundedCornerShape(12.dp)) {
+            Text(explorationNotice,color=chromeInk,fontSize=12.sp,
+                modifier=Modifier.padding(12.dp).heightIn(min=24.dp))
+        }
         if(notice!=null) Surface(onClick=onSettings,color=chrome,shape=RoundedCornerShape(16.dp),
             modifier=Modifier.fillMaxWidth()) {
             Row(Modifier.padding(horizontal=16.dp,vertical=12.dp),verticalAlignment=Alignment.CenterVertically) {

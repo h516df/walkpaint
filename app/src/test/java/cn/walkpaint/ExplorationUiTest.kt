@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -158,4 +159,75 @@ class ExplorationUiTest {
         compose.onNodeWithText("开启高德地图后可自动发现附近地点。已收藏地点仍保留。").assertIsDisplayed()
         assertEquals(0,calls)
     }
+    @Test fun mapDiscoveryWaitsForFixAndIgnoresJitter() {
+        var center by mutableStateOf<RegionPoint?>(null)
+        var calls=0;var shown=emptyList<NearbyCandidate>()
+        val fixture=NearbyCandidate(ExplorationLandmark("park","合成公园",0.0,0.0),"公园",0)
+        compose.setContent {NearbyMapHints(center,{shown=it},{},load={_,_->calls++;listOf(fixture)})}
+        compose.waitForIdle();assertEquals(0,calls)
+        compose.runOnIdle {center=RegionPoint(0.0,0.0)}
+        compose.waitForIdle()
+        compose.waitUntil(10000) {shown.isNotEmpty()}
+        compose.runOnIdle {center=RegionPoint(.00001,0.0)}
+        compose.waitForIdle();assertEquals(1,calls)
+        compose.runOnIdle {center=null}
+        compose.waitForIdle()
+        compose.waitUntil(10000) {shown.isEmpty()}
+    }
+    @Test fun mapDepartureCancelsLateResults() {
+        var open by mutableStateOf(true);var shown=emptyList<NearbyCandidate>()
+        val gate=CompletableDeferred<List<NearbyCandidate>>()
+        compose.setContent {if(open) NearbyMapHints(RegionPoint(0.0,0.0),{shown=it},{},load={_,_->gate.await()})}
+        compose.waitForIdle()
+        compose.runOnIdle {open=false}
+        compose.waitForIdle()
+        compose.runOnIdle {gate.complete(listOf(NearbyCandidate(ExplorationLandmark("late","迟到结果",0.0,0.0),"",0)))}
+        compose.waitForIdle();assertTrue(shown.isEmpty())
+    }
+    @Test @Config(qualifiers="zh-rCN-w320dp-h640dp-xhdpi") fun longPointDetailLargeTextCanSaveWithoutArrival() {
+        RuntimeEnvironment.setFontScale(2f)
+        val point=ExplorationLandmark("fixture","合成的长名称文化公园与城市历史展览场馆，仅作界面验收",.001,0.0)
+        var saved=false
+        compose.setContent {WalkPaintTheme(1) {LandmarkDetail(point,false,null,{saved=true},{},{},RegionPoint(0.0,0.0))}}
+        compose.onNodeWithText("探索点详情").assertIsDisplayed()
+        compose.onNodeWithText("收藏探索点").assertIsDisplayed()
+        shot("hint-detail-font200")
+        compose.onNodeWithText("收藏探索点").performClick();assertTrue(saved);assertNull(point.visitedAt)
+    }
+
+    @Test fun actualHintPainterOverOpaqueFogOpensDetailAndKeepsVisitsSeparate() {
+        var selected by mutableStateOf<ExplorationLandmark?>(null)
+        var saved=false
+        val candidate=ExplorationLandmark("public-park","合成公园",0.001,0.0)
+        compose.setContent {WalkPaintTheme(1) {
+            AndroidView(factory={context -> object:android.view.View(context) {
+                private val paint=android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+                private val d=context.resources.displayMetrics.density
+                private fun hints()=ExplorationHints.select(listOf(
+                    ExplorationHint(candidate,160*d,260*d,false),
+                    ExplorationHint(ExplorationLandmark("saved","合成收藏",0.002,0.0),240*d,360*d,true)),
+                    width.toFloat(),height.toFloat(),d,17f)
+                override fun onDraw(canvas:android.graphics.Canvas) {
+                    canvas.drawColor(android.graphics.Color.BLACK)
+                    canvas.drawColor(FogAppearance.DEFAULT)
+                    ExplorationHintPainter.draw(canvas,hints(),d,false,paint)
+                }
+                override fun onTouchEvent(event:android.view.MotionEvent):Boolean {
+                    if(event.action==android.view.MotionEvent.ACTION_UP) selected=ExplorationHints.hit(hints(),event.x,event.y,d)
+                    return true
+                }
+            }},modifier=Modifier.fillMaxSize().testTag("hint-map"))
+            selected?.let {LandmarkDetail(it,saved,null,{saved=true;selected=null},{},{selected=null},RegionPoint(0.0,0.0))}
+        }}
+        shot("hints-over-opaque-fog-synthetic")
+        val density=compose.activity.resources.displayMetrics.density
+        compose.onNodeWithTag("hint-map").performTouchInput {click(androidx.compose.ui.geometry.Offset(160*density,260*density))}
+        compose.onNodeWithText("探索点详情").assertIsDisplayed()
+        compose.onNodeWithText("推荐地点 · 尚未收藏").assertIsDisplayed()
+        compose.onNodeWithText("距你约 100 米 · 直线距离").assertIsDisplayed()
+        compose.onNodeWithText("取消").performClick();assertFalse(saved);assertNull(candidate.visitedAt)
+        compose.onNodeWithTag("hint-map").performTouchInput {click(androidx.compose.ui.geometry.Offset(160*density,260*density))}
+        compose.onNodeWithText("收藏探索点").performClick();assertTrue(saved);assertNull(candidate.visitedAt)
+    }
+
 }

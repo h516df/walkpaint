@@ -1,6 +1,8 @@
 package cn.walkpaint
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -15,7 +17,7 @@ import androidx.compose.ui.unit.dp
 internal fun LandmarkList(points:List<ExplorationLandmark>,error:String?,mapAvailable:Boolean,
                           center:RegionPoint?,historicalCenter:Boolean,
                           onSelect:(ExplorationLandmark)->Unit,onClose:()->Unit,
-                          load:suspend (android.content.Context,RegionPoint)->List<NearbyCandidate> = {c,p -> NearbyExplorationService.search(c,p)}) {
+                          load:suspend (android.content.Context,RegionPoint)->List<NearbyCandidate> = {c,p -> NearbyExplorationService.nearby(c,p)}) {
     val context=LocalContext.current.applicationContext
     // Freeze the center for this opening, so GPS updates cannot create request storms.
     var anchor by remember {mutableStateOf(center)}
@@ -81,11 +83,45 @@ internal fun LandmarkList(points:List<ExplorationLandmark>,error:String?,mapAvai
 
 @Composable
 internal fun LandmarkDetail(point:ExplorationLandmark,saved:Boolean,error:String?,
-                           onSave:()->Unit,onRemove:()->Unit,onClose:()->Unit) {
-    AlertDialog(onDismissRequest=onClose,title={Text(point.name)},text={Column {
+                           onSave:()->Unit,onRemove:()->Unit,onClose:()->Unit,center:RegionPoint?=null) {
+    AlertDialog(onDismissRequest=onClose,title={Text("探索点详情")},text={Column(Modifier.heightIn(max=420.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+        Text(point.name,style=MaterialTheme.typography.titleMedium)
+        Text(if(point.visitedAt!=null) "已收藏 · 已到访" else if(saved) "已收藏 · 待到访" else "推荐地点 · 尚未收藏")
+        center?.let { val meters=Geo.meters(TrackPoint(it.lat,it.lon,0,1f),TrackPoint(point.lat,point.lon,0,1f)).toInt()
+            Text("距你约 ${((meters+25)/50)*50} 米 · 直线距离") }
         Text(if(saved) "此探索点仅保存在本机，并随足迹备份导出。" else "收藏这个地图地点？名称和位置只保存在本机，并随足迹备份导出。")
         Text(if(point.visitedAt!=null) "已到访" else "到达附近后，前台连续可靠 GPS 才会记为到访。收藏本身不算到访。")
         error?.let {Text(it,color=MaterialTheme.colorScheme.error)}
     }},confirmButton={TextButton(onClick=if(saved) onClose else onSave){Text(if(saved)"完成" else "收藏探索点")}},
         dismissButton={TextButton(onClick=if(saved)onRemove else onClose){Text(if(saved)"移除" else "取消")}})
+}
+
+
+/** Exists only while the exploration screen is resumed. Camera moves never trigger searches. */
+@Composable
+internal fun NearbyMapHints(center:RegionPoint?,onResults:(List<NearbyCandidate>)->Unit,onMessage:(String?)->Unit,
+    load:suspend (android.content.Context,RegionPoint)->List<NearbyCandidate> = {c,p -> NearbyExplorationService.nearby(c,p)}) {
+    val context=LocalContext.current.applicationContext
+    val latestCenter by rememberUpdatedState(center)
+    val results by rememberUpdatedState(onResults)
+    var anchor by remember {mutableStateOf(center)}
+    val status by rememberUpdatedState(onMessage)
+    LaunchedEffect(center) {
+        if(center==null || anchor==null || !NearbyRefreshPolicy.near(anchor!!,center)) anchor=center
+    }
+    DisposableEffect(Unit) {onDispose {results(emptyList());status(null)}}
+    LaunchedEffect(anchor) {
+        results(emptyList());status(null)
+        val at=anchor ?: return@LaunchedEffect
+        while(isActive) {
+            try {
+                val found=load(context,at)
+                ensureActive()
+                if(latestCenter?.let {NearbyRefreshPolicy.near(it,at)}==true) results(found)
+                status(null)
+            } catch(e:CancellationException) {throw e}
+            catch(e:Exception) {results(emptyList());status(NearbyExplorationService.message(e))}
+            delay(NearbyRefreshPolicy.INTERVAL_MS)
+        }
+    }
 }
