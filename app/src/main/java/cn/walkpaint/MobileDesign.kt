@@ -75,12 +75,13 @@ internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolea
     title: String, healthy: Boolean, notice: String?, provider: String, onSettings: () -> Unit,
     onToggle: (Boolean) -> Unit, onLocate: () -> Unit, onShowAll: () -> Unit,
     showOsmCredit: Boolean, onZoom: (Int) -> Unit, mapContent: @Composable () -> Unit, regionContent:@Composable ()->Unit={},
-    replay: ReplayControls? = null,bottomControlsInset:androidx.compose.ui.unit.Dp=94.dp) {
+    replay: ReplayControls? = null,bottomControlsInset:androidx.compose.ui.unit.Dp=94.dp,onExploreLandmarks:()->Unit={}) {
     val uri = androidx.compose.ui.platform.LocalUriHandler.current
-    Box(Modifier.fillMaxSize()) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val compactControls=maxHeight<600.dp && LocalDensity.current.fontScale>1.3f
         mapContent()
-        val chrome=Color(0xFF172334)
-        val chromeInk=Color(0xFFE9EFFA)
+        val chrome=Canvas
+        val chromeInk=Ink
         if(day!=null) Surface(onClick=onShowAll,color=chrome,shape=RoundedCornerShape(16.dp),
             modifier=Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top=12.dp,start=16.dp,end=16.dp)) {
             Row(Modifier.padding(horizontal=16.dp,vertical=12.dp),verticalAlignment=Alignment.CenterVertically,
@@ -94,7 +95,7 @@ internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolea
                     Text("回放",color=Color(0xFFEAF1FF),fontSize=13.sp,fontWeight=FontWeight.Medium,
                         modifier=Modifier.padding(horizontal=10.dp,vertical=6.dp))
                 }
-                Text("返回全部探索",color=Color(0xFFB8D3FF),fontSize=13.sp)
+                Text("返回全部探索",color=Accent,fontSize=13.sp)
             }
         }
         if(day==null) Column(Modifier.align(Alignment.TopStart).statusBarsPadding().padding(top=12.dp,start=16.dp,end=16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
@@ -102,26 +103,24 @@ internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolea
         if(notice!=null) Surface(onClick=onSettings,color=chrome,shape=RoundedCornerShape(16.dp),
             modifier=Modifier.fillMaxWidth()) {
             Row(Modifier.padding(horizontal=16.dp,vertical=12.dp),verticalAlignment=Alignment.CenterVertically) {
-                Icon(painterResource(R.drawable.ic_location),null,tint=Color(0xFFB8D3FF),modifier=Modifier.size(18.dp))
+                Icon(painterResource(R.drawable.ic_location),null,tint=Accent,modifier=Modifier.size(18.dp))
                 Spacer(Modifier.width(10.dp))
                 Text(notice,color=chromeInk,fontSize=13.sp,lineHeight=20.sp,modifier=Modifier.weight(1f))
                 Text("›",color=chromeInk,fontSize=20.sp,modifier=Modifier.padding(start=8.dp))
             }
         }
         }
-        Column(Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(end=16.dp,bottom=bottomControlsInset),
-            verticalArrangement=Arrangement.spacedBy(12.dp)) {
+        if(day==null && replay?.active!=true) Surface(onClick=onExploreLandmarks,color=Canvas,
+            shape=RoundedCornerShape(14.dp),modifier=Modifier.align(Alignment.BottomStart)
+                .padding(start=16.dp,bottom=bottomControlsInset).heightIn(min=48.dp)) {
+            Box(Modifier.padding(horizontal=12.dp,vertical=10.dp),contentAlignment=Alignment.Center) {
+                Text("探索点",color=Accent,fontSize=14.sp,fontWeight=FontWeight.Medium)
+            }
+        }
+        val controls: @Composable ()->Unit = {
             Surface(color=Canvas,shape=RoundedCornerShape(14.dp)) {
-                Column {
-                    listOf("放大地图" to 1,"缩小地图" to -1).forEachIndexed { index,(label,delta) ->
-                        if(index>0) HorizontalDivider(Modifier.width(48.dp).padding(horizontal=10.dp),color=Line)
-                        Surface(onClick={onZoom(delta)},color=Color.Transparent,modifier=Modifier.size(48.dp)) {
-                            Box(Modifier.semantics { contentDescription=label },contentAlignment=Alignment.Center) {
-                                Text(if(delta>0) "+" else "−",color=Ink,fontSize=26.sp)
-                            }
-                        }
-                    }
-                }
+                if(compactControls) Row {MapZoomButtons(onZoom,true)}
+                else Column {MapZoomButtons(onZoom,false)}
             }
             Surface(onClick=onLocate,color=skinPalette(LocalVisualSkin.current,false).brand,shape=RoundedCornerShape(14.dp),modifier=Modifier.size(48.dp)) {
                 Box(Modifier.semantics { contentDescription="定位我" },contentAlignment=Alignment.Center) {
@@ -129,11 +128,15 @@ internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolea
                 }
             }
         }
+        if(compactControls) Row(Modifier.align(Alignment.BottomEnd).padding(end=16.dp,bottom=bottomControlsInset),
+            horizontalArrangement=Arrangement.spacedBy(12.dp),content= {controls()})
+        else Column(Modifier.align(Alignment.BottomEnd).padding(end=16.dp,bottom=bottomControlsInset),
+            verticalArrangement=Arrangement.spacedBy(12.dp),horizontalAlignment=Alignment.End,content={controls()})
         if(replay!=null && replay.active) {
             val progress=replay.progress().coerceIn(0f,1f)
             Surface(color=chrome,shape=RoundedCornerShape(16.dp),
-                modifier=Modifier.align(Alignment.BottomStart).fillMaxWidth().navigationBarsPadding()
-                    .padding(start=16.dp,end=88.dp,bottom=bottomControlsInset)) {
+                modifier=Modifier.align(Alignment.BottomStart).fillMaxWidth()
+                    .padding(start=16.dp,end=if(compactControls)16.dp else 88.dp,bottom=bottomControlsInset+if(compactControls)60.dp else 0.dp)) {
                 Column(Modifier.padding(horizontal=14.dp,vertical=10.dp),
                     verticalArrangement=Arrangement.spacedBy(8.dp)) {
                     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,
@@ -145,7 +148,7 @@ internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolea
                         Spacer(Modifier.weight(1f))
                         Text("${(progress*100).toInt()}%",color=chromeInk,fontSize=12.sp)
                         Surface(onClick=replay.onClose,color=Color.Transparent,shape=RoundedCornerShape(10.dp)) {
-                            Text("关闭",color=Color(0xFFB8D3FF),fontSize=14.sp,
+                            Text("关闭",color=Accent,fontSize=14.sp,
                                 modifier=Modifier.padding(horizontal=4.dp,vertical=8.dp))
                         }
                     }
@@ -158,8 +161,23 @@ internal fun DesignMapOverlay(state: TrackState, day: String?, automatic: Boolea
             }
         }
         if (showOsmCredit) Text("© OpenStreetMap contributors · ODbL 1.0", color = Ink, fontSize = 10.sp,
-            modifier = Modifier.align(Alignment.BottomStart).background(Canvas, RoundedCornerShape(4.dp))
+            modifier = Modifier.align(Alignment.BottomStart).padding(start=4.dp,end=4.dp,bottom=28.dp).background(Canvas, RoundedCornerShape(4.dp))
                 .clickable { uri.openUri("https://www.openstreetmap.org/copyright") }.padding(4.dp))
+    }
+}
+
+@Composable
+private fun MapZoomButtons(onZoom:(Int)->Unit,horizontal:Boolean) {
+    listOf("放大地图" to 1,"缩小地图" to -1).forEachIndexed { index,(label,delta) ->
+        if(index>0) {
+            if(horizontal) VerticalDivider(Modifier.height(48.dp).padding(vertical=10.dp),color=Line)
+            else HorizontalDivider(Modifier.width(48.dp).padding(horizontal=10.dp),color=Line)
+        }
+        Surface(onClick={onZoom(delta)},color=Color.Transparent,modifier=Modifier.size(48.dp)) {
+            Box(Modifier.semantics {contentDescription=label},contentAlignment=Alignment.Center) {
+                Text(if(delta>0) "+" else "−",color=Ink,fontSize=26.sp)
+            }
+        }
     }
 }
 

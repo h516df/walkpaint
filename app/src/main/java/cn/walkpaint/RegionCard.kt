@@ -69,41 +69,26 @@ import java.util.Locale
     val stage=explorationStage(percent)
     val title=if(county)boundary!!.name else place?.let{"${it}附近"} ?: "附近"
     var rules by remember{mutableStateOf(false)}
-    var newlyLit by remember{mutableStateOf(false)}
-    var pulse by remember{mutableIntStateOf(0)}
-    var previousArea by remember(anchor,county){mutableStateOf<Double?>(null)}
-    LaunchedEffect(share,anchor,county){
-        val area=share?.squareMeters ?: return@LaunchedEffect
-        val previous=previousArea
-        previousArea=area
-        if(previous!=null && area>previous+625)pulse++
-    }
-    LaunchedEffect(pulse){if(pulse>0){newlyLit=true;delay(1800);newlyLit=false}}
     val paper=MaterialTheme.colorScheme.surface
     val gold=if(paper.luminance()<.5f)Color(0xFFE2C894) else Color(0xFF7C5C2D)
     val ink=MaterialTheme.colorScheme.onSurface
     val muted=MaterialTheme.colorScheme.onSurfaceVariant
+    val largeText=androidx.compose.ui.platform.LocalDensity.current.fontScale>1.3f
     val value=if(share!=null)String.format(Locale.ROOT,"%.1f%%",percent) else if(raw==null)"待定位" else if(calculating)"计算中" else "暂不可用"
-    Column(modifier.widthIn(max=260.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-        Surface(onClick={details=true},modifier=Modifier.semantics{contentDescription="附近探索"},shape=RoundedCornerShape(16.dp),color=paper,contentColor=ink,shadowElevation=3.dp) {
+    Column(modifier.fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+        Surface(onClick={details=true},modifier=Modifier.semantics{contentDescription="附近探索"},shape=RoundedCornerShape(16.dp),color=paper,contentColor=ink,shadowElevation=1.dp) {
             Row(Modifier.padding(horizontal=14.dp,vertical=12.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                ExplorationMark(gold,Modifier.size(26.dp))
+                if(!largeText) ExplorationMark(gold,Modifier.size(26.dp))
                 Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(3.dp)) {
-                    Text(title,fontWeight=FontWeight.Medium,fontSize=14.sp,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                    Text(if(county)"区县探索" else "周围 2 公里",fontSize=12.sp,color=muted)
+                    Text(title,fontWeight=FontWeight.Medium,fontSize=16.sp,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                    Text(if(county)"区县探索" else if(fix==null && last!=null) "最近足迹 · 2 公里" else "周围 2 公里",fontSize=12.sp,color=muted,maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 }
-                Text(value,fontSize=16.sp,fontWeight=FontWeight.Medium,style=TabularFigures)
+                Text(value,fontSize=if(share==null)14.sp else if(largeText)18.sp else 22.sp,fontWeight=FontWeight.Medium,style=TabularFigures)
                 Icon(painterResource(R.drawable.ic_back),null,Modifier.size(12.dp).rotate(180f),tint=muted)
             }
         }
-        AnimatedVisibility(newlyLit){Surface(shape=RoundedCornerShape(18.dp),color=paper){
-            Row(Modifier.padding(horizontal=14.dp,vertical=10.dp),verticalAlignment=Alignment.CenterVertically,
-                horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                Icon(painterResource(R.drawable.ic_leaf),null,tint=gold,modifier=Modifier.size(16.dp))
-                Text("又点亮了一小片",color=gold,fontSize=13.sp)
-            }
-        }}
     }
+
     if(details) ModalBottomSheet(onDismissRequest={details=false},containerColor=paper,contentColor=ink) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal=24.dp).padding(bottom=28.dp),verticalArrangement=Arrangement.spacedBy(22.dp)) {
             Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(14.dp)) {

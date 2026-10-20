@@ -54,11 +54,13 @@ internal fun AppShell(
     feedbackContent: @Composable (onBack:()->Unit)->Unit,
     updatesContent: @Composable (onBack:()->Unit)->Unit, mapContent: @Composable () -> Unit,
     onBackupEntry:()->Unit={},onSkin:()->Unit={},onNotifications:()->Unit={},backupStatus:String?=null,
-    replay: ReplayControls? = null
+    replay: ReplayControls? = null,onExploreLandmarks:()->Unit={}
 ) {
-    val density=LocalDensity.current
-    var dockHeight by remember { mutableStateOf(62.dp) }
-    Box(Modifier.fillMaxSize().background(PageBackground)) {
+    val uri=LocalUriHandler.current
+    Column(Modifier.fillMaxSize().background(PageBackground)
+        .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Horizontal))) {
+      // A bounded map viewport keeps SDK logos above both app and system navigation.
+      Box(Modifier.weight(1f).fillMaxWidth()) {
         // Keep the SDK and GL surface alive across bottom-tab journeys. Only the controls/pages
         // change; disposing a map here recreated every texture, marker and history overlay.
         Box(Modifier.fillMaxSize()) { mapContent() }
@@ -73,12 +75,12 @@ internal fun AppShell(
             when(selectedTab) {
                 0 -> DesignMapOverlay(state,selectedDay,automatic,recordingTitle,recordingHealthy,mapNotice,
                     mapProviderLabel,onResolveTracking,onToggleTracking,onLocate,onShowAll,
-                    roadState.meters>0,onZoom,{},regionContent={RegionExplorationCard(state,fix,placeName)},
-                    replay=replay,bottomControlsInset=dockHeight+32.dp)
-                1 -> Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(bottom=dockHeight+24.dp)) {
+                    false,onZoom,{},regionContent={RegionExplorationCard(state,fix,placeName)},
+                    replay=replay,bottomControlsInset=24.dp,onExploreLandmarks=onExploreLandmarks)
+                1 -> Box(Modifier.fillMaxSize().statusBarsPadding()) {
                     DesignTripsPage(state,roadColor,onTrip,onExport,onSkin)
                 }
-                else -> Box(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(bottom=dockHeight+24.dp)) {
+                else -> Box(Modifier.fillMaxSize().statusBarsPadding()) {
                     ProfilePage(state,appearanceMode,onAppearanceMode,onShowIntro,automatic,profileNotice,onResolveTracking,
                     onToggleTracking,onRevoke,onBackgroundSettings,onPowerSettings,onCopyDiagnostics,
                     roadState,roadAreaHint,onRoadPack,onExport,onImport,internalBackupCount,
@@ -89,11 +91,16 @@ internal fun AppShell(
         // Stable theme-colored system-bar areas keep icons legible over maps and empty placeholders.
         Spacer(Modifier.align(Alignment.TopCenter).fillMaxWidth()
             .windowInsetsTopHeight(WindowInsets.statusBars).background(PageBackground))
-        Spacer(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-            .windowInsetsBottomHeight(WindowInsets.navigationBars).background(PageBackground))
-        LandscapeDock(selectedTab,onTab,Modifier.align(Alignment.BottomCenter)
-            .navigationBarsPadding().padding(horizontal=20.dp,vertical=8.dp)
-            .onSizeChanged { dockHeight=with(density){it.height.toDp()} })
+      }
+      if(selectedTab==0 && roadState.meters>0) Text("© OpenStreetMap contributors · ODbL 1.0",
+          color=Ink,fontSize=10.sp,lineHeight=14.sp,modifier=Modifier.fillMaxWidth().background(Canvas)
+              .clickable {uri.openUri("https://www.openstreetmap.org/copyright")}
+              .padding(horizontal=8.dp,vertical=4.dp))
+      Surface(color=Canvas,shadowElevation=2.dp) {
+        LandscapeDock(selectedTab,onTab,Modifier.fillMaxWidth()
+            .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
+            .padding(horizontal=16.dp,vertical=4.dp))
+      }
     }
 }
 
