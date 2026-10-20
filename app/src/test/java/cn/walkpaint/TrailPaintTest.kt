@@ -6,7 +6,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The veil's contract, restated for v0.39: unknown ground has a readable themed veil, only a walked corridor
+ * The veil's contract, restated for v0.39: unknown ground has an opaque themed veil, only a walked corridor
  * is cleared, and the frame is always wider than the view so its border can never be mistaken for
  * ground that has been explored.
  */
@@ -28,9 +28,9 @@ class TrailPaintTest {
         assertTrue("feather ${TrailPaint.FEATHER_M} m", TrailPaint.FEATHER_M in 1.0..8.0)
     }
 
-    @Test fun unknownGroundKeepsGeographicContextVisible() {
+    @Test fun unknownGroundConcealsBasemapDetails() {
         val alpha = TrailPaint.FOG_COLOR ushr 24
-        assertTrue("alpha $alpha", alpha in 1..200)
+        assertEquals("unvisited basemap must not bleed through", 255, alpha)
         assertEquals(FogAppearance.DEFAULT, TrailPaint.FOG_COLOR)
     }
 

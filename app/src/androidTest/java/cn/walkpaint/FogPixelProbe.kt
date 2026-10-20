@@ -11,7 +11,7 @@ import android.graphics.Bitmap
  * piles up on the second pass would all pass those tests. These assertions read the rendered
  * bitmap and look at the pixels the person would actually see.
  *
- * The readable-fog contract: unknown ground keeps a themed translucent veil, the cleared corridor ramps back to
+ * The concealment contract: unknown ground keeps an opaque themed veil, the cleared corridor ramps back to
  * it over a narrow band, and the frame's own border has the same veil — the border must never be visible,
  * which is now achieved by always covering the view rather than by fading out.
  */
@@ -49,7 +49,7 @@ internal object FogPixelProbe {
         val midX = frame.pixelX(BASE_LON).toInt().coerceIn(0, frame.widthPx - 1)
 
         // 1. The walked corridor keeps only the person's own tint, and ground away from it is
-        //    veiled at the selected theme strength while geographical context remains visible.
+        //    fully concealed, including distant roads and labels.
         val centre = bitmap.getPixel(midX, midY)
         val initialRevision=painter.revision
         val unchangedImage=painter.update(listOf(street),PIGMENT,null,view)
@@ -63,7 +63,7 @@ internal object FogPixelProbe {
         val offY = (frame.heightPx * 0.30).toInt().coerceIn(0, frame.heightPx - 1)
         val unknown = bitmap.getPixel(offX, offY)
         check(isVeil(unknown), "unknown ground lost the selected themed veil")
-        check(veilAlpha in 1..200, "default fog hides all geographical context")
+        check(veilAlpha == 255, "unknown map details leak through the fog")
 
         // 2. Outside the painted band the veil must come back to full strength over a narrow ramp:
         //    narrow, because the exploration radius must remain unchanged, but a ramp all
@@ -206,9 +206,74 @@ internal object FogPixelProbe {
         themed.update(emptyList(),PIGMENT,null,view)
         val revision=themed.revision
         val dusk=themed.update(emptyList(),PIGMENT,null,view,FogAppearance.color(VisualSkin.DUSK))!!
-        check(themed.revision>revision && alpha(dusk.getPixel(0,0))==veilAlpha,"theme-only change did not repaint")
+        check(themed.revision>revision && dusk.getPixel(0,0)==FogAppearance.color(VisualSkin.DUSK),
+            "theme-only change did not repaint with the requested opaque hue")
         val restored=themed.update(emptyList(),PIGMENT,null,view)!!
-        check(isVeil(restored.getPixel(0,0)),"reused buffer compounded translucent veil")
+        check(isVeil(restored.getPixel(0,0)),"reused buffer changed the opaque veil")
+        // 11. A theme is a colour choice, not permission to expose the unknown basemap.
+        // Composite the real Canvas-rendered veil over opposite backgrounds. Unknown pixels
+        // must be identical regardless of what roads or labels the map engine puts underneath.
+        fun composite(image:Bitmap,background:Int):Bitmap =
+            Bitmap.createBitmap(image.width,image.height,Bitmap.Config.ARGB_8888).also { output ->
+                android.graphics.Canvas(output).apply {
+                    drawColor(background)
+                    drawBitmap(image,0f,0f,null)
+                }
+            }
+        for(skin in VisualSkin.entries) {
+            val color=FogAppearance.color(skin)
+            val themedPainter=TrailPainter()
+            val image=themedPainter.update(listOf(street),PIGMENT,null,view,color)!!
+            val dark=composite(image,android.graphics.Color.BLACK)
+            val light=composite(image,android.graphics.Color.WHITE)
+            check(dark.getPixel(offX,offY)==light.getPixel(offX,offY),
+                "$skin leaks unknown map content through its veil")
+            check(dark.getPixel(midX,midY)!=light.getPixel(midX,midY),
+                "$skin hides the actual recorded corridor")
+            val none=themedPainter.update(emptyList(),PIGMENT,null,view,color)!!
+            check((0 until none.height).all { y -> (0 until none.width).all { x ->
+                alpha(none.getPixel(x,y))==255
+            } },"$skin reveals ground after the selected track is emptied")
+            val initial=TrailPainter().update(listOf(street),PIGMENT,street.first(),null,color)!!
+            check(alpha(initial.getPixel(initial.width/2,initial.height/2))==255,
+                "$skin reveals ground before a usable map projection")
+            val distant=TrailPainter().update(listOf(street),PIGMENT,null,wideView,color)!!
+            check(alpha(distant.getPixel(distant.width/2,distant.height/2))==255,
+                "$skin widens the recorded corridor on zoom-out")
+        }
+
+        // 12. A closed walk is not ownership of its interior, and disconnected segments are
+        // not permission to invent a connecting journey. Both centres are untouched ground.
+        val loop=listOf(point(-150.0,-150.0),point(-150.0,150.0),point(150.0,150.0),
+            point(150.0,-150.0),point(-150.0,-150.0))
+        val separate=listOf(listOf(point(-200.0,-150.0),point(200.0,-150.0)),
+            listOf(point(-200.0,150.0),point(200.0,150.0)))
+        for(paths in listOf(listOf(loop),separate)) {
+            val image=TrailPainter().update(paths,PIGMENT,null,view)!!
+            check(alpha(image.getPixel(midX,midY))==255,
+                "unwalked interior or disconnected gap was revealed")
+        }
+
+        // Evidence uses a synthetic street grid, never the person's map or location history.
+        val synthetic=Bitmap.createBitmap(frame.widthPx,frame.heightPx,Bitmap.Config.ARGB_8888)
+        android.graphics.Canvas(synthetic).apply {
+            drawColor(0xFFF3F0E8.toInt())
+            val brush=android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+            brush.color=0xFFC3D5C4.toInt()
+            drawRect(0f,0f,synthetic.width*.38f,synthetic.height.toFloat(),brush)
+            brush.color=0xFFFFFFFF.toInt();brush.strokeWidth=12f
+            for(x in 40 until synthetic.width step 80) drawLine(x.toFloat(),0f,x.toFloat(),synthetic.height.toFloat(),brush)
+            for(y in 40 until synthetic.height step 80) drawLine(0f,y.toFloat(),synthetic.width.toFloat(),y.toFloat(),brush)
+            brush.color=0xFF353535.toInt();brush.textSize=12f
+            for(y in 65 until synthetic.height step 80) drawText("UNVISITED ROAD / PLACE",15f,y.toFloat(),brush)
+        }
+        val evidence=java.io.File(instrumentation.targetContext.cacheDir,"fog-concealment-evidence").apply {mkdirs()}
+        for((name,color) in listOf("before-city" to 0x709FB5C6)+VisualSkin.entries.map {it.name.lowercase() to FogAppearance.color(it)}) {
+            val overlay=TrailPainter().update(listOf(loop),PIGMENT,null,view,color)!!
+            val output=synthetic.copy(Bitmap.Config.ARGB_8888,true)
+            android.graphics.Canvas(output).drawBitmap(overlay,0f,0f,null)
+            java.io.File(evidence,"$name.png").outputStream().use {output.compress(Bitmap.CompressFormat.PNG,100,it)}
+        }
         return if (failures.isEmpty()) "FOG_PIXEL_PROBE_PASS"
         else "FOG_PIXEL_PROBE_FAIL: " + failures.joinToString(" | ")
     }

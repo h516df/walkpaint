@@ -81,7 +81,7 @@ internal object VeilReport {
         val perMetre = TrailPainter.pixelsPerMeter(frame)
         val raw = TrailPaint.CORRIDOR_M * perMetre
         val drawn = raw
-        val floor = if (!TrailPaint.corridorVisible(frame)) "（这一帧太宽，画不出走廊；雾层保留主题透明度，路线用线条显示）" else ""
+        val floor = if (!TrailPaint.corridorVisible(frame)) "（这一帧太宽，画不出走廊；雾层遮住未探索底图，路线用线条显示）" else ""
         return String.format(Locale.ROOT,
             "雾帧=%dx%d像素 覆盖纬度%.5f° 经度%.5f° 每米=%.3f像素 走廊=%.1f像素%s 地图画行走线=%s",
             frame.widthPx, frame.heightPx, frame.latSpan, frame.lonSpan, perMetre, drawn, floor,
