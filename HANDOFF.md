@@ -1,3 +1,54 @@
+# 当前接续记录（2026-10-21）
+
+本节是会话接续入口；长期规则见 [AGENTS.md](AGENTS.md)，工具链和检查命令见 [CLOUD_DEVELOPMENT.md](CLOUD_DEVELOPMENT.md)。后续任务更新本节，下面已有历史保留。
+
+- **本轮目标**：将项目约定、进度和续接方式保存到 GitHub，使新 Codex 会话可以继续工作。
+- **核对的主线基线**：`2c1af7dd8efb4aae7c4fb8744fde2c15c07f6c3b`（main 的日期快照，继续前重新读取；不是永远最新提交）。
+- **本轮分支**：`codex/session-continuity-20261021`。此分支仅修改协作与交接文档，PR 和实际合并状态以 GitHub 为准。
+- **已准备**：新会话阅读顺序、结束保存流程、远端提交核对及续接提示；保留原项目规则、既有历史和云端开发配置。
+- **验证范围**：本轮检查文档差异、仓库内链接、原文保留及远端读回；业务测试/构建/设备/发布为 **not run**，历史证据不能重标成本轮结果。实际检查结果与远端提交见本轮 PR。
+- **配置与边界**：地图 Key、原正式签名、真实 GPS、户外/锁屏耗电及覆盖升级继续按云端说明分别验收。 其他配置键名、初始化入口及限制仍以云端说明和任务相关文档为准。
+- **下一步**：核对下面 PR 快照及当前 main；按用户的具体目标选择主线或指定分支，读对应 PR 的最新交接后继续。尚未完成的业务工作不因本轮文档完善而视作已完成。
+
+## 打开的 PR 快照
+
+以下仅为 2026-10-21 读取到的列表，不判断是否仍需实施、能否合并，或是否已由其他提交包含；不批量合并、关闭或重复搬运。
+
+| PR | 分支 | 读取时 head | 状态 |
+| --- | --- | --- | --- |
+| [#111: fix: preserve update progress and safely continue installation](https://github.com/h516df/walkpaint/pull/111) | `dot/update-continuity-20261019` | `8376c743c590eb6f7845030ad840153b467618d5` | 草稿 |
+| [#110: feat: readable themed fog and locally saved exploration points](https://github.com/h516df/walkpaint/pull/110) | `dot/fog-landmarks-20261019` | `a058a5a3cf109733553784201b86cdfed6d4b5bd` | 草稿 |
+| [#109: 修复位置/手机朝向跟随恢复，并解释首次探索黑雾](https://github.com/h516df/walkpaint/pull/109) | `dot/fix-heading-follow-20261019` | `1859a4892f3cb9bec7cbb1d5a1e96be9b5c71bb4` | 草稿 |
+| [#104: 0.65：简化默认高德体验，加入足迹行记、收藏查找与路线明信片](https://github.com/h516df/walkpaint/pull/104) | `agent/first-run-amap-20261019` | `8b0f196a0d6961f5f08eb798ea53b38729f1fa44` | 草稿 |
+| [#103: Native landscape UI preview: profile, original badges and adaptive navigation (v0.63-based)](https://github.com/h516df/walkpaint/pull/103) | `dot/native-landscape-ui-20261019` | `4a639563c385ed017a3af43eea82a98a01419150` | 草稿 |
+| [#41: 高德可验收性 + 首屏迷雾根因修复 + 坐标基准（关联 #17，不用于再发布 0.43）](https://github.com/h516df/walkpaint/pull/41) | `dsh/v042-amap-verify` | `eef13c4b56a1be53ebe005fe6d12b956ac3ba21f` | 打开 |
+| [#36: v0.41：采用已选定设计重做手机原生界面](https://github.com/h516df/walkpaint/pull/36) | `agent/codex/mobile-ui-redesign-v041` | `d0a94af9d2e9a0b8390f2e7f7b91a326ca38b739` | 打开 |
+| [#34: v0.38：修复记录恢复、定位视野与正式包更新](https://github.com/h516df/walkpaint/pull/34) | `agent/codex/recording-recovery-v038` | `37af75fedc32c40bb0a13c9ad02fefaa0c6e66d2` | 打开 |
+| [#33: v0.32：连续软边探索迷雾与私有更新](https://github.com/h516df/walkpaint/pull/33) | `agent/codex/fog-of-war` | `5ae5dbc750b2f1f73f0cc93fed7d93219abfc6f4` | 草稿 |
+| [#23: v0.16：高德联网地图直接涂色轨迹，无需准备地图](https://github.com/h516df/walkpaint/pull/23) | `agent/codex/direct-trails` | `243510c6ae06b8f5bfe539dafad3a020793c5d31` | 草稿 |
+| [#22: v0.15：GPS过滤分类、近期线索和实际诊断界面验收](https://github.com/h516df/walkpaint/pull/22) | `agent/codex/diagnostic-acceptance` | `f202d8a13a29078f5b5b73781642b4231e89f9c2` | 草稿 |
+| [#21: 补全私有更新授权、校验下载与系统覆盖安装](https://github.com/h516df/walkpaint/pull/21) | `agent/codex/issue11-private-updater` | `dbd54adad73d5dddfa8a0d33d22b19e3ff1585a3` | 草稿 |
+| [#20: feat: v0.13 中文更新说明与私有浏览器更新入口](https://github.com/h516df/walkpaint/pull/20) | `agent/codex/issue11-updates` | `ed6ee80f3d19334d6e59f04d92838b0c984a3a8d` | 草稿 |
+| [#19: feat: 本地故障线索与预览分享反馈报告](https://github.com/h516df/walkpaint/pull/19) | `agent/codex/issue10-feedback` | `38576168f6f9717d88942b16658338f0a93c0903` | 草稿 |
+| [#18: fix: 不兼容高德的设备使用现有离线地图](https://github.com/h516df/walkpaint/pull/18) | `agent/codex/issue17-map-platform` | `82cc1c2af2371c663c1343e2a749f0327a6e0f92` | 草稿 |
+| [#16: v0.12：简化我的页面与自动记录权限引导](https://github.com/h516df/walkpaint/pull/16) | `agent/codex/issue12-simple-profile` | `c7bba2cb7992f4b6b6288cbd4f6087d7b4d37c2d` | 草稿 |
+| [#15: v0.11：已走道路颜色自定义与本机保存](https://github.com/h516df/walkpaint/pull/15) | `agent/codex/issue8-road-colors` | `3f9604d034cf230021a566b40f0fb1acacc47420` | 草稿 |
+| [#14: test: WalkPaint 测试只允许 Google 官方 AVD（保护个人 MuMu）](https://github.com/h516df/walkpaint/pull/14) | `chore/google-api36-test-only` | `35b6131c3ef9fbef66c10405518a8880ee482576` | 草稿 |
+| [#13: P1: 地图跟随位置与手机朝向（v0.10 私有预览）](https://github.com/h516df/walkpaint/pull/13) | `issue-7-map-follow` | `0a5c6ada079b327f9948115146dfc8ad3477871d` | 草稿 |
+| [#9: v0.9｜GPS 健康检查恢复与无坐标诊断（依赖 #5）](https://github.com/h516df/walkpaint/pull/9) | `issue-6-gps-road-diagnostics` | `5c3bcee1c3b057e09227c797405f1805b219409d` | 草稿 |
+| [#5: [3/3] v0.8｜全屏高德地图与足迹/设置重排](https://github.com/h516df/walkpaint/pull/5) | `feat/v08-map-first` | `f987dc7fc6a047ed4ef450ca6a5523a0e1b4f3c5` | 草稿 |
+| [#3: [2/3] v0.7｜GPS 记录状态与按天足迹](https://github.com/h516df/walkpaint/pull/3) | `issue-2-recording-health` | `bffb1d4245235b269ebd41b97de7bf047657fda2` | 草稿 |
+
+## 下一次交接时更新
+
+请在本节写清本轮目标、完成/待办、工作分支和 PR、所验证的提交 SHA、实际命令与 passed / failed / not run、阻塞、下一步；代码和交接一起推送，再给用户已核实的远端提交链接。未合并时须交代指定分支，不能让新会话只读 main。
+
+---
+
+## 原有交接历史
+
+以下原文保留；其中旧路径、候选版本与测试结论需按日期和源码重新核对。
+
 # 0.57 开雾与更新
 
 本轮修复已接受首点/短段未开雾，增加空历史定位状态，官方发布文件回退及有限续传。完整范围、正式 APK 摘要、409 JVM/23 Python、原生渲染/坐标/匿名下载及限制见 docs/evidence/V057.md。只读专用模拟器验收不能代替用户或女朋友手机，不能将 map_loaded 当作所有瓦片已加载。原签名、schema3、GPS 阈值和30米带宽保持。
