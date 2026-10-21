@@ -3,6 +3,17 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 command -v java >/dev/null
 command -v python3.12 >/dev/null
+mkdir -p .cloud
+python3 - <<'CLOUD_PROXY' > .cloud/proxy.sh
+import os, shlex, urllib.parse
+value = os.environ.get('HTTPS_PROXY') or os.environ.get('https_proxy')
+if value:
+    proxy = urllib.parse.urlparse(value)
+    if proxy.hostname and proxy.port and proxy.username is None:
+        options = f'-Dhttp.proxyHost={proxy.hostname} -Dhttp.proxyPort={proxy.port} -Dhttps.proxyHost={proxy.hostname} -Dhttps.proxyPort={proxy.port}'
+        print('export GRADLE_OPTS="${GRADLE_OPTS:-} "' + shlex.quote(options))
+CLOUD_PROXY
+source .cloud/proxy.sh
 sdk_root="${ANDROID_HOME:-$HOME/.cache/cloud-android-sdk}"
 export ANDROID_HOME="$sdk_root"
 export ANDROID_SDK_ROOT="$sdk_root"
@@ -29,7 +40,9 @@ sdk_license_status=${PIPESTATUS[1]}
 set -o pipefail
 test "$sdk_license_status" -eq 0
 "$sdkmanager_bin" --sdk_root="$sdk_root" 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0'
-mkdir -p .cloud
+test -f "$sdk_root/platforms/android-36/android.jar"
+test -x "$sdk_root/build-tools/36.0.0/aapt2"
 printf 'export ANDROID_HOME=%q\nexport ANDROID_SDK_ROOT=%q\nexport PATH=%q:"$PATH"\n'   "$sdk_root" "$sdk_root" "$sdk_root/platform-tools:$sdk_root/cmdline-tools/20.0/bin" > .cloud/env.sh
 printf 'export SHICANG_BUILD_PYTHON=%q\n' "$(command -v python3.12)" >> .cloud/env.sh
+cat .cloud/proxy.sh >> .cloud/env.sh
 printf '%s\n' 'Android cloud toolchain ready. Run: source .cloud/env.sh'
