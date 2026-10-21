@@ -25,3 +25,6 @@ dist/
 .gradle-user-home/
 __pycache__/
 *.pyc
+
+# Disposable cloud workspace state
+.cloud/

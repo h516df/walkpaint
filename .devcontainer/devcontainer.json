@@ -1,0 +1,31 @@
+{
+  "name": "walkpaint cloud development",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.12"
+    },
+    "ghcr.io/devcontainers/features/java:1": {
+      "version": "21",
+      "additionalVersions": "17",
+      "installGradle": false
+    }
+  },
+  "remoteUser": "vscode",
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "vscjava.vscode-java-pack"
+      ]
+    }
+  },
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "8gb"
+  },
+  "otherPortsAttributes": {
+    "onAutoForward": "ignore"
+  }
+}
