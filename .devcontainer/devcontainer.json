@@ -26,7 +26,6 @@
     "memory": "8gb"
   },
   "otherPortsAttributes": {
-    "visibility": "private",
     "onAutoForward": "ignore"
   }
 }
