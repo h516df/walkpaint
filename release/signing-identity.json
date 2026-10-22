@@ -1,0 +1,9 @@
+{
+  "certificateSha256": "21b74e3e2a10e12da8284d4e6bd7d99e55b00a385215902e94d7896f7a46c967",
+  "alias": "androiddebugkey",
+  "schemaVersion": 1,
+  "repository": "h516df/walkpaint",
+  "packageName": "cn.walkpaint",
+  "publishedTag": "v0.68",
+  "publishedApkSha256": "945fe777e1c93453919ce7b48ee776b065f05f416f2330807c9298f0106663c4"
+}
