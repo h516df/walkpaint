@@ -17,8 +17,36 @@ jobs:
         with:
           persist-credentials: false
       - run: python3 -m unittest discover -s cloud -p test_sign_apk.py -v
-  signing:
+  product:
     needs: policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' >/dev/null
+      - name: Build real debug and unsigned release without formal credentials
+        run: bash gradlew --no-daemon --max-workers=1 :app:assembleDebug :app:assembleRelease -PunsignedRelease=true
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: product-inputs-${{ github.sha }}
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/release/*unsigned.apk
+          if-no-files-found: error
+          retention-days: 3
+  signing:
+    needs: [policy, product]
     if: github.repository == 'h516df/walkpaint' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/codex/cloud-signing-prep-20261022')
     environment: android-signing
     runs-on: ubuntu-24.04
@@ -37,7 +65,28 @@ jobs:
           log-accepted-android-sdk-licenses: false
       - name: Prepare public signing tools without private inputs
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0' >/dev/null
-      - name: Verify original identity and sign a synthetic APK
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: product-inputs-${{ github.sha }}
+          path: ${{ runner.temp }}/product-inputs
+      - name: Sign actual product APK with original identity
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.WALKPAINT_KEYSTORE_BASE64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.WALKPAINT_STORE_PASSWORD }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.WALKPAINT_KEY_PASSWORD }}
+        run: |
+          python3 cloud/sign_apk.py --input "$RUNNER_TEMP/product-inputs/release/app-release-unsigned.apk" --output "$RUNNER_TEMP/product-output/acceptance.apk" > "$RUNNER_TEMP/product-receipt.json"
+          cat "$RUNNER_TEMP/product-receipt.json"
+      - name: Preserve acceptance APK and public receipt (no release/channel update)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: signed-product-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/product-output/acceptance.apk
+            ${{ runner.temp }}/product-receipt.json
+          if-no-files-found: error
+          retention-days: 3
+      - name: Verify rejection cases separately with a synthetic APK
         env:
           SIGNING_KEYSTORE_BASE64: ${{ secrets.WALKPAINT_KEYSTORE_BASE64 }}
           SIGNING_STORE_PASSWORD: ${{ secrets.WALKPAINT_STORE_PASSWORD }}
