@@ -4,7 +4,7 @@
 
 四处冲突保留 v0.43 最新事实，新增 `UiStateProbe` 并保留高德运行、手势、中国夹具、像素和数据探针全部入口。发布工具保留草稿恢复、逐项资产核对和 `--verify-only`；大文件上传运输问题仍由 Issue #39 跟踪。本次没有调用远端上传或修改发布。
 
-八个旧文件在确认不属于已发布 v0.41 基线、且没有在用入口引用后，逐项复制并核对 SHA256，再移出当前树。备份目录为 `D:\Workspaces\Codex\2026-10-13\xai\work\preserved-dsh\historical-delivery`，清单见 [obsolete-files.json](pr38-integration/obsolete-files.json)。Git 历史仍保存原内容。
+八个旧文件在确认不属于已发布 v0.41 基线、且没有在用入口引用后，逐项复制并核对 SHA256，再移出当前树。备份目录为 `<work-dir>\preserved-dsh\historical-delivery`，清单见 [obsolete-files.json](pr38-integration/obsolete-files.json)。Git 历史仍保存原内容。
 
 验证结果：
 

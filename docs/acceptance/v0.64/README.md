@@ -9,7 +9,7 @@
 
 ## 本轮实测证据
 
-命令都在 `D:\Projects\WalkPaint`，设备为专用 `emulator-5560`（`WalkPaint_Google_API36_V044`，x86_64 + ARM64 native bridge），安装的是**正式签名 ARM64 包**（code72/versionName 0.64）。
+命令都在 `<repo>`，设备为专用 `emulator-5560`（`WalkPaint_Google_API36_V044`，x86_64 + ARM64 native bridge），安装的是**正式签名 ARM64 包**（code72/versionName 0.64）。
 
 | 检查 | 命令/探针 | 结果 |
 | --- | --- | --- |
