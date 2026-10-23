@@ -34,10 +34,10 @@ SHA256：`dc4c5b20a20e5889220878e4fc65e520fbe5704080dcd6c560d616bdeedf91e0`。
 
 ```powershell
 $env:JAVA_HOME='C:\Program Files\Eclipse Adoptium\jdk-21.0.12.101-hotspot'
-$env:ANDROID_HOME='D:\Apps\Android\sdk'
+$env:ANDROID_HOME='<android-sdk>'
 $env:GRADLE_USER_HOME=Join-Path (Get-Location) '.gradle-user-home'
-$env:GRADLE_RO_DEP_CACHE='D:\Projects\WalkPaint\.gradle-user-home\caches'
-& 'D:\Apps\Android\gradle-home\wrapper\dists\gradle-9.1.0-bin\9agqghryom9wkf8r80qlhnts3\gradle-9.1.0\bin\gradle.bat' :app:testDebugUnitTest :app:assembleDebug --offline --no-daemon --console=plain
+$env:GRADLE_RO_DEP_CACHE='<repo>\.gradle-user-home\caches'
+& '<gradle-home>\wrapper\dists\<hash>\gradle-9.1.0\bin\gradle.bat' :app:testDebugUnitTest :app:assembleDebug --offline --no-daemon --console=plain
 ```
 
 回退仅本次源码差异，保留schema2/旧行/原签名；不卸载、不清空。用户2026-10-10真机反馈未在本机复现，分类增强用于下一次取得可复查线索，不代表根因已修复。

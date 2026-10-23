@@ -1,6 +1,6 @@
 # v0.15 过滤诊断候选 — 实际 APK/UI 验收
 
-2026-10-10。Refs #10/#6；从私人诊断分支 ea691b0 继续，业务提交 b9e8a2b4fd28338bbc4101c6ff21719769098baa。独立目录 D:\Workspaces\Codex\2026-10-10\ji-x\work\worktrees\codex-diagnostic-v014\codex-diagnostic-acceptance，分支 agent/codex/diagnostic-acceptance。原目录未修改。
+2026-10-10。Refs #10/#6；从私人诊断分支 ea691b0 继续，业务提交 b9e8a2b4fd28338bbc4101c6ff21719769098baa。独立目录 <work-dir>\worktrees\codex-diagnostic-v014\codex-diagnostic-acceptance，分支 agent/codex/diagnostic-acceptance。原目录未修改。
 
 ## 本阶段范围
 
