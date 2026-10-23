@@ -13,7 +13,7 @@ GitHub Actions 的 **Cloud development** 在 PR、main 推送及手动运行时�
 
 ## 当前边界
 
-云端只构建 cn.walkpaint.dev；未配置地图 Key 时不验收地图加载。原正式签名、真实 GPS、户外/锁屏耗电与覆盖升级仍需单独验收。
+普通云端检查构建 `cn.walkpaint.dev`，受控签名工作流另构建原包名的 unsigned release 并注入原证书。未配置地图 Key 时不验收地图加载。真实 GPS、户外/锁屏耗电、覆盖升级和数据保留仍需单独验收；原签名及恢复证据见 [SIGNING_PREPARATION](docs/SIGNING_PREPARATION.md)。
 
 原 README、AGENTS 与交接文件中的 Windows 路径作为历史恢复线索保留；云端开发不依赖这些路径。生产运行与发布步骤按本节边界处理，不自动运行旧的本机派发、安装、隧道或签名脚本。凭据通过平台 Secrets 注入，不能进入源码、日志或构建附件；私有项目继续保持私有。
 
@@ -63,3 +63,7 @@ GitHub Actions 的 **Cloud development** 在 PR、main 推送及手动运行时�
 通用约定与模板统一维护在 [vibe-ui-quality-kit/workflow](https://github.com/h516df/vibe-ui-quality-kit/blob/main/workflow/README.md)。开始任务由代理主动读取；本仓库 AGENTS 内保留可独立执行的简版，跨仓库读取暂不可用时先沿用，不要求用户重复说明工作流或添加仓库。具体工具链、数据、签名、生产与设备保护仍以本项目约束为准。
 
 新任务从默认分支开始时，代理应按用户描述核对相关未合并 PR、依赖和对应分支交接，不能直接把 main 当作所有最新成果；不根据旧快照自动合并业务 PR。这里的仓库配置不代表 Codex 账户级环境已发布。
+
+## 2026-10-22 原签名准备
+
+当前准备分支见 [SIGNING_PREPARATION](docs/SIGNING_PREPARATION.md)。历史未迁移状态由本轮实际运行结果更新；PR 未合并不代表 main 已启用。

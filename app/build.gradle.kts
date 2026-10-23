@@ -41,30 +41,15 @@ android {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
-    // Reuse the existing local debug certificate so v0.2 upgrades v0.1 without uninstalling.
-    signingConfigs {
-        getByName("debug") {
-            if (!developerBuild) {
-                val existing = rootProject.file("${System.getProperty("user.home")}/.android/debug.keystore")
-                require(existing.isFile) { "Original WalkPaint signing certificate is missing; refusing an incompatible update" }
-                storeFile = existing
-                storePassword = "android"
-                keyAlias = "androiddebugkey"
-                keyPassword = "android"
-                // OEM installers may inspect the JAR certificate before platform verification.
-                enableV1Signing = true
-                enableV2Signing = true
-                enableV3Signing = true
-            }
-        }
-    }
     buildTypes {
         getByName("debug") {
-            if (developerBuild) applicationIdSuffix = ".dev"
+            applicationIdSuffix = ".dev"
+            buildConfigField("boolean", "DEVELOPER_BUILD", "true")
         }
         getByName("release") {
             // Preserve the identity of every distributed version, without a debuggable release.
-            signingConfig = if (developerBuild) null else signingConfigs.getByName("debug")
+            signingConfig = null
+            buildConfigField("boolean", "DEVELOPER_BUILD", "false")
         }
     }
     buildFeatures { compose = true; buildConfig = true }
@@ -124,4 +109,12 @@ dependencies {
     testImplementation("org.robolectric:robolectric:4.17")
     testImplementation("io.github.takahirom.roborazzi:roborazzi:1.76.0")
     testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.76.0")
+}
+
+// Fail closed: unsigned candidates require an explicit opt-in; final signing is external.
+gradle.taskGraph.whenReady {
+    val releaseRequested = allTasks.any { it.project == project && it.name in setOf("assembleRelease", "packageRelease", "bundleRelease") }
+    if (releaseRequested && providers.gradleProperty("unsignedRelease").orNull != "true") {
+        throw GradleException("Official signing requires original injected credentials via cloud/sign_apk.py. Use -PunsignedRelease=true only for an unsigned build candidate.")
+    }
 }
