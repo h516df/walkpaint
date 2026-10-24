@@ -20,3 +20,12 @@
 源码提交f643617c6563f13aae0d9fe314a127410979bb72：33项针对性passed；小屏新按钮收紧后5项UI重新passed。完整bash cloud/check.sh passed：552项JVM/Native Graphics/Compose，0失败/错误/跳过；开发APK、lint0 errors、Python18+23 passed。签名策略7、变更文件隐私扫描0命中、git diff --check passed。详细计数和截图摘要见checks.json。历史结果不重标成本版通过。场景包括网络失败保留/重建缓存后续传、版本/摘要/大小变化、损坏片段、取消、空间预算、跨页/地图/状态恢复、详情返回滚动、小屏大字及实际渲染。测试只使用合成路线、元数据与内容。
 
 正式包仍由受保护的Original signing readiness构建和签名，再由Publish verified signed release使用同一产物发布；所有附件实际下载读回。实体手机覆盖安装、真实高德联网、户外GPS、锁屏耗电单列not run。
+
+
+## 正式发行与实际下载（passed）
+
+[GitHub正式发布页v0.70](https://github.com/h516df/walkpaint/releases/tag/v0.70) 非草稿、非预发行且为latest，源码/标签固定f3a6c94e0a6368aa169f7a018c2f1960c1b894bc，与已测试f643617的应用/构建/工具内容一致。PR129已合入main，main完整Cloud development也通过。原签名[40093931196](https://github.com/h516df/walkpaint/actions/runs/40093931196)与发布[40094477774](https://github.com/h516df/walkpaint/actions/runs/40094477774)成功；沿用原签名，无新证书或密钥取回。
+
+APK/中文更新说明/校验文本三个原生附件都已匿名完整下载并核对大小/SHA256、说明JSON与校验清单；下载后的APK再次通过cn.walkpaint、0.70/code78、ARM64、非调试与原证书V1/V2/V3验证。APK 54,716,819 bytes，SHA256 e72e59aa9b52019b09ad50927febfd131e3e7b06e730b951732e1890e0f4ccf9。末尾1024字节Range返回206且逐字节匹配；不把云端网络检查等同用户手机网络。公开回执见publication.json。
+
+实体手机安装/覆盖升级、高德联网、户外GPS和锁屏耗电仍为not run。
