@@ -118,8 +118,9 @@ class FootprintHistoryUiTest {
         compose.onNodeWithText("查找").performClick()
         compose.onNodeWithText("日期、标题、备注或标签").performTextInput(oldMonth.atDay(1).toString())
         compose.waitUntil(10000) {compose.onAllNodesWithText("全部足迹中的结果 · 1 天").fetchSemanticsNodes().isNotEmpty()}
-        compose.onNodeWithTag("footprint-history").performScrollToNode(hasText(oldMonth.atDay(1).toString()))
-        compose.onNodeWithText(oldMonth.atDay(1).toString()).assertIsDisplayed()
+        val result=hasText(oldMonth.atDay(1).toString()) and !hasSetTextAction()
+        compose.onNodeWithTag("footprint-history").performScrollToNode(result)
+        compose.onNode(result).assertIsDisplayed()
         compose.onNodeWithTag("footprint-history").performScrollToIndex(0)
         compose.onNodeWithText("收起查找").performClick()
         compose.onNodeWithContentDescription("上个月").performClick()
