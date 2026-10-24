@@ -1,3 +1,17 @@
+# 当前接续记录（2026-10-24 · v0.69 发行）
+
+- **用户目标**：改进足迹涂色并发布可安装新版。沿用原 Android App，原包名 cn.walkpaint、原证书、SQLite schema3，覆盖升级保留资料。
+- **分支 / PR**：`codex/walkpaint-v069-20261024` / [PR126](https://github.com/h516df/walkpaint/pull/126)，基线 main `ff6bddded601d3c640a176157ff3c5b6af0343fb`。已检查开放业务 PR；仅复用与本次发行直接相关的 PR124 固定签名准备代码，没有合并其他业务 PR。
+- **实现**：月份统一联动日历、月/年统计和完整当月每日列表，月份可跳选；查找/收藏仍覆盖全部历史。当天详情通过系统文件选择器导出 GPX 1.1，精确位置导出前提示，保留 WGS84 原点、UTC 时间、断档分段，JSON 完整备份仍保留。0.69/code77。
+- **代码验证提交**：`a3be66674e832e2330920ef9cf972683fb0c6588`。10项针对性检查 passed，完整541项 JVM/Native Graphics/Compose passed（0失败/错误/跳过），开发APK构建 passed；完整 `bash cloud/check.sh` passed，lint 0 errors（60 warnings/2 hints），后续 Python18+23 passed。独立 Python 18+23、签名策略7 passed；actionlint 1.7.7 passed。
+- **原生界面**：已实际渲染、查看并操作历史换月/8天列表/查找/空月份恢复、保存状态恢复、320dp/1.5字体导出告知、真实 ContentResolver 写出 GPX；导出前后合成数据库备份一致。截图与来源见 `docs/acceptance/v0.69/`，不代表实体手机或真实高德联网。
+- **发布路径**：签名材料仅在既有受保护 android-signing 环境中使用，不带出作业。等源码检查完成后整合 main，在该完整SHA手动运行 Original signing readiness，取同提交 signed-product 附件，按 docs/BUILD.md 使用现有发布脚本的公开/精确SHA模式，逐项校验包名、版本、架构、V1/V2/V3原签名和最终下载摘要。当前尚未发布0.69，不能把开发APK当正式升级包。
+- **扫描**：通用 privacy_scan 已运行；本轮29个变更文本文件0命中。全库扫描保留的历史命中为旧脚本通用SDK路径、合成数值/URL、Kotlin标签与未提交.cloud配置，未将其重标成全库零命中。远端secret-scan单列检查。
+- **未验**：实体手机覆盖安装、真实高德地图联网、户外GPS、锁屏耗电。本任务不操作私人设备。
+- **下一步**：完成构建/CI与正式原签名作业，发布0.69并核验所有公开附件与latest，再更新此处实际发行结果；无需重新向用户确认已授权的发行。
+
+---
+
 # 当前接续记录（2026-10-21 · 统一通用入口）
 
 - **目标**：适应用户经常新开云端 Codex 的方式；每个项目默认分支都指向同一通用工作流，并保留本地可执行简版，用户无需记启动语或分支名。
