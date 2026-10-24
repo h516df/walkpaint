@@ -1,16 +1,14 @@
-# 当前接续记录（2026-10-24 · v0.69 发行）
+# 当前接续记录（2026-10-24 · v0.69 已发布）
 
-- **用户目标**：改进足迹涂色并发布可安装新版。沿用原 Android App，原包名 cn.walkpaint、原证书、SQLite schema3，覆盖升级保留资料。
-- **分支 / PR**：`codex/walkpaint-v069-20261024` / [PR126](https://github.com/h516df/walkpaint/pull/126)，基线 main `ff6bddded601d3c640a176157ff3c5b6af0343fb`。已检查开放业务 PR；仅复用与本次发行直接相关的 PR124 固定签名准备代码，没有合并其他业务 PR。
-- **实现**：月份统一联动日历、月/年统计和完整当月每日列表，月份可跳选；查找/收藏仍覆盖全部历史。当天详情通过系统文件选择器导出 GPX 1.1，精确位置导出前提示，保留 WGS84 原点、UTC 时间、断档分段，JSON 完整备份仍保留。0.69/code77。
-- **代码验证提交**：`a3be66674e832e2330920ef9cf972683fb0c6588`。10项针对性检查 passed，完整541项 JVM/Native Graphics/Compose passed（0失败/错误/跳过），开发APK构建 passed；完整 `bash cloud/check.sh` passed，lint 0 errors（60 warnings/2 hints），后续 Python18+23 passed。独立 Python 18+23、签名策略7 passed；actionlint 1.7.7 passed。
-- **原生界面**：已实际渲染、查看并操作历史换月/8天列表/查找/空月份恢复、保存状态恢复、320dp/1.5字体导出告知、真实 ContentResolver 写出 GPX；导出前后合成数据库备份一致。截图与来源见 `docs/acceptance/v0.69/`，不代表实体手机或真实高德联网。
-- **发布路径**：签名材料仅在既有受保护 android-signing 环境中使用，不带出作业。等源码检查完成后整合 main，在该完整SHA手动运行 Original signing readiness，取同提交 signed-product 附件，按 docs/BUILD.md 使用现有发布脚本的公开/精确SHA模式，逐项校验包名、版本、架构、V1/V2/V3原签名和最终下载摘要。当前尚未发布0.69，不能把开发APK当正式升级包。
-- **扫描**：通用 privacy_scan 已运行；本轮29个变更文本文件0命中。全库扫描保留的历史命中为旧脚本通用SDK路径、合成数值/URL、Kotlin标签与未提交.cloud配置，未将其重标成全库零命中。远端secret-scan单列检查。
-- **未验**：实体手机覆盖安装、真实高德地图联网、户外GPS、锁屏耗电。本任务不操作私人设备。
-- **发行接续（2026-10-24）**：PR126 已 squash 合入 main `454148a333e9e269c84e46c29cf3b5e0880fd883`，应用/构建/工具代码与已测试 a3be666 一致；PR与main Cloud development、delivery-tools、secret-scan passed。原签名运行 [40085397252](https://github.com/h516df/walkpaint/actions/runs/40085397252) passed，官方 APK 54,716,819 bytes、SHA256 `be501faab3a6a00006518c3b7693ce6a399be2c877842afa004696f89cf2568c`。本地 V1/V2/V3、cn.walkpaint、0.69/code77、ARM64、非调试校验 passed。构建附件由官方 GitHub 连接器取回；gh 直接下载端点拒绝，未改签名。
-- **当前具体阻塞与补救**：公开上传端 uploads.github.com 对当前连接返回401；已创建草稿422662113、tag v0.69 指向454148a，附件为空，未发布。不要另建版本、覆盖标签或把草稿当已完成。新增 main 手动 `Publish verified signed release`，使用最小 GitHub 作业令牌从同次运行取回原APK、校验并恢复同一草稿。无签名密钥进入发布作业。
-- **下一步**：整合并运行发布作业（source_sha=454148a333e9e269c84e46c29cf3b5e0880fd883 / build_run_id=40085397252），核验所有公开附件、latest和匿名实际下载，再补最终发行回执；用户已明确授权发行。
+- **用户目标与结果**：已完成“改进足迹涂色，发布新版，我要用”。[正式版0.69](https://github.com/h516df/walkpaint/releases/tag/v0.69) 非草稿、非预发行且为latest；[ARM64安装包](https://github.com/h516df/walkpaint/releases/download/v0.69/WalkPaint-v0.69-arm64.apk) 可匿名下载。原包名/原签名、code77、schema3，覆盖安装，请勿卸载或清库。
+- **本轮改进**：月份统一联动日历、月/年统计和完整每日列表，月份直接跳选；查找/收藏跨全部日期。当天GPX通过系统文件选择器导出WGS84原点、UTC时间和断档分段，导出前提示精确位置，不含备注/标签；完整JSON备份保留。
+- **源码 / PR / 标签**：原任务分支 `codex/walkpaint-v069-20261024`；[PR126](https://github.com/h516df/walkpaint/pull/126) squash至main `454148a333e9e269c84e46c29cf3b5e0880fd883`，tag v0.69固定此SHA。应用/构建/工具与已测 `a3be66674e832e2330920ef9cf972683fb0c6588` 内容一致。只复用PR124中与发行相关的签名隔离代码；没有合并其他业务PR。[PR127](https://github.com/h516df/walkpaint/pull/127) 增加发布通道，未修改应用或重建APK；当前回执提交仅文档。
+- **验证 passed**：10项针对性、完整541 JVM/Native Graphics/Compose（0失败/错误/跳过）、开发APK、lint0 errors（60 warnings/2 hints）、Python18+23、签名策略7、actionlint1.7.7、git diff --check；PR126/main业务CI与secret-scan、delivery-tools通过。原生合成场景实际渲染和操作包括历史8天列表/统计、跨月搜索、空月份恢复、320dp/1.5字体、导出提示、选择器状态恢复与真实ContentResolver写出；导出前后合成数据库一致。
+- **正式产物 passed**：[原签名运行40085397252](https://github.com/h516df/walkpaint/actions/runs/40085397252)、[发布运行40086151447](https://github.com/h516df/walkpaint/actions/runs/40086151447) 成功。APK 54,716,819 bytes，SHA256 `be501faab3a6a00006518c3b7693ce6a399be2c877842afa004696f89cf2568c`；包名、版本、ARM64、非调试与原证书V1/V2/V3校验通过，私钥始终在受保护签名作业内。
+- **下载 passed**：APK、中文release-notes JSON、SHA256文本三个原生附件均匿名实际下载，大小/摘要全部匹配；对下载的APK再次验签，latest与标签SHA读回正确。证据、截图、取舍和下载回执见 `docs/acceptance/v0.69/`。
+- **已解决的发布通道问题**：构建附件由官方GitHub连接器取回；当前CLI的uploads端401，通过main的 `Publish verified signed release` 使用最小作业令牌恢复同一草稿完成。不能把旧失败日志当当前阻塞，不另建相同版本或覆盖已发布文件/标签。
+- **扫描与限制**：变更文本文件隐私扫描0命中；全库旧SDK通用路径/合成数值/URL/Kotlin标签等命中保留分类，没有声称全库零命中。实体手机安装/覆盖升级、真实高德联网、户外GPS、锁屏耗电 not run，模拟或签名一致不能替代这些验收。本轮不操作私人设备。
+- **下一步**：用户可直接覆盖安装0.69；后续按实际体验反馈继续。新会话核对当前main、相关开放PR与实际最新Release，历史PR不是合并清单。
 
 ---
 
