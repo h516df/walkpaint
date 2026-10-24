@@ -4,6 +4,7 @@ import android.location.Location
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -57,6 +58,7 @@ internal fun AppShell(
     replay: ReplayControls? = null,onExploreLandmarks:()->Unit={},explorationNotice:String?=null
 ) {
     val uri=LocalUriHandler.current
+    val historyState=rememberSaveableStateHolder()
     Column(Modifier.fillMaxSize().background(PageBackground)
         .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Horizontal))) {
       // A bounded map viewport keeps SDK logos above both app and system navigation.
@@ -77,8 +79,10 @@ internal fun AppShell(
                     mapProviderLabel,onResolveTracking,onToggleTracking,onLocate,onShowAll,
                     false,onZoom,{},regionContent={RegionExplorationCard(state,fix,placeName)},
                     replay=replay,bottomControlsInset=24.dp,onExploreLandmarks=onExploreLandmarks,explorationNotice=explorationNotice)
-                1 -> Box(Modifier.fillMaxSize().statusBarsPadding()) {
-                    DesignTripsPage(state,roadColor,onTrip,onExport,onSkin)
+                1 -> historyState.SaveableStateProvider("history") {
+                    Box(Modifier.fillMaxSize().statusBarsPadding()) {
+                        DesignTripsPage(state,roadColor,onTrip,onExport,onSkin)
+                    }
                 }
                 else -> Box(Modifier.fillMaxSize().statusBarsPadding()) {
                     ProfilePage(state,appearanceMode,onAppearanceMode,onShowIntro,automatic,profileNotice,onResolveTracking,

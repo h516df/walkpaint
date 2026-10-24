@@ -3,12 +3,16 @@ import java.io.File
 import java.io.InputStream
 
 internal object UpdateFileDownload {
-    /** Resume only this attempt's verified destination and expected asset; never reuse old cache. */
+    /** Durable reuse is opt-in and must be bound to trusted asset metadata by the caller. */
     fun fetch(partial:File,asset:UpdateAsset,checkCancelled:()->Unit,progress:(Int)->Unit,
+              retainPartial:Boolean=false,
               open:(Long,(InputStream)->Unit)->Unit) {
         var succeeded=false
-        partial.delete()
+        var recoverable=false
+        if(!retainPartial) partial.delete()
         try {
+            updateRequire(!partial.exists() || (partial.isFile && partial.length() in 0..asset.size),"下载缓存无效，请重新下载")
+            if(partial.exists()) progress((partial.length()*100/asset.size).toInt())
             repeat(5) { attempt ->
                 checkCancelled()
                 try {
@@ -31,11 +35,15 @@ internal object UpdateFileDownload {
                     checkCancelled();if(attempt==4)throw e
                 }
             }
-        } finally {if(!succeeded)partial.delete()}
+        } catch(e:java.io.IOException) {recoverable=true;throw e}
+        catch(e:InterruptedException) {recoverable=true;throw e}
+        catch(e:UpdateUnavailable) {recoverable=true;throw e}
+        finally {if(!succeeded && !(retainPartial && recoverable))partial.delete()}
     }
-    fun requireSpace(available:Long,size:Long) {
+    fun requireSpace(available:Long,size:Long,existing:Long=0) {
         updateRequire(size in 1..PrivateUpdatePolicy.MAX_APK)
-        updateRequire(available>size+10L*1024*1024,"存储空间不足，请腾出空间后重试")
+        updateRequire(existing in 0..size)
+        updateRequire(available>size-existing+10L*1024*1024,"存储空间不足，请腾出空间后重试")
     }
     /** Partial output is never retained after a failed, interrupted or corrupt transfer. */
     fun copy(input:InputStream,partial:File,asset:UpdateAsset,checkCancelled:()->Unit,progress:(Int)->Unit) {

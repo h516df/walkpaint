@@ -9,6 +9,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -237,12 +238,15 @@ internal fun DesignTripsPage(state: TrackState, roadColor: Int, onTrip: (Track) 
         .groupingBy {it}.eachCount().entries.sortedWith(compareByDescending<Map.Entry<String,Int>> {it.value}.thenBy {it.key}).take(8).map {it.key}}
     var detailKey by rememberSaveable { mutableStateOf<String?>(null) }
     var showStats by rememberSaveable { mutableStateOf(false) }
+    val listState=rememberLazyListState()
     val selected = days.firstOrNull { it.key == detailKey }
     if (selected != null) {
-        DesignTripDetail(selected, roadColor, { detailKey = null }, { onTrip(selected.focusTrack()) }, onExport,journal)
+        val index=days.indexOfFirst {it.key==selected.key}
+        key(selected.key) {DesignTripDetail(selected, roadColor, { detailKey = null }, { onTrip(selected.focusTrack()) }, onExport,journal,
+            days.getOrNull(index+1),days.getOrNull(index-1)) {day->detailKey=day.key;monthKey=day.key.take(7)}}
         return
     }
-    LazyColumn(Modifier.fillMaxSize().imePadding().testTag("footprint-history"), contentPadding = PaddingValues(horizontal=20.dp,vertical=12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyColumn(Modifier.fillMaxSize().imePadding().testTag("footprint-history"),state=listState, contentPadding = PaddingValues(horizontal=20.dp,vertical=12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { TrailHeader("足迹") {
             TextButton(onClick={showStats=!showStats}) { Text(if(showStats) "日历" else "统计") }
             TextButton(onClick={searching=!searching;if(!searching)query=""}){Text(if(searching)"收起查找" else "查找")}
@@ -284,7 +288,12 @@ internal fun DesignTripsPage(state: TrackState, roadColor: Int, onTrip: (Track) 
                 }
             }
             if((searching || starredOnly) && filtered.isEmpty()) item {Text(if(starredOnly && query.isBlank())"还没有收藏。打开某一天的足迹，就可以收藏。" else "没有找到匹配的足迹，试试其他日期或标签。",color=Muted,fontSize=14.sp)}
-            if(!searching && !starredOnly && monthDays.isEmpty()) item {Text("这个月还没有足迹。点月份可以跳到有记录的月份。",color=Muted,fontSize=14.sp)}
+            if(!searching && !starredOnly && monthDays.isEmpty()) item {
+                Column {
+                    Text("这个月还没有足迹。点月份可以跳到有记录的月份。",color=Muted,fontSize=14.sp)
+                    TextButton(onClick={val latest=days.first();monthKey=latest.key.take(7);detailKey=latest.key}) {Text("查看最近足迹")}
+                }
+            }
         }
         if (days.isEmpty()) item {
             Text("第一段足迹，等你出发。开启自动记录后，已保存的路线会出现在日历里。", color = Muted, fontSize = 14.sp)
@@ -293,7 +302,8 @@ internal fun DesignTripsPage(state: TrackState, roadColor: Int, onTrip: (Track) 
 }
 
 @Composable
-private fun DesignTripDetail(day: DailyFootprint, color: Int, onBack: () -> Unit, onMap: () -> Unit, onExport: () -> Unit,journal:JournalView) {
+private fun DesignTripDetail(day: DailyFootprint, color: Int, onBack: () -> Unit, onMap: () -> Unit, onExport: () -> Unit,journal:JournalView,
+    older:DailyFootprint?,newer:DailyFootprint?,onDay:(DailyFootprint)->Unit) {
     BackHandler(onBack = onBack)
     val summary = remember(day) { TrailSummary.of(day.tracks) }
     val integrity=remember(day) { TrailIntegrity.of(day.tracks) }
@@ -302,6 +312,10 @@ private fun DesignTripDetail(day: DailyFootprint, color: Int, onBack: () -> Unit
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal=20.dp,vertical=12.dp),
         verticalArrangement=Arrangement.spacedBy(14.dp)) {
         TrailHeader("当天足迹",day.key,onBack)
+        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+            OutlinedButton(enabled=older!=null,onClick={older?.let(onDay)},modifier=Modifier.weight(1f).heightIn(min=48.dp).semantics {contentDescription="更早足迹"}) {Text("更早")}
+            OutlinedButton(enabled=newer!=null,onClick={newer?.let(onDay)},modifier=Modifier.weight(1f).heightIn(min=48.dp).semantics {contentDescription="更晚足迹"}) {Text("更晚")}
+        }
         RouteThumbnail(day.focusTrack(),Modifier.fillMaxWidth().height(180.dp),color)
         DayJournalActions(day,journal){postcard=true}
         TrailPanel {

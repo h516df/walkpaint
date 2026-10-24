@@ -20,7 +20,6 @@ internal class ReadyUpdateCache(private val directory:File) {
         } finally {temporary.delete()}
     }
     fun cleanupTransient() {
-        File(directory,"pending.apk").delete()
         File(directory,"ready.json.tmp").delete()
         if(!metadata.exists()) apk.delete()
     }
