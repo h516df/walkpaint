@@ -17,6 +17,6 @@
 
 ## 验证与发行
 
-本轮结果完成后补录，历史结果不重标成本版通过。场景包括网络失败保留/重建缓存后续传、版本/摘要/大小变化、损坏片段、取消、空间预算、跨页/地图/状态恢复、详情返回滚动、小屏大字及实际渲染。测试只使用合成路线、元数据与内容。
+源码提交f643617c6563f13aae0d9fe314a127410979bb72：33项针对性passed；小屏新按钮收紧后5项UI重新passed。完整bash cloud/check.sh passed：552项JVM/Native Graphics/Compose，0失败/错误/跳过；开发APK、lint0 errors、Python18+23 passed。签名策略7、变更文件隐私扫描0命中、git diff --check passed。详细计数和截图摘要见checks.json。历史结果不重标成本版通过。场景包括网络失败保留/重建缓存后续传、版本/摘要/大小变化、损坏片段、取消、空间预算、跨页/地图/状态恢复、详情返回滚动、小屏大字及实际渲染。测试只使用合成路线、元数据与内容。
 
 正式包仍由受保护的Original signing readiness构建和签名，再由Publish verified signed release使用同一产物发布；所有附件实际下载读回。实体手机覆盖安装、真实高德联网、户外GPS、锁屏耗电单列not run。

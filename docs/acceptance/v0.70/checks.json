@@ -1,0 +1,23 @@
+{
+  "source_commit": "f643617c6563f13aae0d9fe314a127410979bb72",
+  "counts": {
+    "tests": 552,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "lint": {
+    "Warning": 61,
+    "Hint": 2
+  },
+  "screenshots": {
+    "resume-download-320-font150.png": "6088c817862bed36b97f9ca0a63dd093f1f2a0000a88820bbe14a29ddcccfcc3",
+    "day-navigation-320-font150.png": "1ea3aaab1b2dfb40afe77fe0ab4b3650c188656470eb1cc9699d722a9629650e",
+    "returned-list-position.png": "37e8df9881e3a3d8739137f7bf846512a3c6a1e1e36203ba6b235d31c2ba0879"
+  },
+  "native_scope": "Robolectric Native Graphics / Compose with synthetic fixtures; no real phone or network map",
+  "python_tests": 41,
+  "signing_policy_tests": 7,
+  "status": "passed",
+  "device_acceptance": "not run"
+}
