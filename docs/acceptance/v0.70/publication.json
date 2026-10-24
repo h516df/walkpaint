@@ -1,0 +1,36 @@
+{
+  "status": "verified",
+  "release_url": "https://github.com/h516df/walkpaint/releases/tag/v0.70",
+  "draft": false,
+  "prerelease": false,
+  "latest": true,
+  "source_commit": "f3a6c94e0a6368aa169f7a018c2f1960c1b894bc",
+  "assets": [
+    {
+      "name": "WalkPaint-v0.70-arm64.apk",
+      "size": 54716819,
+      "sha256": "e72e59aa9b52019b09ad50927febfd131e3e7b06e730b951732e1890e0f4ccf9",
+      "url": "https://github.com/h516df/walkpaint/releases/download/v0.70/WalkPaint-v0.70-arm64.apk",
+      "anonymous_download": "passed"
+    },
+    {
+      "name": "WalkPaint-v0.70-release-notes.json",
+      "size": 944,
+      "sha256": "09fe1776e27b91c12934550f206cb27079a5e5ca23b1ab6a4c754e761ebd36dc",
+      "url": "https://github.com/h516df/walkpaint/releases/download/v0.70/WalkPaint-v0.70-release-notes.json",
+      "anonymous_download": "passed"
+    },
+    {
+      "name": "WalkPaint-v0.70-SHA256.txt",
+      "size": 193,
+      "sha256": "f6f12b6f12924345c59100a501e02a8b6ed908ee24a42f31d75c8f80af2ee2b2",
+      "url": "https://github.com/h516df/walkpaint/releases/download/v0.70/WalkPaint-v0.70-SHA256.txt",
+      "anonymous_download": "passed"
+    }
+  ],
+  "device_installation": "not run",
+  "signature_verification": "cn.walkpaint, 0.70/code78, ARM64, non-debuggable, original V1/V2/V3: passed on downloaded bytes",
+  "range_verification": "206 with matching final 1024 bytes: passed",
+  "signing_run": "https://github.com/h516df/walkpaint/actions/runs/40093931196",
+  "publication_run": "https://github.com/h516df/walkpaint/actions/runs/40094477774"
+}
