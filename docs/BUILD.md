@@ -11,13 +11,15 @@ Windows使用gradlew.bat。开发模式使用本机开发签名、独立包名cn
 
 未配置高德Key时不初始化高德，地图区显示「地图还没打开」与「开启高德地图」入口，App 没有离线底图或备用引擎；需要高德时为自己的包名和签名申请合法Key，参见AMap_SETUP.md。
 
-正式包cn.walkpaint保持原签名。私钥与备份放在公开Git之外，默认构建在原签名文件缺失时拒绝继续；发布工具核对实际原证书身份。
+正式包cn.walkpaint保持原签名。私钥与备份放在公开Git之外；Gradle 只生成显式请求的 unsigned 候选，受保护作业通过 cloud/sign_apk.py 签名，发布工具核对实际原证书身份。开发 debug 包始终为 cn.walkpaint.dev。
 
 ```sh
-./gradlew :app:assembleRelease -PwalkpaintArm64Only=true
+./gradlew :app:assembleRelease -PwalkpaintArm64Only=true -PunsignedRelease=true
 ```
 
 公开发布沿scripts/publish_release.py，显式--public-release并绑定已推送完整SHA。核对非调试属性、版本、ABI、原签名V1/V2/V3、说明和摘要后，先上传草稿并检查资产再发布。不得覆盖既有版本。
+
+从同提交的 Original signing readiness 工作流取回签名后的 APK，经本机工具验证后传入 `--no-build --prepared-dir <目录> --phone-only --no-legacy-alias --public-release --target <完整SHA>`。输入目录内文件名须为 `WalkPaint-v<版本>-arm64.apk`；密钥始终留在受保护作业内。
 
 发布输入固定已验收APK，发布后重新下载核对实际字节。升级不卸载清库，必须同签名、versionCode递增；回退也须兼容schema3，不能直接装旧包。
 

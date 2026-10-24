@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -227,6 +228,8 @@ internal fun DesignTripsPage(state: TrackState, roadColor: Int, onTrip: (Track) 
     var searching by rememberSaveable {mutableStateOf(false)}
     var query by rememberSaveable {mutableStateOf("")}
     var starredOnly by rememberSaveable {mutableStateOf(false)}
+    var monthKey by rememberSaveable {mutableStateOf(java.time.YearMonth.now().toString())}
+    val monthDays=remember(days,monthKey) {FootprintMonths.days(days,monthKey)}
     val filtered by produceState(days,days,journal.entries,query,starredOnly) {
         value=withContext(Dispatchers.Default){JournalSearch.filter(days,journal.entries,query,starredOnly)}
     }
@@ -239,7 +242,7 @@ internal fun DesignTripsPage(state: TrackState, roadColor: Int, onTrip: (Track) 
         DesignTripDetail(selected, roadColor, { detailKey = null }, { onTrip(selected.focusTrack()) }, onExport,journal)
         return
     }
-    LazyColumn(Modifier.fillMaxSize().imePadding(), contentPadding = PaddingValues(horizontal=20.dp,vertical=12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    LazyColumn(Modifier.fillMaxSize().imePadding().testTag("footprint-history"), contentPadding = PaddingValues(horizontal=20.dp,vertical=12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { TrailHeader("足迹") {
             TextButton(onClick={showStats=!showStats}) { Text(if(showStats) "日历" else "统计") }
             TextButton(onClick={searching=!searching;if(!searching)query=""}){Text(if(searching)"收起查找" else "查找")}
@@ -255,21 +258,17 @@ internal fun DesignTripsPage(state: TrackState, roadColor: Int, onTrip: (Track) 
         }}
         journal.error?.let {message->item {Text(message,color=MaterialTheme.colorScheme.error,fontSize=13.sp)}}
         if(journal.loading) item {LinearProgressIndicator(Modifier.fillMaxWidth())}
-        item {
-            val month=java.time.LocalDate.now().toString().take(7)
-            val monthDays=remember(days,month) {days.filter {it.key.startsWith(month)}}
-            Text("本月 ${monthDays.size} 天出发 · ${exploredDistance(monthDays.sumOf {it.meters})}",color=Muted,fontSize=14.sp,
-                modifier=Modifier.padding(bottom=8.dp))
-        }
-        if (!searching && !starredOnly && showStats) item { RecapCard(RecapMaker.of(days, java.time.LocalDate.now().toString().take(7)),
-            RecapMaker.of(days, java.time.LocalDate.now().toString().take(4))) }
-        else if(!searching && !starredOnly) item { FootprintCalendar(days, DailyFootprints.key(System.currentTimeMillis())) { track ->
+        if(!searching && !starredOnly) item {FootprintMonthPicker(days,monthKey,{monthKey=it})}
+        if (!searching && !starredOnly && showStats) item { RecapCard(RecapMaker.of(days,monthKey),
+            RecapMaker.of(days,monthKey.take(4))) }
+        else if(!searching && !starredOnly) item { FootprintCalendar(days, DailyFootprints.key(System.currentTimeMillis()),
+            selectedMonth=monthKey,onMonthChange={monthKey=it}) { track ->
             detailKey = days.firstOrNull { it.tracks.any { original -> original.id == track.id } }?.key
                 ?: track.points.firstOrNull()?.let { DailyFootprints.key(it.time) }
         } }
         if(days.isNotEmpty()) {
-            item { TrailSectionLabel(if(searching)"查找结果 · ${filtered.size} 天" else if(starredOnly)"收藏的足迹 · ${filtered.size} 天" else "最近探索") }
-            items(if(searching || starredOnly)filtered else days.take(5),key={"recent:${it.key}"}) { day ->
+            item { TrailSectionLabel(if(searching)"全部足迹中的结果 · ${filtered.size} 天" else if(starredOnly)"收藏的足迹 · ${filtered.size} 天" else "这个月的足迹 · ${monthDays.size} 天") }
+            items(if(searching || starredOnly)filtered else monthDays,key={"recent:${it.key}"}) { day ->
                 val memo=journal.entries[day.key] ?: DayMemo()
                 Surface(onClick={detailKey=day.key},color=Canvas,shape=RoundedCornerShape(16.dp)) {
                     Row(Modifier.fillMaxWidth().padding(12.dp),verticalAlignment=Alignment.CenterVertically,
@@ -285,6 +284,7 @@ internal fun DesignTripsPage(state: TrackState, roadColor: Int, onTrip: (Track) 
                 }
             }
             if((searching || starredOnly) && filtered.isEmpty()) item {Text(if(starredOnly && query.isBlank())"还没有收藏。打开某一天的足迹，就可以收藏。" else "没有找到匹配的足迹，试试其他日期或标签。",color=Muted,fontSize=14.sp)}
+            if(!searching && !starredOnly && monthDays.isEmpty()) item {Text("这个月还没有足迹。点月份可以跳到有记录的月份。",color=Muted,fontSize=14.sp)}
         }
         if (days.isEmpty()) item {
             Text("第一段足迹，等你出发。开启自动记录后，已保存的路线会出现在日历里。", color = Muted, fontSize = 14.sp)
@@ -321,6 +321,7 @@ private fun DesignTripDetail(day: DailyFootprint, color: Int, onBack: () -> Unit
         }
         if(showIntegrity) TrailPanel { Text("预览显示最长连续路线；定位断档保留分段。\n"+integrity.report(),color=Muted,fontSize=13.sp,lineHeight=21.sp) }
         OutlinedButton(onClick=onExport,modifier=Modifier.fillMaxWidth().heightIn(min=48.dp)) { Text("导出全部足迹备份") }
+        GpxExportButton(day)
     }
     if(postcard) PostcardDialog(day,journal.entries[day.key] ?: DayMemo(),color){postcard=false}
 }

@@ -13,7 +13,7 @@ GitHub Actions 的 **Cloud development** 在 PR、main 推送及手动运行时�
 
 ## 当前边界
 
-云端只构建 cn.walkpaint.dev；未配置地图 Key 时不验收地图加载。原正式签名、真实 GPS、户外/锁屏耗电与覆盖升级仍需单独验收。
+普通云端开发构建 cn.walkpaint.dev；未配置地图 Key 时不验收地图加载。正式 ARM64 候选通过受保护的 android-build 环境构建，原签名由独立 android-signing 作业注入，见 [原签名准备](docs/SIGNING_PREPARATION.md)。真实 GPS、户外/锁屏耗电与覆盖升级仍需单独验收。
 
 原 README、AGENTS 与交接文件中的 Windows 路径作为历史恢复线索保留；云端开发不依赖这些路径。生产运行与发布步骤按本节边界处理，不自动运行旧的本机派发、安装、隧道或签名脚本。凭据通过平台 Secrets 注入，不能进入源码、日志或构建附件；私有项目继续保持私有。
 

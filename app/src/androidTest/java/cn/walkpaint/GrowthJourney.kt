@@ -40,7 +40,7 @@ object GrowthJourney {
    tap("查看成长记录");wait("最近 28 天")
    tap("返回")
    tap("外观与配色");wait("足迹颜色");wait("外观：跟随系统");tap("返回");wait(title)
-   tap("足迹");wait("最近探索");shot("journey-trips");tap("我的")
+   tap("足迹");wait("足迹日历");shot("journey-trips");tap("我的")
    tap("后台记录设置")
    val hidden=prefs.getBoolean("hide_recents",false)
    tap("后台隐藏")

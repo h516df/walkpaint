@@ -205,7 +205,7 @@ private fun TripsPage(state:TrackState,onTrip:(Track)->Unit,place:String,share:P
         }
         item { PlaceCard(place,share,streak) }
         item { RecapCard(RecapMaker.of(days,today.take(7)),RecapMaker.of(days,today.take(4))) }
-        item { FootprintCalendar(days,today,onTrip) }
+        item { FootprintCalendar(days,today,onTrip=onTrip) }
        if(days.isEmpty()) {
             item { Text("开启自动记录后，走过的地方会在地图上留下颜色。",color=Muted,fontSize=BodySize) }
         } else {
@@ -242,10 +242,11 @@ private fun monthLabel(month:String):String = "${month.take(4)} 年 ${month.subs
 internal fun RecapCard(month:Recap?,year:Recap?) {
     if(month==null && year==null) return
     Section("回顾") {
-        month?.let { RecapRow("本月", it) }
+        val today=java.time.LocalDate.now().toString()
+        month?.let { RecapRow(if(it.period==today.take(7)) "本月" else it.period.replace('-', '年')+"月", it) }
         if(year!=null && year.period!=month?.period) {
             Spacer(Modifier.height(14.dp))
-            RecapRow("今年", year)
+            RecapRow(if(year.period==today.take(4)) "今年" else year.period+"年", year)
         }
     }
 }
@@ -353,13 +354,21 @@ private fun heatInk(level:Int) = if(level>=3) androidx.compose.ui.graphics.Color
  * share [YearHeatmap] banding, so a shade means the same thing wherever you are.
  */
 @Composable
-internal fun FootprintCalendar(days:List<DailyFootprint>,todayKey:String,onTrip:(Track)->Unit) {
+internal fun FootprintCalendar(days:List<DailyFootprint>,todayKey:String,
+    selectedMonth:String?=null,onMonthChange:(String)->Unit={},onTrip:(Track)->Unit) {
     val today=remember { java.time.LocalDate.now() }
     val byKey=remember(days) { days.associateBy { it.key } }
     val meters=remember(days) { byKey.mapValues { it.value.meters } }
     var modeName by rememberSaveable { mutableStateOf(CalendarMode.MONTH.name) }
-    var monthKey by rememberSaveable { mutableStateOf(todayKey.take(7)) }
+    var ownMonth by rememberSaveable { mutableStateOf(todayKey.take(7)) }
+    val monthKey=selectedMonth ?: ownMonth
+    fun pickMonth(key:String) {ownMonth=key;onMonthChange(key)}
     var dayKey by rememberSaveable { mutableStateOf(todayKey) }
+    LaunchedEffect(monthKey) {
+        if(selectedMonth!=null && dayKey.take(7)!=monthKey) {
+            dayKey="$monthKey-01";modeName=CalendarMode.MONTH.name
+        }
+    }
     val mode=runCatching { CalendarMode.valueOf(modeName) }.getOrDefault(CalendarMode.MONTH)
     Section("足迹日历") {
         Row(Modifier.fillMaxWidth().background(CanvasSoft,ChipShape).padding(3.dp)) {
@@ -378,10 +387,10 @@ internal fun FootprintCalendar(days:List<DailyFootprint>,todayKey:String,onTrip:
         Spacer(Modifier.height(16.dp))
         when(mode) {
             CalendarMode.YEAR -> YearStrip(today,meters) { date ->
-                monthKey=date.toString().take(7); modeName=CalendarMode.MONTH.name }
+                pickMonth(date.toString().take(7)); modeName=CalendarMode.MONTH.name }
             CalendarMode.MONTH -> MonthPage(monthKey,today,meters,byKey,dayKey,
-                onShiftMonth={ monthKey=it }, onPickDay={ dayKey=it; modeName=CalendarMode.DAY.name
-                    byKey[it]?.let { selected -> onTrip(selected.focusTrack()) } })
+                onShiftMonth={ pickMonth(it) }, onPickDay={ dayKey=it; modeName=CalendarMode.DAY.name
+                    byKey[it]?.let { selected -> onTrip(selected.focusTrack()) } },showNavigation=selectedMonth==null)
             CalendarMode.DAY -> DayPage(dayKey,byKey,today,todayKey,onTrip)
         }
     }
@@ -421,12 +430,12 @@ private fun YearStrip(today:java.time.LocalDate,meters:Map<String,Double>,onPick
 @Composable
 private fun MonthPage(monthKey:String,today:java.time.LocalDate,meters:Map<String,Double>,
     byKey:Map<String,DailyFootprint>,selectedKey:String,
-    onShiftMonth:(String)->Unit,onPickDay:(String)->Unit) {
+    onShiftMonth:(String)->Unit,onPickDay:(String)->Unit,showNavigation:Boolean=true) {
     val ym=runCatching { java.time.YearMonth.parse(monthKey) }
         .getOrDefault(java.time.YearMonth.from(today))
     val grid=remember(ym,meters) { YearHeatmap.monthGrid(ym.year,ym.monthValue,today,meters) }
     Column {
-        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+        if(showNavigation) Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
             TextButton(onClick={ onShiftMonth(ym.minusMonths(1).toString()) }) { Text("‹",fontSize=20.sp) }
             Text(grid.label,color=Ink,fontSize=SectionSize,fontWeight=FontWeight.SemiBold,
                 textAlign=TextAlign.Center,modifier=Modifier.weight(1f))
