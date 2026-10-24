@@ -43,7 +43,7 @@ class ReadyUpdateCacheTest {
         try {
             val cache=ReadyUpdateCache(dir)
             listOf("pending.apk","ready.json.tmp","update.apk","unrelated.txt").forEach {File(dir,it).writeText("fixture")}
-            cache.cleanupTransient();assertEquals(setOf("unrelated.txt"),dir.list()!!.toSet())
+            cache.cleanupTransient();PendingUpdateCache(dir,72).cleanup();assertEquals(setOf("unrelated.txt"),dir.list()!!.toSet())
         } finally {dir.deleteRecursively()}
     }
     @Test fun freshSessionRetainsReadyPairForFullRevalidation() {
@@ -51,7 +51,7 @@ class ReadyUpdateCacheTest {
         try {
             val cache=ReadyUpdateCache(dir);cache.save(candidate);cache.apk.writeText("fixture")
             File(dir,"pending.apk").writeText("interrupted")
-            cache.cleanupTransient();assertTrue(cache.apk.exists());assertTrue(cache.exists())
+            cache.cleanupTransient();PendingUpdateCache(dir,72).cleanup();assertTrue(cache.apk.exists());assertTrue(cache.exists())
             assertFalse(File(dir,"pending.apk").exists())
         } finally {dir.deleteRecursively()}
     }

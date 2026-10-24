@@ -10,7 +10,7 @@ import java.util.concurrent.Future
 
 internal data class PrivateUpdateState(val message:String="点击检查后才联网",val busy:Boolean=false,val authorized:Boolean=false,
     val userCode:String?=null,val progress:Int?=null,val candidate:UpdateCandidate?=null,val ready:File?=null,
-    val installVerified:Boolean=false)
+    val installVerified:Boolean=false,val resumableBytes:Long=0)
 internal class PrivateUpdater(context:Context,private var changed:((PrivateUpdateState)->Unit)?=null) {
     private val app=context.applicationContext
     private val store=UpdateTokenStore(app)
@@ -23,8 +23,11 @@ internal class PrivateUpdater(context:Context,private var changed:((PrivateUpdat
     @Volatile private var state=PrivateUpdateState(authorized=store.load()!=null)
     private val directory=File(app.cacheDir,"updates")
     private val readyCache=ReadyUpdateCache(directory)
+    private val pendingCache=PendingUpdateCache(directory,BuildConfig.VERSION_CODE)
     init {
         readyCache.cleanupTransient()
+        pendingCache.cleanup()
+        if(pendingCache.hasPartial()) state=state.copy(message="有未完成的下载，检查新版后可继续")
         if(readyCache.exists()) launch("正在核对本机已下载的安装包…",clearCandidate=true) { _,g ->
             try {
                 val candidate=readyCache.read(BuildConfig.VERSION_CODE)
@@ -53,13 +56,19 @@ internal class PrivateUpdater(context:Context,private var changed:((PrivateUpdat
         if(state.busy) return
         val g=++generation;val http=UpdateTransport();transport=http
         state=state.copy(message=message,busy=true,userCode=null,progress=null,ready=null,installVerified=false,
-            candidate=if(clearCandidate)null else state.candidate);changed?.invoke(state)
+            candidate=if(clearCandidate)null else state.candidate,resumableBytes=if(clearCandidate)0 else state.resumableBytes);changed?.invoke(state)
         task=worker.submit {
             try { operation(http,g) }
             catch(_:InterruptedException) { }
-            catch(e:UpdateFailure) { publish(state.copy(message=e.userMessage,busy=false,userCode=null,progress=null,ready=null,candidate=if(failureClearsCandidate)null else state.candidate,authorized=store.load()!=null),g) }
-            catch(_:Exception) { publish(state.copy(message="暂时无法完成更新，请检查网络后重试",busy=false,userCode=null,progress=null,ready=null,candidate=if(failureClearsCandidate)null else state.candidate,authorized=store.load()!=null),g) }
+            catch(e:UpdateFailure) { failed(e.userMessage,failureClearsCandidate,g) }
+            catch(_:Exception) { failed("暂时无法完成更新，请检查网络后重试",failureClearsCandidate,g) }
         }
+    }
+    private fun failed(message:String,clearCandidate:Boolean,g:Int) {
+        val candidate=if(clearCandidate)null else state.candidate
+        val saved=candidate?.let {pendingCache.bytes(it)} ?: 0
+        publish(state.copy(message=message,busy=false,userCode=null,progress=null,ready=null,candidate=candidate,
+            authorized=store.load()!=null,resumableBytes=saved),g)
     }
     fun check() {
         if(BuildConfig.APPLICATION_ID!="cn.walkpaint") {
@@ -83,26 +92,33 @@ internal class PrivateUpdater(context:Context,private var changed:((PrivateUpdat
         val legacyAuthorization=store.load()!=null
         when(result) {
             is UpdateCatalogResult.Current -> publish(PrivateUpdateState(message="最新发布 ${result.latest.version}，当前版本无需更新",authorized=legacyAuthorization),g)
-            is UpdateCatalogResult.Available -> publish(PrivateUpdateState(message="发现新版本 ${result.candidate.notes.version}",authorized=legacyAuthorization,candidate=result.candidate),g)
+            is UpdateCatalogResult.Available -> publish(PrivateUpdateState(message="发现新版本 ${result.candidate.notes.version}",authorized=legacyAuthorization,candidate=result.candidate,
+                resumableBytes=pendingCache.bytes(result.candidate)),g)
         }
     }
     fun download() {
         val candidate=state.candidate ?: return
         if(candidate.asset.id==0L && candidate.asset.publicUrl==null) {notice("请先重新检查更新，再下载安装包");return}
         launch("正在下载新版…") { http,g ->
-            directory.mkdirs();UpdateFileDownload.requireSpace(directory.usableSpace,candidate.asset.size)
-            val partial=File(directory,"pending.apk");val file=File(directory,"update.apk")
-            readyCache.clear();file.delete();partial.delete()
+            directory.mkdirs()
+            val saved=pendingCache.prepare(candidate)
+            UpdateFileDownload.requireSpace(directory.usableSpace,candidate.asset.size,saved)
+            val partial=pendingCache.partial;val file=File(directory,"update.apk")
+            readyCache.clear();file.delete()
             try {
                 UpdateFileDownload.fetch(partial,candidate.asset,{http.checkCancelled()}, { percent ->
                         publish(state.copy(message="正在下载新版…",busy=true,userCode=null,progress=percent),g)
-                    }, { offset,read -> http.download(candidate.asset,offset,read) })
+                    },retainPartial=true) { offset,read -> http.download(candidate.asset,offset,read) }
                 http.checkCancelled()
                 validateApk(partial,candidate.notes.code,candidate.notes.version)
                 http.checkCancelled();updateRequire(partial.renameTo(file),"无法保存安装包，请重新下载")
                 readyCache.save(candidate)
-                publish(state.copy(message="安装包已校验，可交给系统安装",busy=false,userCode=null,progress=null,ready=file),g)
-            } finally { partial.delete() }
+                pendingCache.clear()
+                publish(state.copy(message="安装包已校验，可交给系统安装",busy=false,userCode=null,progress=null,ready=file,resumableBytes=0),g)
+            } catch(e:java.io.IOException) {throw e}
+            catch(e:InterruptedException) {throw e}
+            catch(e:UpdateUnavailable) {throw e}
+            catch(e:Exception) {pendingCache.clear();throw e}
         }
     }
     fun validateApk(file:File,expected:Int,version:String) {
@@ -123,7 +139,8 @@ internal class PrivateUpdater(context:Context,private var changed:((PrivateUpdat
         return file
     }
     fun cancel() { generation++;transport?.cancel();task?.cancel(true);task=null
-        state=state.copy(message="已取消，仍可使用原版本",installVerified=false,busy=false,userCode=null,progress=null,ready=null);changed?.invoke(state)
+        pendingCache.clear()
+        state=state.copy(message="已取消，仍可使用原版本",installVerified=false,busy=false,userCode=null,progress=null,ready=null,resumableBytes=0);changed?.invoke(state)
     }
     fun logout() { cancel();launch("正在清除旧更新授权…",clearCandidate=true) { _,g ->
         directory.deleteRecursively();store.clear();publish(PrivateUpdateState(message="旧授权已清除，公开更新无需登录，原足迹保留"),g)

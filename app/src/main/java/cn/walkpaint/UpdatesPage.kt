@@ -31,9 +31,10 @@ internal fun UpdatesPage(release:CurrentRelease,state:PrivateUpdateState,onBack:
                 Button(onClick=onCheck,shape=PanelShape,modifier=Modifier.fillMaxWidth().heightIn(min=48.dp)) { Text("检查新版") }
                 if(state.ready!=null) Button(onClick=onInstall,modifier=Modifier.fillMaxWidth()) { Text("交给系统安装") }
                 else if(state.candidate!=null) Button(onClick=onDownload,modifier=Modifier.fillMaxWidth()) {
-                    Text("下载新版 · ${UpdateDownloadNotice.size(state.candidate.asset.size)}")
+                    Text(if(state.resumableBytes>0) "继续下载 · ${(state.resumableBytes*100/state.candidate.asset.size).coerceIn(0,100)}%" else "下载新版 · ${UpdateDownloadNotice.size(state.candidate.asset.size)}")
                 }
             }
+            if(!state.busy && state.resumableBytes>0) Text("已保留 ${UpdateDownloadNotice.size(state.resumableBytes)}，重试会从已下载位置继续。",color=Muted,fontSize=13.sp,lineHeight=20.sp)
             state.candidate?.let {Text(UpdateDownloadNotice.text(it.asset.size),color=Muted,fontSize=13.sp,lineHeight=20.sp)}
             Text("离开此页或旋转屏幕时下载会继续；可随时回来查看或取消。",color=Muted,fontSize=13.sp,lineHeight=20.sp)
             Text("从公开发布页检查和下载安装包，无需 GitHub 登录，不会上传足迹或位置。下载后核对版本和签名，再由系统确认安装，原足迹保留。",color=Muted,fontSize=13.sp,lineHeight=20.sp)
