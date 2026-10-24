@@ -1,0 +1,17 @@
+{
+  "source_commit": "a3be66674e832e2330920ef9cf972683fb0c6588",
+  "scope": "Robolectric Native Graphics, Compose and JVM; synthetic fixtures only",
+  "counts": {
+    "tests": 541,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "screenshots": {
+    "historical-statistics.png": "225b95a2facdeef9351f86712013d95cd7bb4b381140e30f293df4feb00dde0e",
+    "gpx-disclosure-320-font150.png": "8f65b9d4187ba615d94a578ee4c6dac52f602661dd6526eca6e9a9211bc507d5",
+    "historical-month.png": "759c2f374d0a3557f7d5ecc31df7cd913b4f99e34aa010a5d2f490511bb7c8be",
+    "gpx-saved.png": "b31670cd4587d6acdf7d1d5956b531c9ddf17e3d7ba16bf33fcece2a5e3d6a55"
+  },
+  "device_acceptance": "not run"
+}

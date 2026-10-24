@@ -14,6 +14,6 @@
 
 ## 验证状态
 
-结果在完成后绑定本轮源码提交补录；历史报告不作为本版结果。原生 UI 使用 Robolectric Native Graphics / Compose、独立合成轨迹与内容 URI，不是实体手机或真实高德联网验收。最终正式产物的包名、版本、架构、签名与下载摘要另行核对。
+验证源码提交：`a3be66674e832e2330920ef9cf972683fb0c6588`。10项针对性检查 passed；完整 `bash cloud/check.sh` passed：541项 JVM/Native Graphics/Compose（0失败/错误/跳过）、开发APK assembleDebug、lint（0 errors / 60 warnings / 2 hints）、Python18+23。签名策略7项、actionlint 1.7.7、git diff --check passed；结果与截图摘要见 checks.json。首次检查中的测试选择器/数值格式问题已修正并重跑，未沿用失败结果。历史报告不作为本版结果。原生 UI 使用 Robolectric Native Graphics / Compose、独立合成轨迹与内容 URI，不是实体手机或真实高德联网验收。最终正式产物的包名、版本、架构、签名与下载摘要另行核对。
 
 实体手机覆盖安装、真实高德底图、户外 GPS、锁屏耗电：not run。本版不宣称这些已通过。
