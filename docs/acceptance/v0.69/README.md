@@ -17,3 +17,12 @@
 验证源码提交：`a3be66674e832e2330920ef9cf972683fb0c6588`。10项针对性检查 passed；完整 `bash cloud/check.sh` passed：541项 JVM/Native Graphics/Compose（0失败/错误/跳过）、开发APK assembleDebug、lint（0 errors / 60 warnings / 2 hints）、Python18+23。签名策略7项、actionlint 1.7.7、git diff --check passed；结果与截图摘要见 checks.json。首次检查中的测试选择器/数值格式问题已修正并重跑，未沿用失败结果。历史报告不作为本版结果。原生 UI 使用 Robolectric Native Graphics / Compose、独立合成轨迹与内容 URI，不是实体手机或真实高德联网验收。最终正式产物的包名、版本、架构、签名与下载摘要另行核对。
 
 实体手机覆盖安装、真实高德底图、户外 GPS、锁屏耗电：not run。本版不宣称这些已通过。
+
+
+## 已发布并完成下载核验
+
+[正式版 v0.69](https://github.com/h516df/walkpaint/releases/tag/v0.69)，源码与标签绑定 `454148a333e9e269c84e46c29cf3b5e0880fd883`；与 a3be666 的应用/构建/工具内容一致。PR126 与 main 检查 passed。原签名 [40085397252](https://github.com/h516df/walkpaint/actions/runs/40085397252) passed；GitHub 作业 [40086151447](https://github.com/h516df/walkpaint/actions/runs/40086151447) 使用同一产物恢复草稿并完成正式发布，未提取私钥或移动标签。
+
+三个公开附件均无登录实际下载，逐个核对大小和 SHA256；下载后的 APK 再次验证 cn.walkpaint、0.69/code77、非调试、ARM64 与原证书 V1/V2/V3。54,716,819 bytes / SHA256 `be501faab3a6a00006518c3b7693ce6a399be2c877842afa004696f89cf2568c`。Release 非草稿、非预发行，latest 指向 v0.69；说明 JSON 解码和校验清单匹配，见 publication.json。
+
+连接器 CLI 的构建附件下载受拒，沿官方 GitHub 连接器取回；当前连接的 uploads 端401，沿最小 GitHub 作业令牌发布，保持同一草稿、标签和APK。上述通道问题已解决，没有把元数据成功当附件下载成功。实体手机安装和户外/锁屏验收仍为 not run。
