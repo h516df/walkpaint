@@ -29,7 +29,7 @@ internal object TrackGpx {
         }
         output.write("</gpx>\n")
     }
-    private fun decimal(value:Double)=java.math.BigDecimal.valueOf(value).toPlainString()
+    private fun decimal(value:Double)=java.math.BigDecimal.valueOf(value).stripTrailingZeros().toPlainString()
     private fun xml(value:String)=value.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
         .filter {it=='\n' || it=='\r' || it=='\t' || it>=' '}
 }
