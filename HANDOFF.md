@@ -8,7 +8,9 @@
 - **发布路径**：签名材料仅在既有受保护 android-signing 环境中使用，不带出作业。等源码检查完成后整合 main，在该完整SHA手动运行 Original signing readiness，取同提交 signed-product 附件，按 docs/BUILD.md 使用现有发布脚本的公开/精确SHA模式，逐项校验包名、版本、架构、V1/V2/V3原签名和最终下载摘要。当前尚未发布0.69，不能把开发APK当正式升级包。
 - **扫描**：通用 privacy_scan 已运行；本轮29个变更文本文件0命中。全库扫描保留的历史命中为旧脚本通用SDK路径、合成数值/URL、Kotlin标签与未提交.cloud配置，未将其重标成全库零命中。远端secret-scan单列检查。
 - **未验**：实体手机覆盖安装、真实高德地图联网、户外GPS、锁屏耗电。本任务不操作私人设备。
-- **下一步**：完成构建/CI与正式原签名作业，发布0.69并核验所有公开附件与latest，再更新此处实际发行结果；无需重新向用户确认已授权的发行。
+- **发行接续（2026-10-24）**：PR126 已 squash 合入 main `454148a333e9e269c84e46c29cf3b5e0880fd883`，应用/构建/工具代码与已测试 a3be666 一致；PR与main Cloud development、delivery-tools、secret-scan passed。原签名运行 [40085397252](https://github.com/h516df/walkpaint/actions/runs/40085397252) passed，官方 APK 54,716,819 bytes、SHA256 `be501faab3a6a00006518c3b7693ce6a399be2c877842afa004696f89cf2568c`。本地 V1/V2/V3、cn.walkpaint、0.69/code77、ARM64、非调试校验 passed。构建附件由官方 GitHub 连接器取回；gh 直接下载端点拒绝，未改签名。
+- **当前具体阻塞与补救**：公开上传端 uploads.github.com 对当前连接返回401；已创建草稿422662113、tag v0.69 指向454148a，附件为空，未发布。不要另建版本、覆盖标签或把草稿当已完成。新增 main 手动 `Publish verified signed release`，使用最小 GitHub 作业令牌从同次运行取回原APK、校验并恢复同一草稿。无签名密钥进入发布作业。
+- **下一步**：整合并运行发布作业（source_sha=454148a333e9e269c84e46c29cf3b5e0880fd883 / build_run_id=40085397252），核验所有公开附件、latest和匿名实际下载，再补最终发行回执；用户已明确授权发行。
 
 ---
 

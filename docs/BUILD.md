@@ -24,3 +24,6 @@ Windows使用gradlew.bat。开发模式使用本机开发签名、独立包名cn
 发布输入固定已验收APK，发布后重新下载核对实际字节。升级不卸载清库，必须同签名、versionCode递增；回退也须兼容schema3，不能直接装旧包。
 
 自动化 Intent 诊断导出仅在 `walkpaintDeveloperBuild=true` 的 debug 包中可用，官方包不响应；旧诊断文件会在启动时清理。正式包的原生验收使用同签名 androidTest 内的 FieldReportProbe，不在生产包重新开放测试入口。
+
+
+若当前连接只能写 API 元数据、无法在 uploads.github.com 上传附件，可手动运行 main 的 `Publish verified signed release`。输入已测试源码完整 SHA 与同 SHA 成功的 `Original signing readiness` 运行 ID。作业检查来源、主线祖先、签名回执、APK 字节与签名，再沿同一发布工具恢复原草稿；只使用 GitHub 作业令牌，不提取原签名材料，也不覆盖已发布资产。

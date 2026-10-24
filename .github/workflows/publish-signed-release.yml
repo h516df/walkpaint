@@ -1,0 +1,98 @@
+name: Publish verified signed release
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Full tested source commit already on main
+        type: string
+        required: true
+      build_run_id:
+        description: Successful Original signing readiness run for that commit
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: publish-verified-walkpaint-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'h516df/walkpaint' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      BUILD_RUN_ID: ${{ inputs.build_run_id }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Bind artifact to successful signing run and tested main source
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$BUILD_RUN_ID" =~ ^[0-9]+$ ]]
+          git merge-base --is-ancestor "$SOURCE_SHA" HEAD
+          gh api "repos/h516df/walkpaint/actions/runs/$BUILD_RUN_ID" > "$RUNNER_TEMP/signing-run.json"
+          python3 - <<'PY'
+          import json, os, pathlib
+          run=json.loads((pathlib.Path(os.environ['RUNNER_TEMP'])/'signing-run.json').read_text())
+          assert run['head_sha']==os.environ['SOURCE_SHA']
+          assert run['head_repository']['full_name']=='h516df/walkpaint'
+          assert run['path']=='.github/workflows/signing-readiness.yml'
+          assert run['event']=='workflow_dispatch' and run['head_branch']=='main'
+          assert run['status']=='completed' and run['conclusion']=='success'
+          PY
+          git checkout --detach "$SOURCE_SHA"
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Prepare public APK verification tools
+        run: sdkmanager 'build-tools;36.0.0' >/dev/null
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: signed-product-${{ inputs.source_sha }}
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/signed-product
+      - name: Check signed bytes and stage the original APK
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, pathlib, shutil, sys
+          sys.path.insert(0,'scripts')
+          from publish_release import version_from_gradle
+          root=pathlib.Path(os.environ['RUNNER_TEMP'])/'signed-product'
+          apks=list(root.rglob('acceptance.apk')); receipts=list(root.rglob('product-receipt.json'))
+          assert len(apks)==len(receipts)==1
+          apk=apks[0]; receipt=json.loads(receipts[0].read_text())
+          identity=json.loads(pathlib.Path('release/signing-identity.json').read_text())
+          assert receipt['certificateSha256']==identity['certificateSha256']
+          assert receipt['packageName']==identity['packageName']
+          assert receipt['privateKeyVerified'] and receipt['apkSignatureVerified'] and not receipt['syntheticProbe']
+          assert receipt['sha256']==hashlib.sha256(apk.read_bytes()).hexdigest() and receipt['size']==apk.stat().st_size
+          version,code=version_from_gradle()
+          target=pathlib.Path('dist')/f'v{version}'/'input';target.mkdir(parents=True,exist_ok=True)
+          shutil.copyfile(apk,target/f'WalkPaint-v{version}-arm64.apk')
+          with open(os.environ['GITHUB_ENV'],'a') as output:output.write(f'RELEASE_INPUT={target}\n')
+          PY
+      - name: Verify original signature and publish complete assets without replacement
+        run: python3 scripts/publish_release.py --no-build --prepared-dir "$RELEASE_INPUT" --phone-only --no-legacy-alias --public-release --target "$SOURCE_SHA"
+      - name: Preserve public publication receipt
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: publication-${{ inputs.source_sha }}
+          path: dist/*/publication.json
+          if-no-files-found: error
+          retention-days: 7
